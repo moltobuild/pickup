@@ -1,0 +1,19 @@
+# Pickup's own manifest. Aspirational for now: the build runs on the Makefile
+# until molto can build itself. Note what this file does NOT say — no compiler
+# binary, no version. It states what the code needs; pickup's whole purpose is
+# to turn that into a binary on each machine.
+
+[package]
+name = "pickup"
+version = "0.1.0"
+
+[target]
+std = "c2x"
+
+[profile.debug]
+opt_level = 0
+debug_info = true
+
+[profile.release]
+opt_level = 3
+debug_info = false

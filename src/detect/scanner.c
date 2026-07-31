@@ -1,0 +1,173 @@
+#include <pickup/detect/scanner.h>
+
+#include <pickup/services/fs_service.h>
+
+#include <dirent.h>
+#include <limits.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+/* Size of the buffer used to compose the path of a directory entry. */
+#define SCANNER_PATH_SIZE 4096
+
+/* Separator between directories in PATH. */
+#define PATH_SEPARATOR ':'
+
+/* Names that make a file worth probing. A prefix match also accepts the
+   versioned forms the distributions ship (gcc-12, clang-14). */
+static const char *const candidate_prefixes[] = {
+    "gcc", "g++", "clang", "clang++", "tcc",
+};
+
+/* Names that are candidates only when they match exactly: `cc` and `c++` are
+   the conventional entry points, but accepting them as prefixes would drag in
+   every unrelated tool starting with those letters. */
+static const char *const candidate_exact[] = {
+    "cc", "c++",
+};
+
+#define PREFIX_COUNT (sizeof candidate_prefixes / sizeof candidate_prefixes[0])
+#define EXACT_COUNT  (sizeof candidate_exact / sizeof candidate_exact[0])
+
+/* True if `name` continues with a version suffix after `prefix`, i.e. the
+   prefix is followed by nothing or by '-'. Rejects "gccfoo", accepts "gcc-12". */
+static bool matches_prefix(const char *name, const char *prefix) {
+    size_t length = strlen(prefix);
+    if (strncmp(name, prefix, length) != 0)
+        return false;
+    return name[length] == '\0' || name[length] == '-';
+}
+
+/* True if `text` is a version suffix: empty, or "-" followed by a digit.
+   Distinguishes arm-none-eabi-gcc-12 from arm-none-eabi-gcc-wrapper. */
+static bool is_version_suffix(const char *text) {
+    if (text[0] == '\0')
+        return true;
+    return text[0] == '-' && text[1] >= '0' && text[1] <= '9';
+}
+
+/* True if `name` carries `tool` as a trailing component, with or without a
+   version: arm-none-eabi-gcc and arm-none-eabi-gcc-12 both name a compiler. */
+static bool has_tool_suffix(const char *name, const char *tool) {
+    size_t tool_length = strlen(tool);
+    for (const char *cursor = name; (cursor = strchr(cursor, '-')) != NULL; cursor++) {
+        if (strncmp(cursor + 1, tool, tool_length) != 0)
+            continue;
+        if (is_version_suffix(cursor + 1 + tool_length))
+            return true;
+    }
+    return false;
+}
+
+bool scanner_is_candidate_name(const char *name) {
+    for (size_t i = 0; i < EXACT_COUNT; i++) {
+        if (strcmp(name, candidate_exact[i]) == 0)
+            return true;
+    }
+    for (size_t i = 0; i < PREFIX_COUNT; i++) {
+        if (matches_prefix(name, candidate_prefixes[i]))
+            return true;
+    }
+    /* Cross compilers carry a target triple in front: arm-none-eabi-gcc. */
+    for (size_t i = 0; i < PREFIX_COUNT; i++) {
+        if (has_tool_suffix(name, candidate_prefixes[i]))
+            return true;
+    }
+    return false;
+}
+
+/* Candidates as found, plus what each one resolves to. Two lists rather than
+   one: the resolved path decides identity, but the path as found is what gets
+   reported, because that is the name a user types and a build invokes. */
+typedef struct {
+    str_list found;
+    str_list resolved;
+} candidate_list;
+
+/* The part of a path after the last separator. */
+static const char *basename_of(const char *path) {
+    const char *slash = strrchr(path, '/');
+    return slash != NULL ? slash + 1 : path;
+}
+
+/* Record `path` unless the binary it resolves to is already recorded. When it
+   is, keep whichever spelling is shorter: `gcc-12` reads better than
+   `x86_64-linux-gnu-gcc-12`, and both invoke the same compiler. */
+static bool add_unique(candidate_list *list, const char *path) {
+    char resolved[PATH_MAX];
+    if (realpath(path, resolved) == NULL)
+        return true; /* a broken link is not an error, just not a compiler */
+
+    for (size_t i = 0; i < str_list_count(&list->resolved); i++) {
+        if (strcmp(str_list_get(&list->resolved, i), resolved) != 0)
+            continue;
+        const char *kept = str_list_get(&list->found, i);
+        if (strlen(basename_of(path)) < strlen(basename_of(kept)))
+            return str_list_replace(&list->found, i, path);
+        return true;
+    }
+    return str_list_push(&list->found, path) && str_list_push(&list->resolved, resolved);
+}
+
+/* Scan one directory of PATH for candidates. */
+static bool scan_directory(const char *directory, candidate_list *out) {
+    DIR *dir = opendir(directory);
+    if (dir == NULL)
+        return true; /* unreadable or missing entries in PATH are normal */
+
+    bool ok = true;
+    const struct dirent *entry;
+    while (ok && (entry = readdir(dir)) != NULL) {
+        if (!scanner_is_candidate_name(entry->d_name))
+            continue;
+        char path[SCANNER_PATH_SIZE];
+        if (!fs_format_path(path, sizeof path, "%s/%s", directory, entry->d_name))
+            continue;
+        if (access(path, X_OK) != 0)
+            continue;
+        ok = add_unique(out, path);
+    }
+    closedir(dir);
+    return ok;
+}
+
+bool scanner_collect(const char *path_env, str_list *out) {
+    if (path_env == NULL)
+        return true;
+
+    candidate_list candidates;
+    str_list_init(&candidates.found);
+    str_list_init(&candidates.resolved);
+
+    const char *cursor = path_env;
+    while (*cursor != '\0') {
+        const char *separator = strchr(cursor, PATH_SEPARATOR);
+        size_t length = separator != NULL ? (size_t)(separator - cursor) : strlen(cursor);
+
+        if (length > 0) {
+            char directory[SCANNER_PATH_SIZE];
+            if (length < sizeof directory) {
+                memcpy(directory, cursor, length);
+                directory[length] = '\0';
+                if (!scan_directory(directory, &candidates)) {
+                    str_list_free(&candidates.found);
+                    str_list_free(&candidates.resolved);
+                    return false;
+                }
+            }
+        }
+
+        if (separator == NULL)
+            break;
+        cursor = separator + 1;
+    }
+
+    bool ok = true;
+    for (size_t i = 0; ok && i < str_list_count(&candidates.found); i++)
+        ok = str_list_push(out, str_list_get(&candidates.found, i));
+
+    str_list_free(&candidates.found);
+    str_list_free(&candidates.resolved);
+    return ok;
+}

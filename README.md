@@ -158,17 +158,66 @@ pickup search clang --version 21
 pickup install clang                      # the newest stable
 pickup install clang --version 20.1.5
 pickup install clang --dry-run            # resolve it, download nothing
+pickup search clang --refresh             # ask the source again
 ```
 
-Everything lands under `~/.pickup/toolchains/` (or `$PICKUP_HOME`), so
-installing never asks for administrator rights. Installed toolchains join the
-same inventory as the system ones, and `list`, `show` and `resolve` treat them
-no differently.
+The list of published releases is cached for an hour, because the
+unauthenticated GitHub API allows 60 requests in one. `--refresh` throws that
+away and asks again, for when a release lands and you would rather not wait.
+
+Everything Pickup writes lives under `~/.pickup` (or `$PICKUP_HOME`), so
+installing never asks for administrator rights:
+
+```
+~/.pickup/
+  cache/                   the probed inventory and the release index
+  downloads/               archives in flight, removed once installed
+  toolchains/
+    clang-22.1.8-x86_64-unknown-linux-gnu/
+```
+
+`cache/` and `downloads/` can be deleted at any time; the cost is a rescan, not
+a wrong answer. `toolchains/` is what the downloads were for, so deleting the
+whole of `~/.pickup` takes gigabytes of installed compilers with it.
+
+Installed toolchains join the same inventory as the system ones, and `list`,
+`show` and `resolve` treat them no differently.
 
 The archive is checked against the sha256 the source published before anything
 is unpacked, and the install is assembled under a temporary name and moved into
 place only once it is complete, so an interrupted one leaves nothing that looks
 finished.
+
+### Only what gets used
+
+An LLVM release unpacks to **11.29 GB**, of which the compiler is 259 MB. The
+rest is MLIR, Flang, lldb, the refactoring tools, and gigabytes of static
+libraries for people linking against LLVM itself. Pickup installs the compiler,
+a linker, the builtin headers, the runtime and libc++ — **about 550 MB**:
+
+```
+$ pickup install clang
+downloading clang 22.1.8  [█████████████████████████]  100%  1.8G/1.8G
+verifying clang 22.1.8    [█████████████████████████]  100%  1.8G/1.8G
+preparing the extraction  /
+extracting clang 22.1.8   \  550M extracted
+probing installed toolchain                        12 features
+✓ clang 22.1.8 installed in ~/.pickup/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu (550M)
+```
+
+Every stage says what it is doing, because each of them takes long enough on a
+gigabyte to look like a hang otherwise: hashing the archive is forty seconds,
+and tar spends another stretch decompressing its way to the parts that were
+asked for before it writes anything at all.
+
+The rest is never written to disk, not written and then deleted: the archive
+streams past and only matching entries are unpacked. Installing does not need
+11 GB free.
+
+That selection is a guess about someone else's layout, so it is not trusted.
+Once unpacked, the compiler is asked to compile — the count of features above is
+that answer — and if it proves nothing, the release is unpacked in full instead
+of leaving a toolchain that cannot build. `--full` skips the selection entirely.
 
 ```
 $ pickup install clang --dry-run

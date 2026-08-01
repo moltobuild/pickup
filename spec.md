@@ -210,8 +210,19 @@ C++:
 
 Probing is expensive: every compiler is invoked once per feature.
 
-Pickup caches discovery results under the user's cache directory, following the
-XDG convention.
+Pickup caches discovery results under the pickup home, alongside everything else
+it writes:
+
+```
+<pickup home>/cache/       regenerable: the probed inventory, the release index
+<pickup home>/downloads/   archives in flight, removed once installed
+<pickup home>/toolchains/  what was installed, one directory each
+```
+
+The first two can be deleted at any time and cost time, never correctness. The
+third is what the downloads were for. One root rather than two means one
+variable, `PICKUP_HOME`, relocates the lot — which is also how the tests run
+without touching a real home directory.
 
 A cache entry is invalidated when the binary it describes changes, detected by
 path, modification time, and size.
@@ -223,7 +234,10 @@ never proven, which is the one thing Pickup must not do. Adding, removing or
 reordering an entry, or changing the program that proves a feature, all count
 as a change. Rescanning costs about a second.
 
-`--refresh` discards the cache and rescans.
+`scan` discards the inventory and probes everything again. The index of
+published releases is a separate cache with its own short lifetime, discarded by
+`--refresh` on `search` and `install`: the two answer different questions and
+go stale for different reasons.
 
 A corrupt or unreadable cache is discarded, never trusted. Rescanning is always
 correct; trusting bad state is not.
@@ -298,6 +312,26 @@ assumed. Asset naming has changed across LLVM versions, so it is matched, never
 constructed.
 
 GCC publishes no binaries of its own and therefore has no source yet.
+
+## What gets installed
+
+A release carries far more than a compiler. LLVM 22.1.8 unpacks to 11.29 GB, of
+which the compiler is 259 MB; the rest is MLIR, Flang, lldb, the refactoring
+tools, and gigabytes of static libraries for linking against LLVM itself.
+
+Pickup installs what the ecosystem uses — the compiler, a linker, the builtin
+headers, the runtime and libc++ — which comes to about 550 MB. Nothing else is
+ever written: the archive streams past and only matching entries are unpacked,
+so the full contents never need to fit on the disk at all.
+
+The selection is a claim about someone else's layout, and layouts change. So it
+is not trusted: once unpacked, the compiler is asked to compile, and a toolchain
+that proves nothing means the selection was wrong. Then the release is unpacked
+whole rather than leaving something installed that cannot build. `--full` skips
+the selection from the start.
+
+Probing the result is the same test Pickup applies to every compiler it reports
+on, turned on its own installer.
 
 ## Verification
 

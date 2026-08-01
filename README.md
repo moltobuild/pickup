@@ -71,6 +71,34 @@ Columns are measured against what is in them, so a name as long as
 line. Nothing is padded past the last column, which keeps the output readable
 by `awk` and `cut`.
 
+The first `list` on a machine has to probe, and probing is seventeen compilers
+being made to compile. That is long enough to look like a hang, so it says how
+far it has got:
+
+```
+$ pickup list
+probing compilers  [██████████████░░░░░░░░░░░]   58%  10/17
+```
+
+The line is wiped before the table is printed, so what remains is the answer and
+nothing else. `resolve` shows the same bar, and `scan` always does: throwing the
+cache away is what it is for, so it is the one command that never has a cached
+answer to fall back on. A `list` or a `resolve` served from the cache probes
+nothing and draws nothing.
+
+`search` reports the one part of it that touches the network. A spinner rather
+than a bar, because the API never says how long its answer will be:
+
+```
+$ pickup search clang
+fetching the release index  \
+```
+
+All of it goes to stderr, never to stdout:
+`pickup list --format toml > toolchains.toml` gets a file with a progress bar in
+it from nobody, and `resolve` piped into a build stays exactly as parseable as
+it was.
+
 `show` is where the probing becomes visible. Both of these accept `-std=c2x`;
 only one of them implements it:
 

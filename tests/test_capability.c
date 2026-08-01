@@ -1,6 +1,7 @@
 #include <moltest.h>
 
 #include <pickup/detect/capability.h>
+#include <pickup/util/hash.h>
 
 #include <stdint.h>
 #include <string.h>
@@ -58,6 +59,13 @@ MOLTEST(capability_set_for_standard_groups_by_language) {
 
     capability_set unknown = capability_set_for_standard(lang_c, "c47");
     EXPECT_EQ(0, (int)unknown.bits);
+}
+
+MOLTEST(capability_catalog_fingerprint_is_stable_within_a_build) {
+    /* Anything that stores feature bits compares this to decide whether they
+       still mean what they meant, so it must not wander between calls. */
+    EXPECT_TRUE(capability_catalog_fingerprint() == capability_catalog_fingerprint());
+    EXPECT_TRUE(capability_catalog_fingerprint() != HASH_INIT);
 }
 
 /* The measurement this whole project is built on: gcc 9 accepts -std=c2x and

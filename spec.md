@@ -216,6 +216,13 @@ XDG convention.
 A cache entry is invalidated when the binary it describes changes, detected by
 path, modification time, and size.
 
+The whole cache is discarded when the capability catalog changes. Feature sets
+are stored as positions in the catalog, so entries written under a different
+one name different features: reading them would report a capability that was
+never proven, which is the one thing Pickup must not do. Adding, removing or
+reordering an entry, or changing the program that proves a feature, all count
+as a change. Rescanning costs about a second.
+
 `--refresh` discards the cache and rescans.
 
 A corrupt or unreadable cache is discarded, never trusted. Rescanning is always

@@ -165,6 +165,54 @@ MOLTEST(cache_discards_a_corrupt_file) {
     fixture_teardown(&fixture);
 }
 
+/* Room to rewrite a whole cache file in memory. */
+#define CACHE_TEXT_SIZE 65536
+
+MOLTEST(cache_is_rejected_when_the_catalog_changed) {
+    cache_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    str_list candidates;
+    ASSERT_TRUE(collect_candidates(&candidates));
+    inventory discovered;
+    ASSERT_TRUE(inventory_discover(&discovered));
+    ASSERT_TRUE(cache_store(&candidates, &discovered));
+
+    /* As written, it loads. */
+    inventory restored;
+    ASSERT_TRUE(cache_load(&candidates, &restored));
+    inventory_free(&restored);
+
+    char path[256];
+    snprintf(path, sizeof path, "%s/pickup/toolchains", fixture.root);
+    char *stored = fs_read_file(path);
+    ASSERT_NOT_NULL(stored);
+
+    int version = 0;
+    unsigned long long candidate_mark = 0;
+    unsigned long long catalog_mark = 0;
+    ASSERT_EQ(3, sscanf(stored, "%d %llu %llu", &version, &candidate_mark, &catalog_mark));
+
+    /* Put back the same records under a different catalog fingerprint, which is
+       what a build with a reordered catalog would find. The records are left
+       untouched on purpose: they are the bits this build probed, and under
+       another catalog those same bits name other features. Reading them would
+       report a capability that was never proven, so the file has to go. */
+    const char *records = strchr(stored, '\n');
+    ASSERT_NOT_NULL(records);
+    static char rewritten[CACHE_TEXT_SIZE];
+    snprintf(rewritten, sizeof rewritten, "%d %llu %llu%s",
+             version, candidate_mark, catalog_mark + 1, records);
+    ASSERT_TRUE(fs_write_file(path, rewritten));
+    free(stored);
+
+    EXPECT_FALSE(cache_load(&candidates, &restored));
+
+    inventory_free(&discovered);
+    str_list_free(&candidates);
+    fixture_teardown(&fixture);
+}
+
 MOLTEST(cache_load_without_a_cache_simply_fails) {
     cache_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));

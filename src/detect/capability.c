@@ -1,6 +1,7 @@
 #include <pickup/detect/capability.h>
 
 #include <pickup/services/process_service.h>
+#include <pickup/util/hash.h>
 
 #include <stdint.h>
 #include <stdio.h>
@@ -98,6 +99,24 @@ const capability *capability_catalog(size_t *count) {
     if (count != NULL)
         *count = CATALOG_COUNT;
     return catalog;
+}
+
+/* The language as text, so it takes part in the fingerprint. */
+static const char *lang_name(capability_lang lang) {
+    return lang == lang_cxx ? LANG_CXX_NAME : LANG_C_NAME;
+}
+
+unsigned long long capability_catalog_fingerprint(void) {
+    unsigned long long hash = HASH_INIT;
+    for (size_t i = 0; i < CATALOG_COUNT; i++) {
+        hash = hash_add(hash, catalog[i].id);
+        hash = hash_add(hash, lang_name(catalog[i].lang));
+        hash = hash_add(hash, catalog[i].standard);
+        /* The program too: proving a feature with a different program can
+           reach a different verdict, which makes earlier answers stale. */
+        hash = hash_add(hash, catalog[i].program);
+    }
+    return hash;
 }
 
 size_t capability_index(const char *id) {

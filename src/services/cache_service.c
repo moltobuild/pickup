@@ -1,6 +1,8 @@
 #include <pickup/services/cache_service.h>
 
+#include <pickup/detect/capability.h>
 #include <pickup/services/fs_service.h>
+#include <pickup/util/hash.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,7 +11,7 @@
 
 /* Bumped whenever the record layout changes. An older file is discarded
    rather than migrated: rebuilding it costs one scan. */
-#define CACHE_FORMAT_VERSION 1
+#define CACHE_FORMAT_VERSION 2
 
 /* Where the cache lives, following the XDG convention. */
 #define CACHE_DIR_ENV      "XDG_CACHE_HOME"
@@ -111,16 +113,9 @@ static bool parse_record(const char *line, toolchain *out) {
    Comparing the two sets would always differ, so the set actually seen is
    recorded instead. Installing or removing any candidate changes this. */
 static unsigned long long candidates_fingerprint(const str_list *candidates) {
-    unsigned long long hash = 1469598103934665603ULL; /* FNV-1a 64 */
-    for (size_t i = 0; i < str_list_count(candidates); i++) {
-        const char *path = str_list_get(candidates, i);
-        for (const char *c = path; *c != '\0'; c++) {
-            hash ^= (unsigned char)*c;
-            hash *= 1099511628211ULL;
-        }
-        hash ^= (unsigned char)'\n';
-        hash *= 1099511628211ULL;
-    }
+    unsigned long long hash = HASH_INIT;
+    for (size_t i = 0; i < str_list_count(candidates); i++)
+        hash = hash_add(hash, str_list_get(candidates, i));
     return hash;
 }
 
@@ -137,11 +132,16 @@ bool cache_load(const str_list *candidates, inventory *out) {
 
     char line[CACHE_RECORD_SIZE];
     int version = 0;
-    unsigned long long fingerprint = 0;
+    unsigned long long candidate_mark = 0;
+    unsigned long long catalog_mark = 0;
+    /* The catalog fingerprint has to match as well: the records store features
+       as bit positions, so a catalog that changed makes every stored bit mean
+       something else. */
     bool ok = fgets(line, sizeof line, file) != NULL
-           && sscanf(line, "%d %llu", &version, &fingerprint) == 2
+           && sscanf(line, "%d %llu %llu", &version, &candidate_mark, &catalog_mark) == 3
            && version == CACHE_FORMAT_VERSION
-           && fingerprint == candidates_fingerprint(candidates);
+           && candidate_mark == candidates_fingerprint(candidates)
+           && catalog_mark == capability_catalog_fingerprint();
 
     while (ok && fgets(line, sizeof line, file) != NULL) {
         line[strcspn(line, "\n")] = '\0';
@@ -181,8 +181,9 @@ bool cache_store(const str_list *candidates, const inventory *list) {
     if (file == NULL)
         return false;
 
-    bool ok = fprintf(file, "%d %llu\n", CACHE_FORMAT_VERSION,
-                      candidates_fingerprint(candidates)) > 0;
+    bool ok = fprintf(file, "%d %llu %llu\n", CACHE_FORMAT_VERSION,
+                      candidates_fingerprint(candidates),
+                      capability_catalog_fingerprint()) > 0;
     for (size_t i = 0; ok && i < list->count; i++) {
         const toolchain *chain = &list->items[i];
         char version[32];

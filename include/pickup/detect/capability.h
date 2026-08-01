@@ -44,6 +44,17 @@ typedef struct {
 /* Index of `id` in the catalog, or SIZE_MAX if unknown. */
 [[nodiscard]] size_t capability_index(const char *id);
 
+/* A fingerprint of the catalog as a whole: every entry's id, language,
+   standard and program.
+
+   A probed feature set is a bitset, and a bit means whichever catalog entry
+   sits at that position. Reorder the catalog, or change the program that
+   proves a feature, and the same bits describe something else. Anything that
+   stores a feature set beyond the life of the process must record this
+   alongside it and refuse the data when it differs, or Pickup would end up
+   reporting a capability it never proved. */
+[[nodiscard]] unsigned long long capability_catalog_fingerprint(void);
+
 /* Test, set and clear a feature by catalog index. */
 [[nodiscard]] bool capability_set_has(capability_set set, size_t index);
 void capability_set_add(capability_set *set, size_t index);

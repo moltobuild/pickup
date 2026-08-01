@@ -148,6 +148,43 @@ bool fs_rename(const char *from, const char *to) {
     return rename(from, to) == 0;
 }
 
+/* Add up a directory, entry by entry. Symlinks count as the link itself and are
+   never followed, so a link pointing back into the tree cannot be counted twice
+   or send this walking forever. */
+static bool accumulate_tree(const char *path, long long *total) {
+    struct stat info;
+    if (lstat(path, &info) != 0)
+        return false;
+
+    if (!S_ISDIR(info.st_mode)) {
+        *total += (long long)info.st_size;
+        return true;
+    }
+
+    DIR *dir = opendir(path);
+    if (dir == NULL)
+        return false;
+
+    const struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+        char child[REMOVE_PATH_SIZE];
+        if (!fs_format_path(child, sizeof child, "%s/%s", path, entry->d_name))
+            continue;
+        (void)accumulate_tree(child, total);
+    }
+    closedir(dir);
+    return true;
+}
+
+bool fs_tree_size(const char *path, long long *out) {
+    *out = 0;
+    if (!fs_path_exists(path))
+        return true; /* nothing there yet is a size of zero, not a failure */
+    return accumulate_tree(path, out);
+}
+
 bool fs_source_newer(const char *source, const char *target) {
     int64_t target_ns;
     if (!fs_mtime_ns(target, &target_ns))

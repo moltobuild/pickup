@@ -49,6 +49,11 @@
    in flight simply means it has not been created yet. */
 [[nodiscard]] bool fs_file_size(const char *path, long long *out);
 
+/* Total size of everything under `path`, following no symlinks, so a link into
+   a tree cannot make it count twice. Zero for a path that does not exist yet,
+   which is what a directory being filled looks like at the start. */
+[[nodiscard]] bool fs_tree_size(const char *path, long long *out);
+
 /* Rename `from` to `to`, replacing anything already there. Within one
    filesystem this is atomic, which is what lets a half-written directory be
    assembled out of the way and only then take its final name. */

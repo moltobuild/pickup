@@ -1,8 +1,10 @@
 #include <pickup/cli.h>
 
+#include <pickup/commands/install_command.h>
 #include <pickup/commands/list_command.h>
 #include <pickup/commands/resolve_command.h>
 #include <pickup/commands/scan_command.h>
+#include <pickup/commands/search_command.h>
 #include <pickup/commands/show_command.h>
 #include <pickup/exit_code.h>
 #include <pickup/util/cli.h>
@@ -43,6 +45,23 @@ static const cli_option resolve_options[] = {
     { "--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT },
 };
 
+/* What `pickup search` accepts. */
+static const cli_option search_options[] = {
+    { "--version", 'v', cli_opt_value, "<version>",
+      "Only versions matching this, whole or partial", NULL },
+    { "--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT },
+};
+
+/* What `pickup install` accepts. */
+static const cli_option install_options[] = {
+    { "--version", 'v', cli_opt_value, "<version>",
+      "Version to install, whole or partial (default: the latest stable)", NULL },
+    { "--allow-unverified", 0, cli_opt_flag, NULL,
+      "Install even if the release publishes no sha256", NULL },
+    { "--dry-run", 0, cli_opt_flag, NULL,
+      "Report what would be installed and download nothing", NULL },
+};
+
 /* --- command handlers --- */
 
 static int handle_list(const cli_args *args) {
@@ -68,6 +87,22 @@ static int handle_scan(const cli_args *args) {
     return scan_command_run();
 }
 
+static int handle_search(const cli_args *args) {
+    return search_command_run(cli_args_positional(args, 0),
+                              cli_args_option(args, "--version"),
+                              wants_toml(args));
+}
+
+static int handle_install(const cli_args *args) {
+    const install_command_request request = {
+        .name = cli_args_positional(args, 0),
+        .version = cli_args_option(args, "--version"),
+        .allow_unverified = cli_args_flag(args, "--allow-unverified"),
+        .dry_run = cli_args_flag(args, "--dry-run"),
+    };
+    return install_command_run(&request);
+}
+
 static int handle_unimplemented(const cli_args *args) {
     fprintf(stderr, "pickup: '%s' is not implemented yet (see spec.md)\n",
             cli_args_command_name(args));
@@ -85,7 +120,11 @@ static const cli_command commands[] = {
       NULL, 0, handle_scan },
     { "resolve", "Find the best toolchain for a set of requirements", NULL,
       resolve_options, sizeof resolve_options / sizeof resolve_options[0], handle_resolve },
-    { "install", "Install a toolchain", "<toolchain>", NULL, 0, handle_unimplemented },
+    { "search", "List the versions of a toolchain available to install", "<toolchain>",
+      search_options, sizeof search_options / sizeof search_options[0], handle_search },
+    { "install", "Download and install a toolchain", "<toolchain>",
+      install_options, sizeof install_options / sizeof install_options[0],
+      handle_install },
     { "uninstall", "Remove an installed toolchain", "<toolchain>",
       NULL, 0, handle_unimplemented },
     { "default", "Set the default toolchain", "<toolchain>",

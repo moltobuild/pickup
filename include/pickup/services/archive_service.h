@@ -2,6 +2,7 @@
 #define PICKUP_ARCHIVE_SERVICE_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 /*
  * Unpacking downloaded toolchains.
@@ -27,5 +28,36 @@
    `lib` land directly in the destination. */
 [[nodiscard]] bool archive_extract(const char *archive, const char *destination,
                                    int strip_components);
+
+/* Most patterns and exclusions one extraction may name. */
+#define ARCHIVE_MAX_PATTERNS 24
+
+/* What an extraction selects, and what it reports while it runs. */
+typedef struct {
+    const char *const *patterns;   /* entries to extract; NULL for all of them */
+    size_t pattern_count;
+    const char *const *excludes;   /* entries to skip even if they match */
+    size_t exclude_count;
+    int strip_components;
+    const char *label;             /* shown while extracting; NULL to stay quiet */
+    const char *waiting_label;     /* shown until the first entry lands */
+} archive_request;
+
+/* Extract the entries of `archive` that `request` selects into `destination`.
+
+   Only what matches is ever written: the rest of the archive is decompressed
+   and discarded as it streams past, never unpacked and deleted afterwards. On
+   a release that is mostly things Pickup has no use for, that is the difference
+   between needing 11 GB of free space and needing half of one.
+
+   Patterns are shell globs matched against the whole path inside the archive,
+   so they usually open with a star and a slash, to step over the archive's own
+   top-level directory.
+
+   Progress is drawn when `label` is set and the output is a terminal: a spinner
+   and the bytes unpacked so far. Unpacking is minutes of silence otherwise, and
+   silence is what makes people think it has hung. */
+[[nodiscard]] bool archive_extract_selected(const char *archive, const char *destination,
+                                            const archive_request *request);
 
 #endif /* PICKUP_ARCHIVE_SERVICE_H */

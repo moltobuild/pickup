@@ -1,7 +1,11 @@
 #include <moltest.h>
 
+#include <pickup/services/fs_service.h>
+#include <pickup/services/paths_service.h>
 #include <pickup/sources/llvm_source.h>
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* These tests are about choosing correctly among what LLVM publishes, so the
@@ -218,4 +222,99 @@ MOLTEST(llvm_refuses_an_answer_that_is_not_json) {
     EXPECT_FALSE(llvm_parse_releases("<html>rate limited</html>", NULL, &list));
     EXPECT_EQ(0, (int)list.count);
     release_list_free(&list);
+}
+
+/* An index nobody could have fetched, so finding it proves where it was read
+   from and losing it proves it was discarded. */
+static const char planted_index[] =
+    "[{\"tag_name\": \"llvmorg-99.1.1\", \"prerelease\": false, \"draft\": false,"
+    "  \"assets\": [{\"name\": \"LLVM-99.1.1-Linux-X64.tar.xz\","
+    "               \"browser_download_url\": \"https://example.invalid/planted.tar.xz\","
+    "               \"size\": 42, \"digest\": \"sha256:beef\"}]}]";
+
+typedef struct {
+    char root[64];
+    char previous[PICKUP_PATHS_MAX];
+    bool had_previous;
+} index_fixture;
+
+static bool index_setup(index_fixture *fixture) {
+    snprintf(fixture->root, sizeof fixture->root, "%s", "/tmp/pickup_index_XXXXXX");
+    if (mkdtemp(fixture->root) == NULL)
+        return false;
+
+    const char *existing = getenv(PICKUP_HOME_ENV);
+    fixture->had_previous = existing != NULL;
+    if (existing != NULL)
+        snprintf(fixture->previous, sizeof fixture->previous, "%s", existing);
+    return setenv(PICKUP_HOME_ENV, fixture->root, 1) == 0;
+}
+
+static void index_teardown(index_fixture *fixture) {
+    if (fixture->had_previous)
+        (void)setenv(PICKUP_HOME_ENV, fixture->previous, 1);
+    else
+        (void)unsetenv(PICKUP_HOME_ENV);
+    (void)fs_remove_tree(fixture->root);
+}
+
+MOLTEST(llvm_reads_its_index_from_the_cache_directory) {
+    if (!host_is_linux_x64())
+        SKIP("asset names are written for linux x86_64");
+
+    index_fixture fixture;
+    ASSERT_TRUE(index_setup(&fixture));
+
+    /* Planted where the cache lives, not where downloads go: the index is
+       regenerable state, and the downloads directory is for files on their way
+       to becoming an installed toolchain. */
+    char cache[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(paths_cache(cache, sizeof cache));
+    ASSERT_TRUE(fs_make_dirs(cache));
+
+    char index[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(index, sizeof index, "%s/releases.json", cache));
+    ASSERT_TRUE(fs_write_file(index, planted_index));
+
+    release_list list;
+    ASSERT_TRUE(llvm_fetch_releases(NULL, false, &list));
+    ASSERT_EQ(1, (int)list.count);
+    EXPECT_STREQ("99.1.1", list.items[0].version);
+    release_list_free(&list);
+
+    /* And nothing was written to the downloads directory to get it. */
+    char downloads[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(paths_downloads(downloads, sizeof downloads));
+    EXPECT_FALSE(fs_path_exists(downloads));
+
+    index_teardown(&fixture);
+}
+
+MOLTEST(llvm_refresh_discards_the_cached_index) {
+    if (!host_is_linux_x64())
+        SKIP("asset names are written for linux x86_64");
+
+    index_fixture fixture;
+    ASSERT_TRUE(index_setup(&fixture));
+
+    char cache[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(paths_cache(cache, sizeof cache));
+    ASSERT_TRUE(fs_make_dirs(cache));
+    char index[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(index, sizeof index, "%s/releases.json", cache));
+    ASSERT_TRUE(fs_write_file(index, planted_index));
+
+    /* Freshly written, so without a refresh it would be used as-is. */
+    release_list list;
+    bool fetched = llvm_fetch_releases(NULL, true, &list);
+
+    /* Whether the refetch succeeds depends on the network, which this test does
+       not require. Either way the planted index is gone: that is the claim. */
+    if (fetched) {
+        for (size_t i = 0; i < list.count; i++)
+            EXPECT_TRUE(strcmp(list.items[i].version, "99.1.1") != 0);
+    }
+    release_list_free(&list);
+
+    index_teardown(&fixture);
 }

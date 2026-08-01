@@ -26,6 +26,7 @@
 typedef enum {
     install_ok,
     install_ok_unverified,   /* installed, but the source published no digest */
+    install_ok_unpruned,     /* the minimal profile did not work; installed whole */
     install_no_downloader,   /* curl is missing */
     install_no_extractor,    /* tar is missing */
     install_unverifiable,    /* no digest, and the caller did not allow it */
@@ -42,11 +43,14 @@ typedef struct {
     char expected[SHA256_HEX_SIZE];    /* digests, on a mismatch */
     char actual[SHA256_HEX_SIZE];
     toolchain installed;               /* what the compiler said it is */
+    size_t features_proven;            /* what it compiled once installed */
+    long long installed_size;          /* bytes on disk */
 } install_report;
 
 typedef struct {
     const release_asset *asset;
     bool allow_unverified;  /* install even when there is no digest to check */
+    bool full;              /* unpack the whole release instead of the profile */
 } install_request;
 
 /* Run the whole thing. Never partially applies: on any failure nothing is left

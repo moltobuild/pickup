@@ -8,6 +8,8 @@ typedef struct {
     const char *version;     /* exact or partial; NULL for the latest stable */
     bool allow_unverified;   /* install even when no digest is published */
     bool dry_run;            /* resolve and report, download nothing */
+    bool refresh;            /* ignore the cached index and ask the source again */
+    bool full;               /* unpack the whole release, not just the profile */
 } install_command_request;
 
 /* Install a toolchain under the pickup home. Returns an exit code. */

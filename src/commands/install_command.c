@@ -3,6 +3,7 @@
 #include <pickup/exit_code.h>
 #include <pickup/services/install_service.h>
 #include <pickup/sources/llvm_source.h>
+#include <pickup/util/color.h>
 #include <pickup/util/format.h>
 
 #include <stdio.h>
@@ -35,8 +36,8 @@ static int report_dry_run(const release_asset *asset) {
 
 /* Say what went wrong, and what the user can do about it. */
 static int report_failure(const install_report *report, const release_asset *asset) {
-    fprintf(stderr, "%s %s %s: %s\n", format_cross(), TOOLCHAIN_CLANG, asset->version,
-            install_status_message(report->status));
+    fprintf(stderr, "%s%s%s %s %s: %s\n", color_error(), format_cross(), color_reset(),
+            TOOLCHAIN_CLANG, asset->version, install_status_message(report->status));
 
     switch (report->status) {
     case install_unverifiable:
@@ -55,13 +56,26 @@ static int report_failure(const install_report *report, const release_asset *ass
 }
 
 static int report_success(const install_report *report, const release_asset *asset) {
+    /* What was proven, in the same breath as the claim that it is installed:
+       the number is what says the pruning did not quietly break it. */
+    printf("probing installed toolchain%*s%zu features\n",
+           24, "", report->features_proven);
+
     if (report->status == install_ok_unverified)
         printf("! not verified: the release publishes no digest\n");
+    if (report->status == install_ok_unpruned)
+        printf("! the minimal profile did not compile, extracted in full\n");
 
     char version[32];
     toolchain_version_format(report->installed.version, version, sizeof version);
-    printf("%s %s %s installed in %s\n", format_check(),
-           toolchain_vendor_name(report->installed.vendor), version, report->directory);
+
+    char size[FORMAT_SIZE_MAX];
+    format_size(report->installed_size, size, sizeof size);
+
+    printf("%s%s%s %s %s installed in %s%s (%s)%s\n",
+           color_ok(), format_check(), color_reset(),
+           toolchain_vendor_name(report->installed.vendor), version,
+           color_dim(), report->directory, size, color_reset());
 
     /* What was asked for and what answered are not always spelled the same,
        so say so rather than let it look like the wrong thing was installed. */
@@ -79,7 +93,7 @@ int install_command_run(const install_command_request *request) {
     }
 
     release_list list;
-    if (!llvm_fetch_releases(request->version, &list)) {
+    if (!llvm_fetch_releases(request->version, request->refresh, &list)) {
         fprintf(stderr, "pickup: could not read the list of releases\n");
         return exit_failure;
     }
@@ -103,6 +117,7 @@ int install_command_run(const install_command_request *request) {
     const install_request install = {
         .asset = &asset,
         .allow_unverified = request->allow_unverified,
+        .full = request->full,
     };
     install_report report = install_run(&install);
 

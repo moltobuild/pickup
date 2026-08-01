@@ -1,9 +1,11 @@
 #include <pickup/services/install_service.h>
 
+#include <pickup/detect/capability.h>
 #include <pickup/detect/probe.h>
 #include <pickup/services/archive_service.h>
 #include <pickup/services/fs_service.h>
 #include <pickup/services/http_service.h>
+#include <pickup/util/progress.h>
 
 #include <stdio.h>
 
@@ -20,6 +22,9 @@
 
 /* What the progress bar says while downloading. */
 #define DOWNLOAD_LABEL_FORMAT "downloading clang %s"
+#define EXTRACT_LABEL_FORMAT  "extracting clang %s"
+#define VERIFY_LABEL_FORMAT   "verifying clang %s"
+#define PREPARING_LABEL       "preparing the extraction"
 #define LABEL_SIZE 64
 
 static install_report report_of(install_status status) {
@@ -29,13 +34,15 @@ static install_report report_of(install_status status) {
 }
 
 bool install_succeeded(install_status status) {
-    return status == install_ok || status == install_ok_unverified;
+    return status == install_ok || status == install_ok_unverified
+        || status == install_ok_unpruned;
 }
 
 const char *install_status_message(install_status status) {
     switch (status) {
     case install_ok:              return "installed";
     case install_ok_unverified:   return "installed, integrity not verified";
+    case install_ok_unpruned:     return "installed in full: the minimal profile did not compile";
     case install_no_downloader:   return "curl is required to download toolchains";
     case install_no_extractor:    return "tar is required to unpack toolchains";
     case install_unverifiable:    return "this release publishes no sha256 digest";
@@ -61,27 +68,87 @@ static bool fetch_archive(const release_asset *asset, char *out, size_t out_size
     return http_download_with_progress(asset->url, out, asset->size, label);
 }
 
+/* Redraw the verification bar, but only when the figure it shows would change:
+   the digest is fed in 64 KB at a time, and a gigabyte of that is thirty
+   thousand redraws nobody can read. */
+static void watch_verify(long long done, long long total, void *context) {
+    const char *label = context;
+    static int last_percent = -1;
+
+    if (total <= 0 || !progress_is_interactive(stdout))
+        return;
+
+    int percent = (int)((done * 100) / total);
+    if (percent == last_percent && done < total)
+        return;
+    last_percent = percent;
+    progress_draw(stdout, label, done, total);
+}
+
 /* Compare the archive against the digest the source published. */
 static bool digest_matches(const char *archive, const release_asset *asset,
                            install_report *report) {
-    if (!sha256_file(archive, report->actual))
+    char label[LABEL_SIZE];
+    snprintf(label, sizeof label, VERIFY_LABEL_FORMAT, asset->version);
+
+    bool interactive = progress_is_interactive(stdout);
+    bool hashed = sha256_file_watched(archive, report->actual, watch_verify, label);
+    if (interactive)
+        progress_done(stdout);
+    if (!hashed)
         return false;
+
     (void)fs_format_path(report->expected, sizeof report->expected, "%s", asset->sha256);
     return sha256_hex_equal(report->actual, asset->sha256);
 }
 
-/* Unpack into a directory that does not yet look like an installation. */
-static bool extract_to_partial(const char *archive, char *partial, size_t partial_size) {
+/* Where a toolchain is assembled, emptied of anything an interrupted install
+   may have left. */
+static bool prepare_partial(char *partial, size_t partial_size) {
     char toolchains[PICKUP_PATHS_MAX];
     if (!paths_toolchains(toolchains, sizeof toolchains) || !fs_make_dirs(toolchains))
         return false;
     if (!fs_format_path(partial, partial_size, "%s/%s", toolchains, PARTIAL_SUFFIX))
         return false;
+    return fs_remove_tree(partial) && fs_make_dirs(partial);
+}
 
-    /* Left over from an install that was interrupted. */
-    if (!fs_remove_tree(partial) || !fs_make_dirs(partial))
-        return false;
-    return archive_extract(archive, partial, STRIP_TOP_LEVEL);
+/* Unpack, either the profile or the whole release. */
+static bool extract_to_partial(const char *archive, const release_asset *asset,
+                               bool full, const char *partial) {
+    char label[LABEL_SIZE];
+    snprintf(label, sizeof label, EXTRACT_LABEL_FORMAT, asset->version);
+
+    archive_request request = {
+        .strip_components = STRIP_TOP_LEVEL,
+        .label = label,
+        .waiting_label = PREPARING_LABEL,
+    };
+    if (!full) {
+        request.patterns = llvm_minimal_patterns(&request.pattern_count);
+        request.excludes = llvm_minimal_excludes(&request.exclude_count);
+    }
+    return archive_extract_selected(archive, partial, &request);
+}
+
+/* Count what the installed compiler actually compiles.
+
+   This is the check that makes pruning safe to attempt: the profile is a guess
+   about somebody else's layout, and a guess that dropped something essential
+   shows up here as a compiler that proves nothing. Leaving one feature behind
+   would be missed, but leaving out the builtin headers, the runtime or the
+   binary itself cannot be. */
+static size_t count_proven_features(const toolchain *chain) {
+    capability_set proven = capability_probe(chain->path, lang_c);
+
+    size_t total = 0;
+    const capability *catalog = capability_catalog(&total);
+    size_t count = 0;
+    for (size_t i = 0; i < total; i++) {
+        if (catalog[i].lang == lang_c && capability_set_has(proven, i))
+            count++;
+    }
+    return count;
 }
 
 /* Ask what was unpacked to identify itself, which also proves it runs. */
@@ -137,17 +204,42 @@ install_report install_run(const install_request *request) {
     }
 
     char partial[PICKUP_PATHS_MAX];
-    if (!extract_to_partial(archive, partial, sizeof partial)) {
+    if (!prepare_partial(partial, sizeof partial)) {
         remove(archive);
-        (void)fs_remove_tree(partial);
-        return report_of(install_extract_failed);
+        return report_of(install_path_error);
+    }
+    /* Unpack the profile, then ask the result to compile. Both a profile that
+       fits nothing in this archive and one that dropped something essential
+       come out the same way here — as a toolchain that proves nothing — and get
+       the same answer: unpack the release whole rather than leave something
+       installed that cannot build. */
+    bool pruned = !request->full;
+    if (pruned) {
+        if (extract_to_partial(archive, asset, false, partial)
+            && identify_installed(partial, &report.installed))
+            report.features_proven = count_proven_features(&report.installed);
+        if (report.features_proven == 0)
+            pruned = false;
     }
 
-    if (!identify_installed(partial, &report.installed)) {
+    if (!pruned) {
+        if (!prepare_partial(partial, sizeof partial)
+            || !extract_to_partial(archive, asset, true, partial)) {
+            remove(archive);
+            (void)fs_remove_tree(partial);
+            return report_of(install_extract_failed);
+        }
+        report.features_proven = identify_installed(partial, &report.installed)
+            ? count_proven_features(&report.installed) : 0;
+    }
+
+    if (report.features_proven == 0) {
         remove(archive);
         (void)fs_remove_tree(partial);
         return report_of(install_not_a_toolchain);
     }
+
+    (void)fs_tree_size(partial, &report.installed_size);
 
     if (!adopt(partial, &report.installed, report.directory, sizeof report.directory)) {
         remove(archive);
@@ -159,6 +251,14 @@ install_report install_run(const install_request *request) {
        be read again is not a cache, it is litter. */
     remove(archive);
 
-    report.status = verifiable ? install_ok : install_ok_unverified;
+    /* Three outcomes worth telling apart: it was verified and pruned, it could
+       not be verified, or pruning did not hold and the whole release is on
+       disk. Each is something the user may want to act on. */
+    if (!verifiable)
+        report.status = install_ok_unverified;
+    else if (!request->full && !pruned)
+        report.status = install_ok_unpruned;
+    else
+        report.status = install_ok;
     return report;
 }

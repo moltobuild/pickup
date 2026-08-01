@@ -3,11 +3,15 @@
 
 #include <stdbool.h>
 
-/* List the versions of `name` that can be installed on this machine.
+typedef struct {
+    const char *name;      /* the toolchain to search for */
+    const char *version;   /* exact or partial; NULL for everything on offer */
+    bool refresh;          /* ignore the cached index and ask the source again */
+    bool as_toml;
+} search_command_request;
 
-   `version` narrows the answer and may be partial ("14", "14.2", "14.2.1");
-   NULL or "" lists everything on offer. Release candidates are never listed.
-   Returns an exit code. */
-[[nodiscard]] int search_command_run(const char *name, const char *version, bool as_toml);
+/* List the versions of a toolchain that can be installed on this machine.
+   Release candidates are never listed. Returns an exit code. */
+[[nodiscard]] int search_command_run(const search_command_request *request);
 
 #endif /* PICKUP_SEARCH_COMMAND_H */

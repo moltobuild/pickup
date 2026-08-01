@@ -264,12 +264,14 @@ bool llvm_parse_releases(const char *json, const char *version_filter, release_l
 
 /* --- fetching --- */
 
-/* Where the API answer is kept between runs. */
+/* Where the API answer is kept between runs. It is cached state, not a
+   download: what lands in the downloads directory is on its way to becoming an
+   installed toolchain, and this never is. */
 static bool cache_file(char *out, size_t out_size) {
-    char downloads[PICKUP_PATHS_MAX];
-    if (!paths_downloads(downloads, sizeof downloads))
+    char directory[PICKUP_PATHS_MAX];
+    if (!paths_cache(directory, sizeof directory))
         return false;
-    return fs_format_path(out, out_size, "%s/%s", downloads, RELEASES_CACHE_FILE);
+    return fs_format_path(out, out_size, "%s/%s", directory, RELEASES_CACHE_FILE);
 }
 
 static bool cache_is_fresh(const char *path) {
@@ -280,16 +282,22 @@ static bool cache_is_fresh(const char *path) {
     return age >= 0 && age < RELEASES_CACHE_TTL_SECONDS;
 }
 
-bool llvm_fetch_releases(const char *version_filter, release_list *out) {
+bool llvm_fetch_releases(const char *version_filter, bool refresh, release_list *out) {
     release_list_init(out);
 
     char path[PICKUP_PATHS_MAX];
     if (!cache_file(path, sizeof path))
         return false;
 
+    /* An explicit refresh throws the index away first, so what comes back is
+       what the source publishes now rather than what it published within the
+       last hour. */
+    if (refresh)
+        remove(path);
+
     if (!cache_is_fresh(path)) {
         char directory[PICKUP_PATHS_MAX];
-        if (!paths_downloads(directory, sizeof directory) || !fs_make_dirs(directory))
+        if (!paths_cache(directory, sizeof directory) || !fs_make_dirs(directory))
             return false;
         if (!http_download(RELEASES_URL, path))
             return false;
@@ -306,6 +314,45 @@ bool llvm_fetch_releases(const char *version_filter, release_list *out) {
     if (!ok)
         remove(path);
     return ok;
+}
+
+/*
+ * The minimal profile, checked entry by entry against the 11,073 paths of the
+ * 22.1.8 release: 2,197 of them, 550 MB against 11.29 GB.
+ */
+static const char *const minimal_patterns[] = {
+    /* the compiler, its aliases, and the binary they point at */
+    "*/bin/clang", "*/bin/clang++", "*/bin/clang-cpp", "*/bin/clang-[0-9]*",
+    /* the linker, so the toolchain does not depend on the system having one */
+    "*/bin/lld", "*/bin/ld.lld",
+    /* builtin headers, compiler-rt and the sanitizer runtimes */
+    "*/lib/clang/*",
+    /* libc++: its headers, and the per-target __config_site without which not
+       one C++ translation unit compiles.
+
+       These must not overlap. tar reports failure for any pattern that matched
+       nothing, and a pattern for libc++abi would never match: libc++* claims
+       those entries first. */
+    "*/include/c++/*", "*/include/*/c++/*",
+    "*/lib/*/libc++*", "*/lib/*/libunwind*",
+};
+#define MINIMAL_PATTERN_COUNT (sizeof minimal_patterns / sizeof minimal_patterns[0])
+
+static const char *const minimal_excludes[] = {
+    "*flang*", /* the Fortran runtime, 27 MB inside the clang resource dir */
+};
+#define MINIMAL_EXCLUDE_COUNT (sizeof minimal_excludes / sizeof minimal_excludes[0])
+
+const char *const *llvm_minimal_patterns(size_t *count) {
+    if (count != NULL)
+        *count = MINIMAL_PATTERN_COUNT;
+    return minimal_patterns;
+}
+
+const char *const *llvm_minimal_excludes(size_t *count) {
+    if (count != NULL)
+        *count = MINIMAL_EXCLUDE_COUNT;
+    return minimal_excludes;
 }
 
 bool llvm_best(const release_list *list, release_asset *out) {

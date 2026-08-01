@@ -55,8 +55,13 @@ void release_list_free(release_list *list);
 
 /* The same, fetched from GitHub. The answer is cached briefly, because the
    unauthenticated API allows only 60 requests an hour and `search` is the kind
-   of command people run twice in a row. */
-[[nodiscard]] bool llvm_fetch_releases(const char *version_filter, release_list *out);
+   of command people run twice in a row.
+
+   `refresh` discards that cached index first. It is a parameter rather than a
+   separate call because the only moment worth discarding it is immediately
+   before asking again. */
+[[nodiscard]] bool llvm_fetch_releases(const char *version_filter, bool refresh,
+                                       release_list *out);
 
 /* The highest version in `list`. False if it is empty. */
 [[nodiscard]] bool llvm_best(const release_list *list, release_asset *out);
@@ -69,5 +74,24 @@ void release_list_free(release_list *list);
    the version has: "14" matches 14.2.1, "14.2" does not match 14.3.0. NULL or
    "" matches everything. */
 [[nodiscard]] bool llvm_version_matches(const char *filter, const char *version);
+
+/*
+ * What is worth keeping out of a release.
+ *
+ * A release weighs some 11 GB unpacked, and almost none of it compiles C or
+ * C++: MLIR, Flang, lldb, clangd, the refactoring tools, and gigabytes of LLVM
+ * static libraries for people linking against LLVM itself. What Molto needs is
+ * a compiler, a linker, the builtin headers, the runtime, and libc++ — about
+ * 550 MB.
+ *
+ * The patterns name no version, so they hold for 18.1.8 and for whatever comes
+ * next. They are still only a guess about someone else's layout, which is why
+ * an install that uses them is confirmed by compiling with the result.
+ */
+[[nodiscard]] const char *const *llvm_minimal_patterns(size_t *count);
+
+/* Entries to drop even though they match: the Fortran runtime lives inside the
+   clang resource directory and has no part in C or C++. */
+[[nodiscard]] const char *const *llvm_minimal_excludes(size_t *count);
 
 #endif /* PICKUP_LLVM_SOURCE_H */

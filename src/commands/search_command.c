@@ -62,7 +62,8 @@ static void print_toml(const release_list *list) {
     }
 }
 
-int search_command_run(const char *name, const char *version, bool as_toml) {
+int search_command_run(const search_command_request *request) {
+    const char *name = request->name;
     if (!is_supported(name)) {
         fprintf(stderr, "pickup: nothing to search for named '%s'\n",
                 name != NULL ? name : "");
@@ -76,7 +77,7 @@ int search_command_run(const char *name, const char *version, bool as_toml) {
     }
 
     release_list list;
-    if (!llvm_fetch_releases(version, &list)) {
+    if (!llvm_fetch_releases(request->version, request->refresh, &list)) {
         fprintf(stderr, "pickup: could not read the list of releases\n");
         return exit_failure;
     }
@@ -84,15 +85,16 @@ int search_command_run(const char *name, const char *version, bool as_toml) {
     if (list.count == 0) {
         /* Nothing matched is an answer, and gets the exit code that says so
            rather than the one that means something broke. */
-        if (version != NULL && version[0] != '\0')
-            fprintf(stderr, "pickup: no %s release matches version %s\n", name, version);
+        if (request->version != NULL && request->version[0] != '\0')
+            fprintf(stderr, "pickup: no %s release matches version %s\n",
+                    name, request->version);
         else
             fprintf(stderr, "pickup: no %s release ships a build for this machine\n", name);
         release_list_free(&list);
         return exit_no_match;
     }
 
-    if (as_toml)
+    if (request->as_toml)
         print_toml(&list);
     else
         print_text(&list);

@@ -47,9 +47,11 @@ pickup list                # the inventory
 pickup show <name>         # one toolchain, feature by feature
 pickup scan                # re-probe everything and rewrite the cache
 pickup resolve [options]   # the best toolchain for a set of requirements
+pickup search <toolchain>  # the versions available to install
+pickup install <toolchain> # download and install one
 ```
 
-`install`, `uninstall` and `default` are specified but not implemented yet.
+`uninstall` and `default` are specified but not implemented yet.
 
 ### Looking at what the machine has
 
@@ -133,6 +135,64 @@ pickup: no c compiler satisfies the request
   clang            (14.0.0) missing: constexpr nullptr
   gcc-12           (12.3.0) missing: constexpr nullptr
 ```
+
+### Installing a toolchain
+
+When the machine has nothing suitable, Pickup can fetch one. `search` shows
+what is on offer for this host, newest first; release candidates are never
+listed:
+
+```
+$ pickup search clang
+VERSION  SIZE  ASSET
+22.1.8   1.8G  LLVM-22.1.8-Linux-X64.tar.xz
+22.1.7   1.8G  LLVM-22.1.7-Linux-X64.tar.xz
+21.1.8   1.9G  LLVM-21.1.8-Linux-X64.tar.xz
+```
+
+`--version` narrows it, and may name fewer components than the version has:
+`21` means any 21, `20.1.5` means exactly that one.
+
+```sh
+pickup search clang --version 21
+pickup install clang                      # the newest stable
+pickup install clang --version 20.1.5
+pickup install clang --dry-run            # resolve it, download nothing
+```
+
+Everything lands under `~/.pickup/toolchains/` (or `$PICKUP_HOME`), so
+installing never asks for administrator rights. Installed toolchains join the
+same inventory as the system ones, and `list`, `show` and `resolve` treat them
+no differently.
+
+The archive is checked against the sha256 the source published before anything
+is unpacked, and the install is assembled under a temporary name and moved into
+place only once it is complete, so an interrupted one leaves nothing that looks
+finished.
+
+```
+$ pickup install clang --dry-run
+version  22.1.8
+asset    LLVM-22.1.8-Linux-X64.tar.xz
+url      https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.8/LLVM-22.1.8-Linux-X64.tar.xz
+size     1.8G (1938859476 bytes)
+sha256   df0e1ecf16caf3489a272a5eea4eec9b0d82878f6477fa309504f918a0006384
+```
+
+LLVM only began publishing digests recently. For a release that has none there
+is nothing to check against, so Pickup refuses it rather than claim it
+verified, and says what would override that:
+
+```
+$ pickup install clang --version 18.1.8
+✗ clang 18.1.8: this release publishes no sha256 digest
+  nothing was downloaded
+  re-run with --allow-unverified to install it anyway
+```
+
+Downloads need `curl` and unpacking needs `tar`, both of which ship with
+Windows 10 and later, macOS, and mainstream Linux. Neither is linked into
+Pickup; it still builds against libc alone.
 
 ### Output for machines
 

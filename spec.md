@@ -269,18 +269,50 @@ Layout:
 <pickup home>/toolchains/<vendor>-<version>-<target>/
 ```
 
+The pickup home is `~/.pickup`, or `$PICKUP_HOME` where that is set. Nothing is
+ever written outside it, so installing never requires elevation and uninstalling
+is deleting a directory.
+
+The version and target in that name are read from the installed compiler, not
+from the name of the archive it came in. Unpacking something and asking it what
+it is proves it runs; trusting a file name proves nothing.
+
 Installed toolchains join the same inventory as system ones. Resolution does
 not distinguish between them.
 
 Operations:
 
+- search
 - install
 - uninstall
 - list installed
 - set the default toolchain
 
+## Sources
+
+A source knows what a vendor publishes and which of it runs here. The first is
+LLVM, read from GitHub's REST API: releases marked as prereleases or drafts are
+never offered, and one release ships source archives, documentation, installers
+and several platforms at once, so the asset for the host is selected rather than
+assumed. Asset naming has changed across LLVM versions, so it is matched, never
+constructed.
+
+GCC publishes no binaries of its own and therefore has no source yet.
+
+## Verification
+
 Installed archives are verified before use. An artifact that fails verification
-is discarded, never installed.
+is discarded, never installed, and never unpacked.
+
+The digest comes from the source alongside the download. Where a release
+publishes none — LLVM only began doing so recently — Pickup refuses to install
+it rather than pretend it checked, and says what flag will override that. The
+decision is made before downloading: spending a gigabyte to arrive at the same
+refusal helps nobody.
+
+An install is assembled under a temporary name and moved into place only once it
+is complete, which is atomic within a filesystem. An interrupted install
+therefore leaves nothing that looks finished.
 
 ---
 
@@ -296,9 +328,14 @@ Commands:
 - `show <name|path>` — one toolchain in detail, feature by feature
 - `resolve` — the best toolchain for a set of requirements
 - `scan` — rebuild the inventory
-- `install` — add a toolchain
+- `search <toolchain>` — the versions available to install
+- `install <toolchain>` — add a toolchain
 - `uninstall` — remove a toolchain
 - `default` — set the default toolchain
+
+`search` and `install` take `--version`, which may name fewer components than
+the version has: `14` means any 14, `14.2` any 14.2. Without it, `install`
+takes the newest stable release.
 
 Exit codes:
 

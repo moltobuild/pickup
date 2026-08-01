@@ -36,7 +36,7 @@ static bool wants_toml(const cli_args *args) {
    of it names a machine. */
 static const cli_option resolve_options[] = {
     { "--lang", 'l', cli_opt_value, "<c|c++>", "Language to compile", "c" },
-    { "--std", 's', cli_opt_value, "<name>", "Standard whose features are required", NULL },
+    { "--std", 's', cli_opt_value, "<name>", "Standard flag the compiler must accept", NULL },
     { "--require", 'r', cli_opt_value, "<ids>",
       "Comma-separated features that must be present", NULL },
     { "--vendor", 'v', cli_opt_value, "<name>", "Restrict to one vendor", NULL },

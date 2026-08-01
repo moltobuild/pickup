@@ -4,6 +4,7 @@
 #include <pickup/services/http_service.h>
 #include <pickup/sources/llvm_source.h>
 #include <pickup/util/format.h>
+#include <pickup/util/progress.h>
 #include <pickup/util/table.h>
 
 #include <stdio.h>
@@ -62,6 +63,21 @@ static void print_toml(const release_list *list) {
     }
 }
 
+/* What the spinner says while the index is on its way. A spinner rather than a
+   bar: the API never announces how long its answer is, so there is no fraction
+   to draw. */
+#define FETCH_LABEL "fetching the release index"
+
+/* On stderr, for the same reason the table is on stdout: one of them is the
+   answer and the other is not. */
+static void watch_fetch(size_t frame, void *context) {
+    progress_line *line = context;
+    if (!progress_is_interactive(stderr))
+        return;
+    spinner_wait(stderr, FETCH_LABEL, frame);
+    line->drawn = true;
+}
+
 int search_command_run(const search_command_request *request) {
     const char *name = request->name;
     if (!is_supported(name)) {
@@ -77,7 +93,12 @@ int search_command_run(const search_command_request *request) {
     }
 
     release_list list;
-    if (!llvm_fetch_releases(request->version, request->refresh, &list)) {
+    progress_line line = { .drawn = false };
+    bool fetched = llvm_fetch_releases_watched(request->version, request->refresh,
+                                               watch_fetch, &line, &list);
+    progress_line_clear(stderr, &line);
+
+    if (!fetched) {
         fprintf(stderr, "pickup: could not read the list of releases\n");
         return exit_failure;
     }

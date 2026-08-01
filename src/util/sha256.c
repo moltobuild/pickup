@@ -152,17 +152,40 @@ void sha256_finish(sha256_state *state, char *hex_out) {
 }
 
 bool sha256_file(const char *path, char *hex_out) {
+    return sha256_file_watched(path, hex_out, NULL, NULL);
+}
+
+/* The file's size, so progress can be reported as a fraction. Zero when it
+   cannot be told, which the watcher reads as "total unknown". */
+static long long size_of(FILE *file) {
+    if (fseek(file, 0, SEEK_END) != 0)
+        return 0;
+    long end = ftell(file);
+    if (end < 0 || fseek(file, 0, SEEK_SET) != 0)
+        return 0;
+    return (long long)end;
+}
+
+bool sha256_file_watched(const char *path, char *hex_out,
+                         sha256_watcher watcher, void *context) {
     FILE *file = fopen(path, "rb");
     if (file == NULL)
         return false;
+
+    long long total = watcher != NULL ? size_of(file) : 0;
+    long long done = 0;
 
     sha256_state state;
     sha256_init(&state);
 
     static unsigned char chunk[SHA256_CHUNK_SIZE];
     size_t got;
-    while ((got = fread(chunk, 1, sizeof chunk, file)) > 0)
+    while ((got = fread(chunk, 1, sizeof chunk, file)) > 0) {
         sha256_update(&state, chunk, got);
+        done += (long long)got;
+        if (watcher != NULL)
+            watcher(done, total, context);
+    }
 
     bool ok = ferror(file) == 0;
     fclose(file);

@@ -41,6 +41,18 @@ void sha256_finish(sha256_state *state, char *hex_out);
    SHA256_HEX_SIZE bytes. */
 [[nodiscard]] bool sha256_file(const char *path, char *hex_out);
 
+/* Called as a file is hashed, with how much of it has been read. */
+typedef void (*sha256_watcher)(long long done, long long total, void *context);
+
+/* The same, reporting progress as it goes.
+
+   Digesting a gigabyte takes tens of seconds during which a caller has nothing
+   to show, and unexplained silence is indistinguishable from a hang. The total
+   is known here — it is the size of the file — so this can be reported as a
+   real fraction rather than mere animation. `watcher` may be NULL. */
+[[nodiscard]] bool sha256_file_watched(const char *path, char *hex_out,
+                                       sha256_watcher watcher, void *context);
+
 /* Compare two hex digests without regard to case, and without giving up early,
    so the comparison cannot be timed. Either being NULL is false. */
 [[nodiscard]] bool sha256_hex_equal(const char *left, const char *right);

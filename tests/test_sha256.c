@@ -92,3 +92,46 @@ MOLTEST(sha256_compares_digests_case_insensitively) {
     EXPECT_FALSE(sha256_hex_equal(NULL, lower));
     EXPECT_FALSE(sha256_hex_equal(lower, NULL));
 }
+
+/* Collects what a hash reported as it went. */
+typedef struct { long long last_done; long long total; int calls; } progress_record;
+
+static void record_progress(long long done, long long total, void *context) {
+    progress_record *record = context;
+    record->last_done = done;
+    record->total = total;
+    record->calls++;
+}
+
+MOLTEST(sha256_reports_progress_while_it_hashes) {
+    char path[] = "/tmp/pickup_sha_watch_XXXXXX";
+    int fd = mkstemp(path);
+    ASSERT_TRUE(fd >= 0);
+    close(fd);
+
+    /* Big enough to span several read chunks, so progress has somewhere to
+       go. */
+    FILE *file = fopen(path, "wb");
+    ASSERT_TRUE(file != NULL);
+    static char block[65536];
+    memset(block, 'a', sizeof block);
+    for (int i = 0; i < 4; i++)
+        fwrite(block, 1, sizeof block, file);
+    fclose(file);
+
+    progress_record seen = { 0, 0, 0 };
+    char hex[SHA256_HEX_SIZE];
+    EXPECT_TRUE(sha256_file_watched(path, hex, record_progress, &seen));
+
+    /* Reported as a fraction of a known total, growing to all of it. */
+    EXPECT_TRUE(seen.calls > 1);
+    EXPECT_TRUE(seen.total == 4 * 65536);
+    EXPECT_TRUE(seen.last_done == seen.total);
+
+    /* And the digest is the same one the unwatched call produces. */
+    char plain[SHA256_HEX_SIZE];
+    EXPECT_TRUE(sha256_file(path, plain));
+    EXPECT_STREQ(plain, hex);
+
+    remove(path);
+}

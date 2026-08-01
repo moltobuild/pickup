@@ -17,6 +17,15 @@
    skipped, not fatal. */
 [[nodiscard]] bool scanner_collect(const char *path_env, str_list *out);
 
+/* Add the candidates from toolchains Pickup installed itself, found under
+   `toolchains_dir` as <toolchain>/bin.
+
+   `out` may already hold what PATH turned up, and is deduplicated against it,
+   so a toolchain that is both installed here and reachable on PATH is still
+   reported once. A missing directory simply means nothing has been installed,
+   which is not a failure. */
+[[nodiscard]] bool scanner_collect_installed(const char *toolchains_dir, str_list *out);
+
 /* True if `name` looks like a compiler worth probing. Exposed for testing. */
 [[nodiscard]] bool scanner_is_candidate_name(const char *name);
 

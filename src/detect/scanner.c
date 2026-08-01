@@ -132,6 +132,61 @@ static bool scan_directory(const char *directory, candidate_list *out) {
     return ok;
 }
 
+/* Copy the candidate list back out, replacing what the caller had. Rebuilt
+   rather than appended to, because deduplication may have swapped an existing
+   entry for a better-named spelling of the same binary. */
+static bool publish(const candidate_list *candidates, str_list *out) {
+    str_list_free(out);
+    str_list_init(out);
+    for (size_t i = 0; i < str_list_count(&candidates->found); i++) {
+        if (!str_list_push(out, str_list_get(&candidates->found, i)))
+            return false;
+    }
+    return true;
+}
+
+/* Start from what has already been collected, so anything added afterwards is
+   deduplicated against it. */
+static bool seed(const str_list *existing, candidate_list *candidates) {
+    for (size_t i = 0; i < str_list_count(existing); i++) {
+        if (!add_unique(candidates, str_list_get(existing, i)))
+            return false;
+    }
+    return true;
+}
+
+bool scanner_collect_installed(const char *toolchains_dir, str_list *out) {
+    DIR *dir = opendir(toolchains_dir);
+    if (dir == NULL)
+        return true; /* nothing installed yet */
+
+    candidate_list candidates;
+    str_list_init(&candidates.found);
+    str_list_init(&candidates.resolved);
+
+    bool ok = seed(out, &candidates);
+    const struct dirent *entry;
+    while (ok && (entry = readdir(dir)) != NULL) {
+        /* Skips . and .., and also .partial, which is an install in flight. */
+        if (entry->d_name[0] == '.')
+            continue;
+
+        char bin[SCANNER_PATH_SIZE];
+        if (!fs_format_path(bin, sizeof bin, "%s/%s/bin", toolchains_dir, entry->d_name))
+            continue;
+        if (!fs_is_dir(bin))
+            continue;
+        ok = scan_directory(bin, &candidates);
+    }
+    closedir(dir);
+
+    if (ok)
+        ok = publish(&candidates, out);
+    str_list_free(&candidates.found);
+    str_list_free(&candidates.resolved);
+    return ok;
+}
+
 bool scanner_collect(const char *path_env, str_list *out) {
     if (path_env == NULL)
         return true;

@@ -3,6 +3,7 @@
 #include <pickup/detect/probe.h>
 #include <pickup/detect/scanner.h>
 #include <pickup/services/cache_service.h>
+#include <pickup/services/paths_service.h>
 #include <pickup/util/str_list.h>
 
 #include <stdlib.h>
@@ -71,6 +72,20 @@ static bool probe_candidates(const str_list *candidates, inventory *out) {
     return true;
 }
 
+/* Everything worth probing: what PATH offers, plus the toolchains Pickup
+   installed, which are not on PATH and would otherwise be invisible to the
+   commands that report them (spec.md section 6). */
+static bool collect_candidates(str_list *out) {
+    str_list_init(out);
+    if (!scanner_collect(getenv("PATH"), out))
+        return false;
+
+    char toolchains[PICKUP_PATHS_MAX];
+    if (!paths_toolchains(toolchains, sizeof toolchains))
+        return true; /* no pickup home: nothing of ours to add */
+    return scanner_collect_installed(toolchains, out);
+}
+
 /* Put the inventory in its documented order, so two runs agree. */
 static void inventory_sort(inventory *list) {
     if (list->count > 1)
@@ -81,8 +96,7 @@ bool inventory_discover(inventory *out) {
     memset(out, 0, sizeof *out);
 
     str_list candidates;
-    str_list_init(&candidates);
-    if (!scanner_collect(getenv("PATH"), &candidates)) {
+    if (!collect_candidates(&candidates)) {
         str_list_free(&candidates);
         return false;
     }
@@ -99,8 +113,7 @@ bool inventory_load(inventory *out, bool refresh) {
     /* Scanning PATH is cheap; probing is not. So the candidate list is always
        rebuilt, and it is what tells the cache whether it is still current. */
     str_list candidates;
-    str_list_init(&candidates);
-    if (!scanner_collect(getenv("PATH"), &candidates)) {
+    if (!collect_candidates(&candidates)) {
         str_list_free(&candidates);
         return false;
     }

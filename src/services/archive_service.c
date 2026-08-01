@@ -15,6 +15,11 @@
 #define ARG_STRIP_FORMAT "--strip-components=%d"
 #define ARG_VERSION    "--version"
 
+/* Asks for the member arguments to be read as globs. Only GNU tar has it, and
+   only GNU tar needs it; whether this one does is settled by asking, in
+   archive_supports_wildcards. */
+#define ARG_WILDCARDS "--wildcards"
+
 /* Room for the composed --strip-components argument. */
 #define STRIP_ARG_SIZE 32
 
@@ -35,16 +40,28 @@ bool archive_available(void) {
     return available;
 }
 
+bool archive_supports_wildcards(void) {
+    static bool checked = false;
+    static bool supported = false;
+    if (checked)
+        return supported;
+
+    /* Paired with --version so the question costs nothing: tar parses its
+       options, finds nothing to do, and says whether it recognised the flag.
+       An implementation that does not have it exits non-zero without touching
+       an archive. */
+    const char *argv[] = { TAR_COMMAND, ARG_WILDCARDS, ARG_VERSION, NULL };
+    process_result result = process_try(argv, NULL);
+    supported = result.completed && result.exit_code == 0;
+    checked = true;
+    return supported;
+}
+
 bool archive_extract(const char *archive, const char *destination, int strip_components) {
     const archive_request request = { .strip_components = strip_components };
     return archive_extract_selected(archive, destination, &request);
 }
 
-/* Treat the member arguments as globs. GNU tar needs telling; bsdtar, which is
-   what macOS and Windows ship, globs by default and rejects the flag. Only
-   passed when there are patterns to match, so the plain full extraction keeps
-   working everywhere. */
-#define ARG_WILDCARDS "--wildcards"
 #define ARG_EXCLUDE_FORMAT "--exclude=%s"
 
 /* Fixed part of the command, plus room for the exclusions and patterns. */
@@ -87,6 +104,8 @@ static bool build_command(tar_command *command, const char *archive,
     push(command, destination);
     push(command, command->strip);
 
+    /* Exclusions first, and they need no flag: both implementations already
+       read those as globs. */
     for (size_t i = 0; i < request->exclude_count; i++) {
         snprintf(command->excludes[i], EXCLUDE_ARG_SIZE, ARG_EXCLUDE_FORMAT,
                  request->excludes[i]);
@@ -94,7 +113,12 @@ static bool build_command(tar_command *command, const char *archive,
     }
 
     if (request->pattern_count > 0) {
-        push(command, ARG_WILDCARDS);
+        /* In GNU tar a matching option governs the patterns that follow it, so
+           this belongs here rather than earlier. Passed only where it is
+           understood, and only when there are members to match: a full
+           extraction names none. */
+        if (archive_supports_wildcards())
+            push(command, ARG_WILDCARDS);
         for (size_t i = 0; i < request->pattern_count; i++)
             push(command, request->patterns[i]);
     }

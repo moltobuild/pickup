@@ -17,6 +17,18 @@
 /* True if a usable tar was found. Worked out once. */
 [[nodiscard]] bool archive_available(void);
 
+/* True if this tar takes --wildcards.
+
+   GNU tar needs telling before it will treat the requested members as globs;
+   its wildcards-by-default applies to exclusions only. bsdtar, which macOS and
+   Windows ship, globs member arguments already and has no such option, so
+   passing it there is an unknown-option error.
+
+   Which one is present is settled by running tar rather than by reading its
+   version string, the same way a compiler is asked whether it takes a `-std=`
+   instead of being looked up in a table. Worked out once. */
+[[nodiscard]] bool archive_supports_wildcards(void);
+
 /* The command a caller should be told to install when archive_available is
    false. */
 [[nodiscard]] const char *archive_requirement(void);

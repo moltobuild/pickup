@@ -44,6 +44,17 @@ MOLTEST(archive_reports_whether_it_can_extract) {
     EXPECT_STREQ("tar", archive_requirement());
 }
 
+MOLTEST(archive_settles_the_wildcards_question_by_asking) {
+    if (!archive_available())
+        SKIP("tar is not installed");
+
+    /* Whatever this tar answers, it must answer the same every time: the
+       result is worked out once and reused for every extraction after. */
+    bool first = archive_supports_wildcards();
+    EXPECT_TRUE(archive_supports_wildcards() == first);
+    EXPECT_TRUE(archive_supports_wildcards() == first);
+}
+
 MOLTEST(archive_strips_the_top_level_directory) {
     if (!archive_available())
         SKIP("tar is not installed");
@@ -164,6 +175,41 @@ MOLTEST(archive_extracts_only_what_was_asked_for) {
 
     /* Excluded even though the pattern matched it. */
     snprintf(path, sizeof path, "%s/lib/clang/1/lib/libflang_rt.runtime.a", destination);
+    EXPECT_FALSE(fs_path_exists(path));
+
+    fixture_teardown(&fixture);
+}
+
+MOLTEST(archive_selects_by_pattern_whichever_tar_this_is) {
+    if (!archive_available())
+        SKIP("tar is not installed");
+
+    archive_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    char archive[256], destination[256];
+    snprintf(archive, sizeof archive, "%s/release.tar.gz", fixture.root);
+    snprintf(destination, sizeof destination, "%s/picked", fixture.root);
+    ASSERT_TRUE(make_mixed_archive(fixture.root, archive));
+    ASSERT_TRUE(fs_make_dirs(destination));
+
+    const char *const patterns[] = { "*/bin/clang" };
+    const archive_request request = {
+        .patterns = patterns, .pattern_count = 1,
+        .strip_components = 1,
+    };
+    ASSERT_TRUE(archive_extract_selected(archive, destination, &request));
+
+    /* The point of detecting the flag: a glob has to select by pattern on
+       either implementation. GNU tar without --wildcards would read this as a
+       literal file name and match nothing; bsdtar handed --wildcards would
+       refuse the option outright. Both come out the same way here — an empty
+       destination — so a passing selection is what says the detection was
+       right. */
+    char path[512];
+    snprintf(path, sizeof path, "%s/bin/clang", destination);
+    EXPECT_TRUE(fs_path_exists(path));
+    snprintf(path, sizeof path, "%s/bin/mlir-opt", destination);
     EXPECT_FALSE(fs_path_exists(path));
 
     fixture_teardown(&fixture);

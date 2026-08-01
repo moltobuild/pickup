@@ -227,3 +227,47 @@ MOLTEST(cache_load_without_a_cache_simply_fails) {
     str_list_free(&candidates);
     fixture_teardown(&fixture);
 }
+
+/* What the probing told the command while it ran. */
+typedef struct {
+    size_t calls;
+    size_t last_done;
+    size_t total;
+    bool advances;
+} probe_record;
+
+static void record_probe(size_t done, size_t total, void *context) {
+    probe_record *record = context;
+    if (record->calls > 0 && done < record->last_done)
+        record->advances = false;
+    record->last_done = done;
+    record->total = total;
+    record->calls++;
+}
+
+MOLTEST(inventory_reports_its_progress_while_it_probes) {
+    cache_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    /* Nothing cached yet, so this load has to probe, which is the slow part a
+       user needs told about. */
+    probe_record record = { .calls = 0, .last_done = 0, .total = 0, .advances = true };
+    inventory list;
+    ASSERT_TRUE(inventory_load_watched(&list, false, record_probe, &record));
+
+    EXPECT_TRUE(record.calls > 0);
+    EXPECT_TRUE(record.advances);          /* a bar that goes backwards is worse than none */
+    EXPECT_EQ(record.total, record.last_done); /* and it ends full, not at 90% */
+    EXPECT_TRUE(record.total >= list.count);   /* candidates, not survivors */
+    inventory_free(&list);
+
+    /* Served from the cache the first load wrote, this one probes nothing and
+       so has nothing to report: a bar flashing up for work that never happened
+       is noise. */
+    probe_record cached = { .calls = 0, .last_done = 0, .total = 0, .advances = true };
+    ASSERT_TRUE(inventory_load_watched(&list, false, record_probe, &cached));
+    EXPECT_EQ(0, (int)cached.calls);
+    inventory_free(&list);
+
+    fixture_teardown(&fixture);
+}

@@ -51,11 +51,22 @@ static int compare_toolchains(const void *left, const void *right) {
     return strcmp(a->path, b->path);
 }
 
+static void notify(inventory_watch watch, void *context, size_t done, size_t total) {
+    if (watch != NULL)
+        watch(done, total, context);
+}
+
 /* Probe every candidate and fill `out`. Shared by the cached and uncached
    paths, which differ only in where the candidate list comes from. */
-static bool probe_candidates(const str_list *candidates, inventory *out) {
+static bool probe_candidates(const str_list *candidates, inventory *out,
+                             inventory_watch watch, void *context) {
+    size_t total = str_list_count(candidates);
     bool ok = true;
-    for (size_t i = 0; ok && i < str_list_count(candidates); i++) {
+    for (size_t i = 0; ok && i < total; i++) {
+        /* Announced before the work rather than after it, so the first
+           candidate is not probed in silence. */
+        notify(watch, context, i, total);
+
         toolchain chain;
         /* A candidate that cannot describe itself is not a compiler we can
            use; skipping it is the answer, not an error. */
@@ -65,6 +76,8 @@ static bool probe_candidates(const str_list *candidates, inventory *out) {
         probe_capabilities(&chain);
         ok = inventory_append(out, &chain);
     }
+    if (ok)
+        notify(watch, context, total, total);
     if (!ok) {
         inventory_free(out);
         return false;
@@ -100,7 +113,7 @@ bool inventory_discover(inventory *out) {
         str_list_free(&candidates);
         return false;
     }
-    bool ok = probe_candidates(&candidates, out);
+    bool ok = probe_candidates(&candidates, out, NULL, NULL);
     str_list_free(&candidates);
     if (ok)
         inventory_sort(out);
@@ -108,6 +121,11 @@ bool inventory_discover(inventory *out) {
 }
 
 bool inventory_load(inventory *out, bool refresh) {
+    return inventory_load_watched(out, refresh, NULL, NULL);
+}
+
+bool inventory_load_watched(inventory *out, bool refresh,
+                            inventory_watch watch, void *context) {
     memset(out, 0, sizeof *out);
 
     /* Scanning PATH is cheap; probing is not. So the candidate list is always
@@ -126,7 +144,7 @@ bool inventory_load(inventory *out, bool refresh) {
         return true;
     }
 
-    bool ok = probe_candidates(&candidates, out);
+    bool ok = probe_candidates(&candidates, out, watch, context);
     if (ok) {
         inventory_sort(out);
         /* A cache that cannot be written costs a rescan next time and nothing

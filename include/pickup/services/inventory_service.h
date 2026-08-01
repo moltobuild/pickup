@@ -24,6 +24,19 @@ typedef struct {
    forces a full rescan. */
 [[nodiscard]] bool inventory_load(inventory *out, bool refresh);
 
+/* Told how far the probing has got: `done` candidates asked of `total`.
+
+   Probing is the slow part of every inventory — each candidate is made to
+   compile several programs — and a command that says nothing for that long
+   looks like one that has died. Called before each candidate and once more when
+   the last has answered. A cached inventory probes nothing and so reports
+   nothing. */
+typedef void (*inventory_watch)(size_t done, size_t total, void *context);
+
+/* `inventory_load`, watched. A NULL `watch` is the unwatched load. */
+[[nodiscard]] bool inventory_load_watched(inventory *out, bool refresh,
+                                          inventory_watch watch, void *context);
+
 /* Append a toolchain. Exposed so the cache can rebuild an inventory it read. */
 [[nodiscard]] bool inventory_append(inventory *list, const toolchain *chain);
 

@@ -120,3 +120,84 @@ MOLTEST(http_with_progress_reports_a_failure_too) {
 
     fixture_teardown(&fixture);
 }
+
+/* What a watched download told its caller. */
+typedef struct {
+    size_t ticks;
+    size_t last_frame;
+    bool frames_grow;
+} tick_record;
+
+static void record_tick(size_t frame, void *context) {
+    tick_record *record = context;
+    if (record->ticks > 0 && frame <= record->last_frame)
+        record->frames_grow = false;
+    record->last_frame = frame;
+    record->ticks++;
+}
+
+MOLTEST(http_watched_delivers_the_file_it_was_asked_for) {
+    if (!http_available())
+        SKIP("curl is not installed");
+
+    http_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    char source[128], dest[128], url[256];
+    snprintf(source, sizeof source, "%s/index.json", fixture.root);
+    snprintf(dest, sizeof dest, "%s/copy.json", fixture.root);
+    ASSERT_TRUE(fs_write_file(source, "[]"));
+    file_url(source, url, sizeof url);
+
+    /* A local copy may well finish before the first poll, so the tick count is
+       not what is under test here: the transfer is. Watching must not cost the
+       caller the file. */
+    tick_record record = { .ticks = 0, .last_frame = 0, .frames_grow = true };
+    EXPECT_TRUE(http_download_watched(url, dest, record_tick, &record));
+
+    char *got = fs_read_file(dest);
+    ASSERT_NOT_NULL(got);
+    EXPECT_STREQ("[]", got);
+    free(got);
+    EXPECT_TRUE(record.frames_grow); /* a frame that went backwards would stall the spinner */
+
+    fixture_teardown(&fixture);
+}
+
+MOLTEST(http_watched_without_a_watcher_is_a_plain_download) {
+    if (!http_available())
+        SKIP("curl is not installed");
+
+    http_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    char source[128], dest[128], url[256];
+    snprintf(source, sizeof source, "%s/index.json", fixture.root);
+    snprintf(dest, sizeof dest, "%s/copy.json", fixture.root);
+    ASSERT_TRUE(fs_write_file(source, "[]"));
+    file_url(source, url, sizeof url);
+
+    EXPECT_TRUE(http_download_watched(url, dest, NULL, NULL));
+    EXPECT_TRUE(fs_path_exists(dest));
+
+    fixture_teardown(&fixture);
+}
+
+MOLTEST(http_watched_leaves_nothing_behind_when_it_fails) {
+    if (!http_available())
+        SKIP("curl is not installed");
+
+    http_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    char dest[128], url[256], missing[128];
+    snprintf(dest, sizeof dest, "%s/copy.json", fixture.root);
+    snprintf(missing, sizeof missing, "%s/absent.json", fixture.root);
+    file_url(missing, url, sizeof url);
+
+    tick_record record = { .ticks = 0, .last_frame = 0, .frames_grow = true };
+    EXPECT_FALSE(http_download_watched(url, dest, record_tick, &record));
+    EXPECT_FALSE(fs_path_exists(dest));
+
+    fixture_teardown(&fixture);
+}

@@ -35,4 +35,16 @@
                                                long long expected_size,
                                                const char *label);
 
+/* Told, about ten times a second, that the transfer is still running.
+
+   For a download whose size the source never announces — an API answer, rather
+   than a release asset — there is no fraction to report, and that it is still
+   moving is the whole message. `frame` only ever grows. */
+typedef void (*http_tick)(size_t frame, void *context);
+
+/* Download `url` into `dest`, ticking while it runs. A NULL `tick` is the plain
+   download. */
+[[nodiscard]] bool http_download_watched(const char *url, const char *dest,
+                                         http_tick tick, void *context);
+
 #endif /* PICKUP_HTTP_SERVICE_H */

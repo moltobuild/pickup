@@ -119,3 +119,28 @@ bool http_download_with_progress(const char *url, const char *dest,
     progress_done(stdout);
     return true;
 }
+
+bool http_download_watched(const char *url, const char *dest,
+                           http_tick tick, void *context) {
+    if (tick == NULL)
+        return http_download(url, dest);
+    if (!http_available())
+        return false;
+
+    const char *argv[CURL_ARGV_SIZE];
+    build_argv(url, dest, argv);
+
+    process_handle handle;
+    if (!process_start(argv, &handle))
+        return discard(dest);
+
+    process_result result;
+    for (size_t frame = 0; !process_poll(&handle, &result); frame++) {
+        tick(frame, context);
+        wait_a_moment();
+    }
+
+    if (!result.completed || result.exit_code != 0)
+        return discard(dest);
+    return true;
+}

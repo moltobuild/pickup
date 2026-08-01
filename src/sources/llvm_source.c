@@ -283,6 +283,11 @@ static bool cache_is_fresh(const char *path) {
 }
 
 bool llvm_fetch_releases(const char *version_filter, bool refresh, release_list *out) {
+    return llvm_fetch_releases_watched(version_filter, refresh, NULL, NULL, out);
+}
+
+bool llvm_fetch_releases_watched(const char *version_filter, bool refresh,
+                                 http_tick tick, void *context, release_list *out) {
     release_list_init(out);
 
     char path[PICKUP_PATHS_MAX];
@@ -299,7 +304,7 @@ bool llvm_fetch_releases(const char *version_filter, bool refresh, release_list 
         char directory[PICKUP_PATHS_MAX];
         if (!paths_cache(directory, sizeof directory) || !fs_make_dirs(directory))
             return false;
-        if (!http_download(RELEASES_URL, path))
+        if (!http_download_watched(RELEASES_URL, path, tick, context))
             return false;
     }
 

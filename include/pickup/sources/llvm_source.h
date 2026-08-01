@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include <pickup/services/http_service.h>
 #include <pickup/util/sha256.h>
 
 /*
@@ -62,6 +63,14 @@ void release_list_free(release_list *list);
    before asking again. */
 [[nodiscard]] bool llvm_fetch_releases(const char *version_filter, bool refresh,
                                        release_list *out);
+
+/* The same, ticking while the index is on its way.
+
+   Only the fetch is watched, because only the fetch takes time worth reporting:
+   a cached index parses in an instant and ticks not at all. */
+[[nodiscard]] bool llvm_fetch_releases_watched(const char *version_filter, bool refresh,
+                                               http_tick tick, void *context,
+                                               release_list *out);
 
 /* The highest version in `list`. False if it is empty. */
 [[nodiscard]] bool llvm_best(const release_list *list, release_asset *out);

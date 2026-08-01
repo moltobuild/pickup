@@ -136,6 +136,18 @@ bool fs_mtime_ns(const char *path, int64_t *out) {
     return true;
 }
 
+bool fs_file_size(const char *path, long long *out) {
+    struct stat info;
+    if (stat(path, &info) != 0)
+        return false;
+    *out = (long long)info.st_size;
+    return true;
+}
+
+bool fs_rename(const char *from, const char *to) {
+    return rename(from, to) == 0;
+}
+
 bool fs_source_newer(const char *source, const char *target) {
     int64_t target_ns;
     if (!fs_mtime_ns(target, &target_ns))

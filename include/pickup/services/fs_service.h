@@ -45,6 +45,15 @@
    report whole seconds. */
 [[nodiscard]] bool fs_mtime_ns(const char *path, int64_t *out);
 
+/* Size of `path` in bytes. False if it cannot be stat-ed, which for a download
+   in flight simply means it has not been created yet. */
+[[nodiscard]] bool fs_file_size(const char *path, long long *out);
+
+/* Rename `from` to `to`, replacing anything already there. Within one
+   filesystem this is atomic, which is what lets a half-written directory be
+   assembled out of the way and only then take its final name. */
+[[nodiscard]] bool fs_rename(const char *from, const char *to);
+
 /* Return true if `target` must be rebuilt from `source`: true when `target`
    is missing or `source` has a newer modification time (nanosecond precision,
    so two edits within the same second are still told apart). */

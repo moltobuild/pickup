@@ -37,8 +37,34 @@ typedef struct {
 /* Draw a labelled bar over the current line. */
 void progress_draw(FILE *out, const char *label, long long done, long long total);
 
+/* The same, for work counted in steps rather than in bytes.
+
+   Probing compilers is not a transfer: what advances is how many of them have
+   answered, and a byte count would be a figure with nothing behind it. */
+void progress_draw_steps(FILE *out, const char *label, long long done, long long total);
+
 /* Finish the line a bar was drawn on. */
 void progress_done(FILE *out);
+
+/* Wipe the line a bar or spinner was drawn on, leaving the cursor at its start.
+
+   For work whose result is printed afterwards: the table, or the TOML, is what
+   the user asked for, and it should read exactly as if nothing had been drawn
+   in front of it. */
+void progress_clear(FILE *out);
+
+/* The line a command draws its bar on, and whether it ever did.
+
+   Whether anything appears at all depends on the terminal and on whether there
+   was slow work to report — a cached inventory has none. Wiping a line that was
+   never drawn would paint a hundred spaces over whatever the terminal had
+   there, so the two cases are told apart rather than guessed at. */
+typedef struct {
+    bool drawn;
+} progress_line;
+
+/* Wipe the line, if anything was ever drawn on it. */
+void progress_line_clear(FILE *out, progress_line *line);
 
 /* True if `out` is a terminal, and so worth drawing a bar on at all. Piped to
    a file or a log, a bar would only leave a trail of carriage returns. */

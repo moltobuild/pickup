@@ -14,6 +14,11 @@
 
 #define PERCENT_MAX 100
 
+/* Widest line a bar or a spinner leaves behind, and so how much has to be
+   painted over to erase one. Generous rather than exact: the label is the only
+   part whose width is not fixed. */
+#define PROGRESS_LINE_WIDTH 100
+
 progress_bar progress_measure(long long done, long long total, size_t width) {
     progress_bar bar = { .percent = 0, .filled = 0, .width = width };
     if (total <= 0 || done <= 0)
@@ -27,6 +32,16 @@ progress_bar progress_measure(long long done, long long total, size_t width) {
     return bar;
 }
 
+/* The label and the bar itself, which every drawn line opens with. What comes
+   after is the figure the bar stands for, and that differs by what is being
+   measured. */
+static void draw_cells(FILE *out, const char *label, progress_bar bar) {
+    fprintf(out, "\r%s  %s[", label, color_accent());
+    for (size_t i = 0; i < bar.width; i++)
+        fputs(i < bar.filled ? CELL_FILLED : CELL_EMPTY, out);
+    fprintf(out, "]%s  %3d%%", color_reset(), bar.percent);
+}
+
 void progress_draw(FILE *out, const char *label, long long done, long long total) {
     progress_bar bar = progress_measure(done, total, PROGRESS_BAR_WIDTH);
 
@@ -35,11 +50,16 @@ void progress_draw(FILE *out, const char *label, long long done, long long total
     format_size(done, done_text, sizeof done_text);
     format_size(total, total_text, sizeof total_text);
 
-    fprintf(out, "\r%s  %s[", label, color_accent());
-    for (size_t i = 0; i < bar.width; i++)
-        fputs(i < bar.filled ? CELL_FILLED : CELL_EMPTY, out);
-    fprintf(out, "]%s  %3d%%  %s%s/%s%s", color_reset(), bar.percent,
-            color_dim(), done_text, total_text, color_reset());
+    draw_cells(out, label, bar);
+    fprintf(out, "  %s%s/%s%s", color_dim(), done_text, total_text, color_reset());
+    fflush(out);
+}
+
+void progress_draw_steps(FILE *out, const char *label, long long done, long long total) {
+    progress_bar bar = progress_measure(done, total, PROGRESS_BAR_WIDTH);
+
+    draw_cells(out, label, bar);
+    fprintf(out, "  %s%lld/%lld%s", color_dim(), done, total, color_reset());
     fflush(out);
 }
 
@@ -65,6 +85,21 @@ void spinner_draw(FILE *out, const char *label, size_t frame, long long done) {
 void progress_done(FILE *out) {
     fputc('\n', out);
     fflush(out);
+}
+
+void progress_clear(FILE *out) {
+    fputc('\r', out);
+    for (size_t i = 0; i < PROGRESS_LINE_WIDTH; i++)
+        fputc(' ', out);
+    fputc('\r', out);
+    fflush(out);
+}
+
+void progress_line_clear(FILE *out, progress_line *line) {
+    if (!line->drawn)
+        return;
+    progress_clear(out);
+    line->drawn = false;
 }
 
 bool progress_is_interactive(FILE *out) {

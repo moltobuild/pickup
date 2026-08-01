@@ -94,6 +94,92 @@ MOLTEST(progress_draws_a_bar_with_its_percentage) {
     EXPECT_TRUE(strstr(line, "1.0M/4.0M") != NULL);
 }
 
+/* Draw with `draw`, and hand back what landed on the stream. */
+static void captured(void (*draw)(FILE *, const char *, long long, long long),
+                     const char *label, long long done, long long total,
+                     char *out, size_t out_size) {
+    FILE *sink = tmpfile();
+    if (sink == NULL) {
+        out[0] = '\0';
+        return;
+    }
+    draw(sink, label, done, total);
+    rewind(sink);
+    size_t read = fread(out, 1, out_size - 1, sink);
+    out[read] = '\0';
+    fclose(sink);
+}
+
+MOLTEST(progress_counts_steps_rather_than_bytes) {
+    char line[256];
+    captured(progress_draw_steps, "probing compilers", 3, 12, line, sizeof line);
+
+    /* The same bar, measuring something that is not a transfer: what a user
+       wants to know is how many compilers are left, and "3.0B/12B" would be an
+       answer to a question nobody asked. */
+    EXPECT_TRUE(line[0] == '\r');
+    EXPECT_TRUE(strstr(line, "probing compilers") != NULL);
+    EXPECT_TRUE(strstr(line, " 25%") != NULL);
+    EXPECT_TRUE(strstr(line, "3/12") != NULL);
+    EXPECT_TRUE(strstr(line, "B") == NULL);
+}
+
+MOLTEST(progress_steps_start_and_finish_where_the_work_does) {
+    char line[256];
+
+    /* Nothing probed yet is an empty bar, not an absent one: it is the first
+       thing that says the command is alive. */
+    captured(progress_draw_steps, "probing compilers", 0, 4, line, sizeof line);
+    EXPECT_TRUE(strstr(line, "  0%") != NULL);
+    EXPECT_TRUE(strstr(line, "0/4") != NULL);
+
+    captured(progress_draw_steps, "probing compilers", 4, 4, line, sizeof line);
+    EXPECT_TRUE(strstr(line, "100%") != NULL);
+    EXPECT_TRUE(strstr(line, "4/4") != NULL);
+}
+
+MOLTEST(progress_clears_the_line_it_drew_on) {
+    FILE *sink = tmpfile();
+    ASSERT_TRUE(sink != NULL);
+
+    progress_clear(sink);
+    rewind(sink);
+
+    char line[256] = "";
+    size_t read = fread(line, 1, sizeof line - 1, sink);
+    line[read] = '\0';
+    fclose(sink);
+
+    /* Back to the start, blanks over whatever was there, back to the start
+       again: what is printed next begins on a clean line. */
+    EXPECT_TRUE(read > 2);
+    EXPECT_TRUE(line[0] == '\r');
+    EXPECT_TRUE(line[read - 1] == '\r');
+    for (size_t i = 1; i + 1 < read; i++)
+        EXPECT_TRUE(line[i] == ' ');
+}
+
+MOLTEST(progress_leaves_a_line_it_never_drew_on_alone) {
+    FILE *sink = tmpfile();
+    ASSERT_TRUE(sink != NULL);
+
+    progress_line line = { .drawn = false };
+    progress_line_clear(sink, &line);
+    rewind(sink);
+
+    /* A cached inventory probes nothing and draws nothing; blanking a line
+       nobody wrote would wipe out whatever the terminal had there. */
+    char text[64] = "";
+    EXPECT_EQ(0, (int)fread(text, 1, sizeof text - 1, sink));
+
+    line.drawn = true;
+    progress_line_clear(sink, &line);
+    rewind(sink);
+    EXPECT_TRUE(fread(text, 1, sizeof text - 1, sink) > 0);
+    EXPECT_FALSE(line.drawn); /* wiped once, not once per caller */
+    fclose(sink);
+}
+
 MOLTEST(spinner_cycles_through_its_frames) {
     char seen[SPINNER_FRAMES][64];
 

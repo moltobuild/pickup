@@ -132,6 +132,10 @@ static void print_toml(const toolchain *chain, capability_lang lang,
 
     printf("[compiler]\n");
     printf("path = \"%s\"\n", lang == lang_cxx ? chain->cxx_path : chain->path);
+    /* Both drivers, always. A project with C and C++ sources needs each one,
+       and they must come from the same toolchain; `path` alone answers only
+       the language that was asked about. */
+    printf("c_path = \"%s\"\n", chain->path);
     printf("cxx_path = \"%s\"\n", chain->cxx_path);
     printf("vendor = \"%s\"\n", toolchain_vendor_name(chain->vendor));
     printf("version = \"%s\"\n", version);

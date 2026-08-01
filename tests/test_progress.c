@@ -5,6 +5,8 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 MOLTEST(format_size_reads_at_a_glance) {
     char text[FORMAT_SIZE_MAX];
@@ -90,6 +92,73 @@ MOLTEST(progress_draws_a_bar_with_its_percentage) {
     EXPECT_TRUE(strstr(line, "downloading") != NULL);
     EXPECT_TRUE(strstr(line, " 25%") != NULL);
     EXPECT_TRUE(strstr(line, "1.0M/4.0M") != NULL);
+}
+
+MOLTEST(spinner_cycles_through_its_frames) {
+    char seen[SPINNER_FRAMES][64];
+
+    for (size_t frame = 0; frame < SPINNER_FRAMES; frame++) {
+        FILE *sink = tmpfile();
+        ASSERT_TRUE(sink != NULL);
+        spinner_draw(sink, "extracting", frame, 1024);
+        rewind(sink);
+        size_t read = fread(seen[frame], 1, sizeof seen[frame] - 1, sink);
+        seen[frame][read] = '\0';
+        fclose(sink);
+    }
+
+    /* Every frame differs from the one before, which is what reads as motion
+       rather than as a stuck character. */
+    for (size_t frame = 1; frame < SPINNER_FRAMES; frame++)
+        EXPECT_TRUE(strcmp(seen[frame], seen[frame - 1]) != 0);
+
+    /* And it wraps rather than walking off the end of the set. */
+    FILE *sink = tmpfile();
+    ASSERT_TRUE(sink != NULL);
+    spinner_draw(sink, "extracting", SPINNER_FRAMES * 1000, 1024);
+    rewind(sink);
+    char wrapped[64] = "";
+    size_t read = fread(wrapped, 1, sizeof wrapped - 1, sink);
+    wrapped[read] = '\0';
+    fclose(sink);
+    EXPECT_STREQ(seen[0], wrapped);
+}
+
+MOLTEST(spinner_waits_without_claiming_a_figure) {
+    FILE *sink = tmpfile();
+    ASSERT_TRUE(sink != NULL);
+    spinner_wait(sink, "preparing the extraction", 1);
+    rewind(sink);
+
+    char line[128] = "";
+    size_t read = fread(line, 1, sizeof line - 1, sink);
+    line[read] = '\0';
+    fclose(sink);
+
+    /* Before anything has been produced there is no number worth showing, and
+       a byte count stuck at zero reads as a stall rather than as work. */
+    EXPECT_TRUE(line[0] == '\r');
+    EXPECT_TRUE(strstr(line, "preparing the extraction") != NULL);
+    EXPECT_TRUE(strstr(line, "0B") == NULL);
+    EXPECT_TRUE(strstr(line, "extracted") == NULL);
+}
+
+MOLTEST(spinner_says_how_much_it_has_produced) {
+    FILE *sink = tmpfile();
+    ASSERT_TRUE(sink != NULL);
+    spinner_draw(sink, "extracting clang 22.1.8", 0, 224395264);
+    rewind(sink);
+
+    char line[128] = "";
+    size_t read = fread(line, 1, sizeof line - 1, sink);
+    line[read] = '\0';
+    fclose(sink);
+
+    /* Without a percentage to give, the bytes so far are what tells the user
+       it is moving. */
+    EXPECT_TRUE(line[0] == '\r');
+    EXPECT_TRUE(strstr(line, "extracting clang 22.1.8") != NULL);
+    EXPECT_TRUE(strstr(line, "214M") != NULL);
 }
 
 MOLTEST(progress_is_not_interactive_when_redirected) {

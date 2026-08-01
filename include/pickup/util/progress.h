@@ -44,4 +44,22 @@ void progress_done(FILE *out);
    a file or a log, a bar would only leave a trail of carriage returns. */
 [[nodiscard]] bool progress_is_interactive(FILE *out);
 
+/* Frames the spinner cycles through. Four, so it reads as rotation. */
+#define SPINNER_FRAMES 4
+
+/* Draw one frame of an indeterminate spinner, with the bytes produced so far.
+
+   For work whose total is not knowable in advance, which is what unpacking is:
+   how much comes out of an archive is not written anywhere on it, and reading
+   it to find out costs a second pass over the whole thing. Turning minutes of
+   silence into something moving is what this is for.
+
+   `frame` may grow without bound; it wraps. */
+void spinner_draw(FILE *out, const char *label, size_t frame, long long done);
+
+/* The same, for work that has produced nothing to report yet. Turning up a
+   byte count of zero over and over reads as a stall; saying what is going on
+   does not. */
+void spinner_wait(FILE *out, const char *label, size_t frame);
+
 #endif /* PICKUP_PROGRESS_H */

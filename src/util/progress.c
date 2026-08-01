@@ -1,7 +1,11 @@
 #include <pickup/util/progress.h>
 
+#include <pickup/util/color.h>
 #include <pickup/util/format.h>
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 /* What the bar is drawn with. */
@@ -31,10 +35,30 @@ void progress_draw(FILE *out, const char *label, long long done, long long total
     format_size(done, done_text, sizeof done_text);
     format_size(total, total_text, sizeof total_text);
 
-    fprintf(out, "\r%s  [", label);
+    fprintf(out, "\r%s  %s[", label, color_accent());
     for (size_t i = 0; i < bar.width; i++)
         fputs(i < bar.filled ? CELL_FILLED : CELL_EMPTY, out);
-    fprintf(out, "]  %3d%%  %s/%s", bar.percent, done_text, total_text);
+    fprintf(out, "]%s  %3d%%  %s%s/%s%s", color_reset(), bar.percent,
+            color_dim(), done_text, total_text, color_reset());
+    fflush(out);
+}
+
+/* Read as rotation rather than as four unrelated characters. */
+static const char *const spinner_frames[SPINNER_FRAMES] = { "-", "\\", "|", "/" };
+
+void spinner_wait(FILE *out, const char *label, size_t frame) {
+    fprintf(out, "\r%s  %s%s%s   ", label,
+            color_accent(), spinner_frames[frame % SPINNER_FRAMES], color_reset());
+    fflush(out);
+}
+
+void spinner_draw(FILE *out, const char *label, size_t frame, long long done) {
+    char done_text[FORMAT_SIZE_MAX];
+    format_size(done, done_text, sizeof done_text);
+
+    fprintf(out, "\r%s  %s%s%s  %s%s extracted%s", label,
+            color_accent(), spinner_frames[frame % SPINNER_FRAMES], color_reset(),
+            color_dim(), done_text, color_reset());
     fflush(out);
 }
 

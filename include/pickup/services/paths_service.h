@@ -5,12 +5,19 @@
 #include <stddef.h>
 
 /*
- * Where Pickup keeps what it installs.
+ * Where Pickup keeps everything it writes.
  *
- * Everything lives under one directory the user owns, so installing a
- * toolchain never needs administrator rights and removing one is deleting a
- * folder. `PICKUP_HOME` overrides the location, which is also what lets the
- * tests exercise installation without touching a real home directory.
+ * All of it lives under one directory the user owns, so installing a toolchain
+ * never needs administrator rights and removing one is deleting a folder.
+ * `PICKUP_HOME` relocates the lot, which is also what lets the tests run
+ * without touching a real home directory.
+ *
+ *   <home>/cache/       regenerable: the probed inventory, the release index
+ *   <home>/downloads/   archives in flight, removed once installed
+ *   <home>/toolchains/  what was installed, one directory each
+ *
+ * The first two can be deleted at any time and cost a rescan. The third is
+ * what the downloads were for.
  */
 
 /* Environment variable that relocates all of it. */
@@ -28,7 +35,13 @@
 /* Where installed toolchains live, one directory each. */
 [[nodiscard]] bool paths_toolchains(char *out, size_t out_size);
 
-/* Where archives are downloaded before they are verified and unpacked. */
+/* Where answers worth keeping but never worth trusting blindly are stored:
+   the probed inventory and the index of published releases. Deleting any of it
+   costs time, never correctness. */
+[[nodiscard]] bool paths_cache(char *out, size_t out_size);
+
+/* Where archives are downloaded before they are verified and unpacked. Holds
+   only files in flight; anything that finishes installing is removed. */
 [[nodiscard]] bool paths_downloads(char *out, size_t out_size);
 
 /* The directory a toolchain of this identity is installed into, named so that

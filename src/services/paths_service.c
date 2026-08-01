@@ -7,6 +7,7 @@
 /* Subdirectories of the pickup home. */
 #define TOOLCHAINS_DIRNAME "toolchains"
 #define DOWNLOADS_DIRNAME  "downloads"
+#define CACHE_DIRNAME      "cache"
 
 bool paths_home(char *out, size_t out_size) {
     const char *override = getenv(PICKUP_HOME_ENV);
@@ -29,6 +30,10 @@ static bool home_subdir(const char *subdirectory, char *out, size_t out_size) {
 
 bool paths_toolchains(char *out, size_t out_size) {
     return home_subdir(TOOLCHAINS_DIRNAME, out, out_size);
+}
+
+bool paths_cache(char *out, size_t out_size) {
+    return home_subdir(CACHE_DIRNAME, out, out_size);
 }
 
 bool paths_downloads(char *out, size_t out_size) {

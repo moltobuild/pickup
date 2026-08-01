@@ -4,14 +4,16 @@
 #include <pickup/services/cache_service.h>
 #include <pickup/services/fs_service.h>
 #include <pickup/services/inventory_service.h>
+#include <pickup/services/paths_service.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-/* Point the cache at a throwaway directory so the tests never touch the real
-   one, and remember what to restore. */
+/* Point the pickup home at a throwaway directory so the tests never touch the
+   real one, and remember what to restore. One environment variable relocates
+   everything Pickup writes, so this is the only isolation the tests need. */
 typedef struct {
     char root[64];
     char previous[4096];
@@ -23,21 +25,19 @@ static bool fixture_setup(cache_fixture *fixture) {
     if (mkdtemp(fixture->root) == NULL)
         return false;
 
-    const char *existing = getenv("XDG_CACHE_HOME");
+    const char *existing = getenv(PICKUP_HOME_ENV);
     fixture->had_previous = existing != NULL;
     if (existing != NULL)
         snprintf(fixture->previous, sizeof fixture->previous, "%s", existing);
-    return setenv("XDG_CACHE_HOME", fixture->root, 1) == 0;
+    return setenv(PICKUP_HOME_ENV, fixture->root, 1) == 0;
 }
 
 static void fixture_teardown(cache_fixture *fixture) {
     if (fixture->had_previous)
-        (void)setenv("XDG_CACHE_HOME", fixture->previous, 1);
+        (void)setenv(PICKUP_HOME_ENV, fixture->previous, 1);
     else
-        (void)unsetenv("XDG_CACHE_HOME");
-    char cmd[128];
-    snprintf(cmd, sizeof cmd, "rm -rf %s", fixture->root);
-    (void)system(cmd);
+        (void)unsetenv(PICKUP_HOME_ENV);
+    (void)fs_remove_tree(fixture->root);
 }
 
 /* The candidate list a load has to be checked against. */
@@ -153,7 +153,7 @@ MOLTEST(cache_discards_a_corrupt_file) {
     ASSERT_TRUE(cache_store(&candidates, &discovered));
 
     char path[256];
-    snprintf(path, sizeof path, "%s/pickup/toolchains", fixture.root);
+    snprintf(path, sizeof path, "%s/cache/toolchains", fixture.root);
     ASSERT_TRUE(fs_write_file(path, "this is not a cache\n"));
 
     /* Garbage is discarded, never trusted: rescanning is always correct. */
@@ -184,7 +184,7 @@ MOLTEST(cache_is_rejected_when_the_catalog_changed) {
     inventory_free(&restored);
 
     char path[256];
-    snprintf(path, sizeof path, "%s/pickup/toolchains", fixture.root);
+    snprintf(path, sizeof path, "%s/cache/toolchains", fixture.root);
     char *stored = fs_read_file(path);
     ASSERT_NOT_NULL(stored);
 

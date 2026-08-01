@@ -2,6 +2,7 @@
 
 #include <pickup/detect/capability.h>
 #include <pickup/services/fs_service.h>
+#include <pickup/services/paths_service.h>
 #include <pickup/util/hash.h>
 
 #include <stdio.h>
@@ -13,11 +14,8 @@
    rather than migrated: rebuilding it costs one scan. */
 #define CACHE_FORMAT_VERSION 2
 
-/* Where the cache lives, following the XDG convention. */
-#define CACHE_DIR_ENV      "XDG_CACHE_HOME"
-#define CACHE_DIR_FALLBACK ".cache"
-#define CACHE_SUBDIR       "pickup"
-#define CACHE_FILENAME     "toolchains"
+/* The cache file, inside the directory Pickup keeps regenerable state in. */
+#define CACHE_FILENAME "toolchains"
 
 /* Size of the buffers holding the cache path and one record. */
 #define CACHE_PATH_SIZE   4096
@@ -28,15 +26,10 @@
 
 /* Compose the cache file path. False if there is no home directory to use. */
 static bool cache_path(char *out, size_t out_size) {
-    const char *base = getenv(CACHE_DIR_ENV);
-    if (base != NULL && base[0] != '\0')
-        return fs_format_path(out, out_size, "%s/%s/%s", base, CACHE_SUBDIR, CACHE_FILENAME);
-
-    const char *home = getenv("HOME");
-    if (home == NULL || home[0] == '\0')
+    char directory[CACHE_PATH_SIZE];
+    if (!paths_cache(directory, sizeof directory))
         return false;
-    return fs_format_path(out, out_size, "%s/%s/%s/%s",
-                          home, CACHE_DIR_FALLBACK, CACHE_SUBDIR, CACHE_FILENAME);
+    return fs_format_path(out, out_size, "%s/%s", directory, CACHE_FILENAME);
 }
 
 /* The signature that decides whether a cached entry still describes the binary

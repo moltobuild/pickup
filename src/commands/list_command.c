@@ -1,5 +1,6 @@
 #include <pickup/commands/list_command.h>
 
+#include <pickup/commands/probe_progress.h>
 #include <pickup/exit_code.h>
 #include <pickup/services/inventory_service.h>
 #include <pickup/util/table.h>
@@ -75,7 +76,7 @@ static void print_toml(const inventory *list) {
 
 int list_command_run(bool as_toml) {
     inventory list;
-    if (!inventory_load(&list, false)) {
+    if (!probe_progress_load(&list, false)) {
         fprintf(stderr, "pickup: could not scan for compilers\n");
         return exit_failure;
     }

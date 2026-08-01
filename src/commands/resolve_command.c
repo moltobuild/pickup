@@ -1,5 +1,6 @@
 #include <pickup/commands/resolve_command.h>
 
+#include <pickup/commands/probe_progress.h>
 #include <pickup/exit_code.h>
 #include <pickup/services/inventory_service.h>
 
@@ -165,8 +166,11 @@ int resolve_command_run(const resolve_request *request, bool as_toml) {
         }
     }
 
+    /* The request is checked before the machine is: rejecting an unknown
+       feature after a minute of probing would be a minute spent on an answer
+       that was never going to come. */
     inventory list;
-    if (!inventory_load(&list, false)) {
+    if (!probe_progress_load(&list, false)) {
         fprintf(stderr, "pickup: could not scan for compilers\n");
         return exit_failure;
     }

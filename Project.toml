@@ -1,7 +1,9 @@
-# Pickup's own manifest. Aspirational for now: the build runs on the Makefile
-# until molto can build itself. Note what this file does NOT say — no compiler
-# binary, no version. It states what the code needs; pickup's whole purpose is
-# to turn that into a binary on each machine.
+# Pickup's own manifest. Note what this file does NOT say — no compiler binary,
+# no version. It states what the code needs; pickup's whole purpose is to turn
+# that into a binary on each machine.
+#
+# This is what `molto build` and `molto test` read, so it has to describe the
+# build completely: nothing falls back to the Makefile.
 
 [package]
 name = "pickup"
@@ -9,6 +11,17 @@ version = "0.1.0"
 
 [target]
 std = "c2x"
+requires = ["attr_nodiscard"]
+defines = ["_DEFAULT_SOURCE"]
+include = ["include"]
+flags = ["-Wall", "-Wextra", "-Wpedantic"]
+
+[test]
+# The suite registers its cases and moltest owns main(), so everything links
+# into one executable. moltest lives outside src/, hence the extra sources.
+mode = "single"
+sources = ["modules/moltest/src"]
+include = ["modules/moltest/include"]
 
 [profile.debug]
 opt_level = 0

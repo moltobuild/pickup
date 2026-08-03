@@ -29,6 +29,17 @@ typedef struct {
 [[nodiscard]] process_result process_capture(const char *const argv[], const char *input,
                                              char *out, size_t out_size);
 
+/* The same, capturing stderr instead.
+
+   Compilers say two different kinds of thing on two different streams. What a
+   compiler *is* comes back on stdout, which is what process_capture reads; what
+   it *decided* — which GCC installation it picked, which directories it
+   searched — is written to stderr by `-v`. Reading that is the only way to
+   learn a choice the driver makes internally and never prints anywhere else. */
+[[nodiscard]] process_result process_capture_stderr(const char *const argv[],
+                                                    const char *input,
+                                                    char *out, size_t out_size);
+
 /* Start `argv` and return without waiting for it, with its output discarded.
 
    Used where something has to happen while the child runs: a download reports

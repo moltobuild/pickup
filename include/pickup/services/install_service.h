@@ -5,6 +5,7 @@
 
 #include <pickup/model/toolchain.h>
 #include <pickup/services/paths_service.h>
+#include <pickup/sources/conda_closure.h>
 #include <pickup/sources/llvm_source.h>
 #include <pickup/util/sha256.h>
 
@@ -56,6 +57,22 @@ typedef struct {
 /* Run the whole thing. Never partially applies: on any failure nothing is left
    in the toolchains directory. */
 [[nodiscard]] install_report install_run(const install_request *request);
+
+/*
+ * The same, for a toolchain that arrives as a set of packages.
+ *
+ * A compiler on conda-forge is not one archive but a dozen, unpacked over one
+ * prefix so that the parts find each other. The order is otherwise identical —
+ * download, verify, unpack, prove, and only then take the final name — because
+ * that order is what makes an interrupted install leave nothing behind, and it
+ * does not become less true for arriving in pieces.
+ *
+ * Every package is verified. The channel publishes a digest for each one
+ * separately, so `allow_unverified` covers the whole set rather than any
+ * particular member: an install is either checked or it is not.
+ */
+[[nodiscard]] install_report install_run_closure(const conda_closure *closure,
+                                                 bool allow_unverified);
 
 /* A one-line explanation of a status, for a caller that reports to a user. */
 [[nodiscard]] const char *install_status_message(install_status status);

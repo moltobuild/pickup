@@ -45,6 +45,7 @@ make test
 ```sh
 pickup list                # the inventory
 pickup show <name>         # one toolchain, feature by feature
+pickup doctor              # what stops this machine from building, and what fixes it
 pickup scan                # re-probe everything and rewrite the cache
 pickup resolve [options]   # the best toolchain for a set of requirements
 pickup search <toolchain>  # the versions available to install
@@ -55,16 +56,51 @@ pickup install <toolchain> # download and install one
 
 ### Looking at what the machine has
 
-`list` prints the inventory, deduplicated by resolved identity and ordered by
-version, so `cc`, `gcc` and `gcc-9` appear once:
+`list` prints the inventory, one row per compiler:
 
 ```
 $ pickup list
-NAME     VENDOR  VERSION  TARGET
-clang    clang   14.0.0   x86_64-pc-linux-gnu
-gcc-12   gcc     12.3.0   x86_64-linux-gnu
-cc       gcc     9.5.0    x86_64-linux-gnu
+NAME              VENDOR  VERSION  TARGET                    SOURCE
+clang@22.1.8      clang   22.1.8   x86_64-unknown-linux-gnu  pickup
+clang@14.0.0      clang   14.0.0   x86_64-pc-linux-gnu       system
+gcc@12.3.0-conda  gcc     12.3.0   x86_64-conda-linux-gnu    pickup
+gcc@12.3.0        gcc     12.3.0   x86_64-linux-gnu          system
+gcc@11.4.0        gcc     11.4.0   x86_64-linux-gnu          system
+gcc@9.5.0         gcc     9.5.0    x86_64-linux-gnu          system
 ```
+
+**A toolchain is named for what it is, not for the link that led to it.** One
+GCC answers to `cc`, `gcc-9`, `c89-gcc` and `g++-9`; four rows of that say four
+things where there is one, and none of the four names tells you which compiler
+it is. The identity is the vendor and the version, in the shape package
+managers already use.
+
+Where two toolchains would share a name, the target settles it: a GCC built for
+`x86_64-conda-linux-gnu` becomes `gcc@12.3.0-conda` and does not collide with
+the system's own 12.3.0. The suffix comes from the target itself and never from
+comparing toolchains with each other — a name that changed because something
+unrelated was installed would be no name at all.
+
+`SOURCE` says who is responsible for it: `pickup` for one Pickup installed and
+can remove again, `system` for one that was already there and belongs to the
+distribution's package manager.
+
+Collapsing the aliases keeps everything measured. Each spelling is probed on
+its own, and a bare `c++` has no C++ driver to derive from its name, so its C++
+features come back empty while the `cc` beside it finds one; taking either
+alone would report less than was proven.
+
+Any shorter form of the name works wherever one is asked for:
+
+```sh
+pickup show gcc@12.3.0-conda   # exactly that one
+pickup show gcc@12.3.0         # the version, whichever target
+pickup show gcc@12             # the newest 12
+pickup show gcc@latest         # or just: pickup show gcc
+```
+
+When a query genuinely names more than one — two toolchains at the same version
+— the chosen one is still shown, and stderr says what else it could have meant.
 
 Columns are measured against what is in them, so a name as long as
 `x86_64-linux-gnu-gcc-12` widens its column instead of pushing the row out of
@@ -127,6 +163,36 @@ C features
 The first query probes every compiler once and caches the result; later ones
 answer from the cache in milliseconds. Run `scan` after installing or upgrading
 a compiler to rebuild it.
+
+### What is wrong with this machine
+
+The capability catalog tests the *language*, on purpose: its probes avoid
+headers so that a compiler is not failed for the state of the library beside
+it. That leaves a second question, which `doctor` asks — can this compiler
+produce a program that runs?
+
+```
+$ pickup doctor
+x  gcc 12  /usr/lib/gcc/x86_64-linux-gnu/12
+      installed without C++ support: no libstdc++ headers
+        clang 14.0.0 selects this GCC and cannot find <iostream>
+        gcc-12 12.3.0 has no C++ driver, so it compiles C only
+      -> install the g++-12 package - completes this GCC, and fixes everything above
+      -> pickup install gcc --version 12 - a separate toolchain, no root; leaves the one above untouched
+```
+
+**A finding is a cause, not a symptom.** One GCC installed without its C++ half
+shows up in two unrelated-looking places, and reporting them separately would
+send a reader chasing two problems where there is one — and hide the only part
+that was not obvious: why a package missing from GCC breaks Clang.
+
+The two remedies are not interchangeable, so each says what it does. Only the
+first repairs the installation, and with it every compiler standing on it. The
+second installs a toolchain of Pickup's own without administrator rights and
+leaves the broken one exactly where it was.
+
+Remedies are named, never applied. Exit code 1 when something cannot be built,
+0 when it can; a warning on its own does not make a machine a failure.
 
 ### Asking for a toolchain
 
@@ -271,22 +337,156 @@ Downloads need `curl` and unpacking needs `tar`, both of which ship with
 Windows 10 and later, macOS, and mainstream Linux. Neither is linked into
 Pickup; it still builds against libc alone.
 
+### A GCC, from conda-forge, without conda
+
+The GNU project publishes no binaries, so a GCC comes from conda-forge — read
+straight from the channel. There is no client to install, no environment to
+activate, and no Python.
+
+```sh
+pickup search gcc
+pickup install gcc --version 12
+pickup install gcc --version 16 --dry-run   # the closure, nothing downloaded
+```
+
+Both report while they wait, for the same reason `search clang` does:
+
+```
+$ pickup search gcc
+fetching the conda-forge listing  \
+
+$ pickup install gcc --version 16
+resolving libstdcxx-devel_linux-64  /
+```
+
+Working out a closure is one request per package — a dozen or more — and there
+is no transfer to measure against, so it says which package it is asking about
+rather than spinning mutely. All of it goes to stderr, so
+`pickup search gcc --format toml > gcc.toml` still gets a file with nothing in
+it but TOML.
+
+A compiler there is not one package but a closure of them: `gxx` at 16.1.0
+pulls in nineteen, from `gcc_impl_linux-64` at 81 MB down to the sysroot and
+the development halves of libstdc++. Install the first alone and nothing
+compiles, so Pickup gathers all of it or none:
+
+```
+$ pickup install gcc --version 16 --dry-run
+packages 19
+size     184M
+  gxx                       16.1.0   hd47ba16_1     28K
+  gcc_impl_linux-64         16.1.0   h5fcb69b_1     81M
+  libstdcxx-devel_linux-64  16.1.0   h41cdd0d_101   21M
+  …
+```
+
+**This is not a dependency solver, and Pickup does not become a package manager
+by having it.** There is no backtracking and no search: the graph of one
+toolchain is small and its constraints are already consistent, because the
+channel built those packages against each other. It is a walk — take the newest
+build satisfying each requirement, follow what it names, stop when nothing new
+appears. When a requirement cannot be met the walk stops and says which one,
+and nothing is downloaded.
+
+Three things about the channel are worth knowing, because each of them is a way
+to get this wrong:
+
+- `repodata.json` for one subdirectory is **432 MB**. It is never fetched. The
+  per-package endpoint answers in about a megabyte, with the dependencies of
+  every build.
+- That endpoint publishes md5 and not sha256. The per-build one publishes
+  sha256, so it is asked for each package actually being installed — which is
+  what keeps the rule that nothing is installed without a digest.
+- The development halves of the compilers are published as **noarch**, despite
+  names like `libstdcxx-devel_linux-64`. Read only the host's own subdirectory
+  and you find the compiler and none of what it compiles against.
+
+A `.conda` package is a zip holding two zstd tarballs, and the entries are
+*stored* rather than compressed again — so reaching one means walking a few
+headers and copying a range of bytes. No zip library is linked and no `unzip`
+is needed; the tarball goes to the same `tar` as everything else.
+
+Unpacking is only half of it. A package is built under a long placeholder path,
+and files that had to record where they were built still carry it, so the build
+prefix is rewritten to the real one. Binaries keep their length — an ELF is full
+of offsets into itself — and the difference is made up with NUL bytes **at the
+end of the string**, not straight after the prefix. That distinction is not
+academic: a linker carries its own script embedded as text, and padding in the
+middle of `SEARCH_DIR("=<prefix>/lib")` loses the closing quote and leaves a
+linker that will not parse its own script.
+
+Which is exactly why what comes out is not trusted. A closure that unpacked is
+not a toolchain until it has compiled, linked and **run** a program:
+
+```
+$ pickup install gcc --version 16
+probing installed toolchain                        12 features
+✓ gcc 16.1.0 installed in ~/.pickup/toolchains/gcc-16.1.0-x86_64-conda-linux-gnu (990M)
+```
+
+Feature counts alone would not have caught that linker: those probes avoid
+headers on purpose, so all twelve passed against a toolchain that could not
+link `#include <stdio.h>`. Compiling something real is the check that matters.
+
 ### Output for machines
 
 Every command that produces data takes `--format toml`. TOML because Molto
 already parses it: consuming Pickup adds no parser to the consumer.
 
 ```
-$ pickup resolve --std c2x --require attr_nodiscard --format toml
+$ pickup resolve --lang c++ --format toml
 [compiler]
-path = "/usr/bin/clang"
-c_path = "/usr/bin/clang"
-cxx_path = "/usr/bin/clang++"
+path = "~/.pickup/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu/bin/clang++"
+c_path = "~/.pickup/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu/bin/clang"
+cxx_path = "~/.pickup/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu/bin/clang++"
 vendor = "clang"
-version = "14.0.0"
-target = "x86_64-pc-linux-gnu"
-std_flag = "-std=c2x"
+version = "22.1.8"
+target = "x86_64-unknown-linux-gnu"
+
+[cxx]
+stdlib = "libstdc++"
+compile_flags = ["--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/11"]
+link_flags = ["--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/11"]
+runtime_dirs = []
 ```
+
+### The flags are part of the answer
+
+A compiler is not a command; it is a command plus whatever it has to be told
+before it produces a program that runs. On Linux a Clang has to be told which
+C++ standard library to use, and when that library is its own, where the loader
+will find it afterwards. Answer with a path alone and the caller is left to
+work the rest out, which is how a build ends up hard-coding flags for the
+machine it was written on.
+
+So `resolve` publishes the recipe, and like everything else here it is proven
+rather than assumed: candidates are tried in order and the first that compiles,
+links **and runs** is the one published.
+
+libstdc++ is tried before libc++ deliberately. The two are not ABI compatible,
+and libstdc++ is what everything else on the machine was built against; falling
+back to the compiler's own library makes a toolchain self-contained at the cost
+of no longer linking against the system's C++ libraries. `--stdlib` forces one
+when the project has a constraint Pickup cannot see:
+
+```
+$ pickup resolve --lang c++ --stdlib libc++ --format toml
+[cxx]
+stdlib = "libc++"
+compile_flags = ["-stdlib=libc++", "--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/11"]
+link_flags = ["-stdlib=libc++", "-Wl,-rpath,~/.pickup/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu/lib/x86_64-unknown-linux-gnu", …]
+runtime_dirs = ["~/.pickup/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu/lib/x86_64-unknown-linux-gnu"]
+```
+
+`runtime_dirs` is there because linking is not running. Without that `-rpath`
+the link exits zero and the program dies on `libc++.so.1: cannot open shared
+object file` — a toolchain that passes every check and builds nothing, which is
+the one thing Pickup must never report as success.
+
+`install` leaves the same recipe in a `clang++.cfg` beside the driver, which
+Clang reads by itself, so a toolchain works when invoked directly too. That is
+a convenience; the contract is the TOML, which also covers system compilers
+that cannot be written to.
 
 ### Exit codes
 

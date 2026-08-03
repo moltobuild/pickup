@@ -10,6 +10,12 @@ typedef struct {
     const char *standard;  /* e.g. "c2x"; NULL means no standard requirement */
     const char *features;  /* comma-separated feature ids; NULL means none */
     const char *vendor;    /* restrict to one vendor; NULL means any */
+    /* "libstdc++" or "libc++"; NULL takes whichever the toolchain works with.
+
+       Only worth naming when the project has an ABI constraint Pickup cannot
+       see — linking against a prebuilt C++ library commits everything else to
+       the same standard library, and the two do not mix. */
+    const char *stdlib;
 } resolve_request;
 
 /* Execute `pickup resolve`: print the best toolchain satisfying `request`.

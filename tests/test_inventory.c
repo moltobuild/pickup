@@ -1,5 +1,7 @@
 #include <moltest.h>
 
+#include <stdio.h>
+
 #include <pickup/detect/probe.h>
 #include <pickup/services/inventory_service.h>
 
@@ -71,5 +73,110 @@ MOLTEST(inventory_finds_a_toolchain_by_name_or_path) {
 
     EXPECT_NOT_NULL(inventory_find(&list, list.items[0].path));
     EXPECT_NULL(inventory_find(&list, "definitely-not-a-compiler"));
+    inventory_free(&list);
+}
+
+/*
+ * Collapsing the aliases of one compiler.
+ *
+ * A single GCC answers to `cc`, `gcc-9`, `c89-gcc` and `g++-9`, and a list
+ * that shows four rows for it says four things where there is one. Built by
+ * hand rather than discovered: what is under test is the collapsing, and the
+ * machine running the tests cannot be relied on to have the right mess
+ * installed.
+ */
+static toolchain alias_of(const char *name, const char *path, const char *cxx,
+                          int major, int minor, const char *target,
+                          unsigned long long c_bits, unsigned long long cxx_bits) {
+    toolchain chain = { 0 };
+    snprintf(chain.name, sizeof chain.name, "%s", name);
+    snprintf(chain.path, sizeof chain.path, "%s", path);
+    snprintf(chain.cxx_path, sizeof chain.cxx_path, "%s", cxx);
+    snprintf(chain.target, sizeof chain.target, "%s", target);
+    chain.vendor = vendor_gcc;
+    chain.version = (toolchain_version){ major, minor, 0 };
+    chain.c_features.bits = c_bits;
+    chain.cxx_features.bits = cxx_bits;
+    return chain;
+}
+
+MOLTEST(inventory_collapses_the_aliases_of_one_compiler) {
+    inventory list = { 0 };
+    /* Four spellings of the same GCC, exactly as a real machine offers them. */
+    toolchain cc = alias_of("cc", "/usr/bin/cc", "/usr/bin/c++", 9, 5,
+                            "x86_64-linux-gnu", 0x1, 0x2);
+    toolchain gpp = alias_of("g++-9", "/usr/bin/g++-9", "", 9, 5,
+                             "x86_64-linux-gnu", 0x4, 0);
+    toolchain c89 = alias_of("c89-gcc", "/usr/bin/c89-gcc", "", 9, 5,
+                             "x86_64-linux-gnu", 0x8, 0);
+    ASSERT_TRUE(inventory_append(&list, &gpp));
+    ASSERT_TRUE(inventory_append(&list, &c89));
+    ASSERT_TRUE(inventory_append(&list, &cc));
+
+    inventory_settle(&list);
+
+    ASSERT_EQ(1, (int)list.count);
+    EXPECT_STREQ("gcc@9.5.0", list.items[0].id);
+    /* The plain C driver is the one kept: the C++ driver is found by
+       transforming its name, so keeping `g++-9` would lose the C++ side. */
+    EXPECT_STREQ("cc", list.items[0].name);
+    EXPECT_STREQ("/usr/bin/c++", list.items[0].cxx_path);
+    /* And everything proven about any spelling survives: each was probed on
+       its own, so taking one alone would report less than was measured. */
+    EXPECT_TRUE(list.items[0].c_features.bits == (0x1 | 0x4 | 0x8));
+    EXPECT_TRUE(list.items[0].cxx_features.bits == 0x2);
+
+    inventory_free(&list);
+}
+
+MOLTEST(inventory_keeps_apart_two_compilers_of_the_same_version) {
+    inventory list = { 0 };
+    /* The system's 12.3.0 and a conda one. Same vendor and version, different
+       toolchains, and collapsing them would hide one of them entirely. */
+    toolchain system = alias_of("gcc-12", "/usr/bin/gcc-12", "", 12, 3,
+                                "x86_64-linux-gnu", 0x1, 0);
+    toolchain conda = alias_of("cc", "/opt/conda/bin/cc", "", 12, 3,
+                               "x86_64-conda-linux-gnu", 0x1, 0);
+    ASSERT_TRUE(inventory_append(&list, &system));
+    ASSERT_TRUE(inventory_append(&list, &conda));
+
+    inventory_settle(&list);
+
+    ASSERT_EQ(2, (int)list.count);
+    /* And their names say which is which without reading the target column. */
+    bool saw_plain = false, saw_conda = false;
+    for (size_t i = 0; i < list.count; i++) {
+        saw_plain = saw_plain || strcmp(list.items[i].id, "gcc@12.3.0") == 0;
+        saw_conda = saw_conda || strcmp(list.items[i].id, "gcc@12.3.0-conda") == 0;
+    }
+    EXPECT_TRUE(saw_plain);
+    EXPECT_TRUE(saw_conda);
+
+    inventory_free(&list);
+}
+
+MOLTEST(inventory_finds_a_toolchain_by_the_forms_a_person_types) {
+    inventory list = { 0 };
+    toolchain newer = alias_of("gcc-12", "/usr/bin/gcc-12", "", 12, 4,
+                               "x86_64-linux-gnu", 0x1, 0);
+    toolchain older = alias_of("gcc-11", "/usr/bin/gcc-11", "", 11, 4,
+                               "x86_64-linux-gnu", 0x1, 0);
+    ASSERT_TRUE(inventory_append(&list, &older));
+    ASSERT_TRUE(inventory_append(&list, &newer));
+    inventory_settle(&list);
+
+    const toolchain *found = inventory_find(&list, "gcc@latest");
+    ASSERT_TRUE(found != NULL);
+    /* Ordered newest first, so the first match is the highest version. */
+    EXPECT_STREQ("gcc@12.4.0", found->id);
+
+    found = inventory_find(&list, "gcc@11");
+    ASSERT_TRUE(found != NULL);
+    EXPECT_STREQ("gcc@11.4.0", found->id);
+
+    EXPECT_NULL(inventory_find(&list, "gcc@9"));
+    EXPECT_EQ(2, (int)inventory_count_matching(&list, "gcc"));
+    EXPECT_EQ(1, (int)inventory_count_matching(&list, "gcc@12"));
+
     inventory_free(&list);
 }

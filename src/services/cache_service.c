@@ -12,7 +12,7 @@
 
 /* Bumped whenever the record layout changes. An older file is discarded
    rather than migrated: rebuilding it costs one scan. */
-#define CACHE_FORMAT_VERSION 2
+#define CACHE_FORMAT_VERSION 3
 
 /* The cache file, inside the directory Pickup keeps regenerable state in. */
 #define CACHE_FILENAME "toolchains"

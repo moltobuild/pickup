@@ -58,6 +58,58 @@ char *fs_read_file(const char *path) {
     return buffer;
 }
 
+unsigned char *fs_read_bytes(const char *path, size_t *size) {
+    *size = 0;
+    FILE *file = fopen(path, "rb");
+    if (file == NULL)
+        return NULL;
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        return NULL;
+    }
+    long length = ftell(file);
+    if (length < 0 || fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        return NULL;
+    }
+
+    /* One spare byte so that an empty file still yields a pointer, and a
+       caller may treat the result as a string when it happens to be one. */
+    unsigned char *buffer = malloc((size_t)length + 1);
+    if (buffer == NULL) {
+        fclose(file);
+        return NULL;
+    }
+    size_t read = fread(buffer, 1, (size_t)length, file);
+    fclose(file);
+    if (read != (size_t)length) {
+        free(buffer);
+        return NULL;
+    }
+    buffer[read] = '\0';
+    *size = read;
+    return buffer;
+}
+
+bool fs_write_bytes(const char *path, const unsigned char *data, size_t size) {
+    /* Read first, so the mode can be put back: rewriting a compiler in place
+       must not leave it unexecutable. */
+    struct stat before;
+    bool had_mode = stat(path, &before) == 0;
+
+    FILE *file = fopen(path, "wb");
+    if (file == NULL)
+        return false;
+    size_t written = fwrite(data, 1, size, file);
+    int closed = fclose(file);
+    if (written != size || closed != 0)
+        return false;
+
+    if (had_mode)
+        (void)chmod(path, before.st_mode & 07777);
+    return true;
+}
+
 bool fs_is_dir(const char *path) {
     struct stat info;
     return stat(path, &info) == 0 && S_ISDIR(info.st_mode);

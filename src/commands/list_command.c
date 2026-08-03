@@ -7,8 +7,15 @@
 
 #include <stdio.h>
 
-/* The columns of the human-readable table. */
-static const char *const list_headers[] = { "NAME", "VENDOR", "VERSION", "TARGET" };
+/* The columns of the human-readable table.
+
+   SOURCE comes last, and says who is responsible for the toolchain rather than
+   what it is: `pickup` for one Pickup installed and can remove again, `system`
+   for one that was already on the machine and belongs to its package
+   manager. */
+static const char *const list_headers[] = {
+    "NAME", "VENDOR", "VERSION", "TARGET", "SOURCE"
+};
 #define LIST_COLUMNS (sizeof list_headers / sizeof list_headers[0])
 
 /* Room for a formatted version ("12.3.0"). */
@@ -22,10 +29,13 @@ static const char *const list_headers[] = { "NAME", "VENDOR", "VERSION", "TARGET
 static void row_of(const toolchain *chain, char *version, size_t version_size,
                    const char **cells) {
     toolchain_version_format(chain->version, version, version_size);
-    cells[0] = chain->name;
+    /* The identity, not the basename of whichever link was found first: one
+       compiler answering to four names was four rows saying one thing. */
+    cells[0] = chain->id;
     cells[1] = toolchain_vendor_name(chain->vendor);
     cells[2] = version;
     cells[3] = chain->target[0] != '\0' ? chain->target : FIELD_MISSING;
+    cells[4] = toolchain_source_name(chain->source);
 }
 
 static void print_text(const inventory *list) {
@@ -63,11 +73,16 @@ static void print_toml(const inventory *list) {
         char version[32];
         toolchain_version_format(chain->version, version, sizeof version);
         printf("[toolchain.%zu]\n", i);
+        /* The identity first, because it is what another command is given to
+           name this toolchain again. `name` stays as the binary's own, which
+           is still what a build line invokes. */
+        printf("id = \"%s\"\n", chain->id);
         printf("name = \"%s\"\n", chain->name);
         printf("path = \"%s\"\n", chain->path);
         printf("vendor = \"%s\"\n", toolchain_vendor_name(chain->vendor));
         printf("version = \"%s\"\n", version);
         printf("target = \"%s\"\n", chain->target);
+        printf("source = \"%s\"\n", toolchain_source_name(chain->source));
         printf("cxx_path = \"%s\"\n", chain->cxx_path);
         if (i + 1 < list->count)
             printf("\n");

@@ -18,6 +18,19 @@
    Returns NULL on error; the caller must free() the result. */
 [[nodiscard]] char *fs_read_file(const char *path);
 
+/* Read the whole file at `path`, bytes and all, into a heap-allocated buffer.
+   `size` receives its length. Returns NULL on error; the caller must free().
+
+   Distinct from fs_read_file because a compiled binary is not text: it holds
+   NUL bytes, and a reader that stops at the first one would report a fraction
+   of the file as the whole of it. */
+[[nodiscard]] unsigned char *fs_read_bytes(const char *path, size_t *size);
+
+/* Write `size` bytes to `path`, creating or truncating it, preserving the
+   permissions it already had. An executable rewritten in place has to stay
+   executable. */
+[[nodiscard]] bool fs_write_bytes(const char *path, const unsigned char *data, size_t size);
+
 /* Return true if `path` exists and is a directory. */
 [[nodiscard]] bool fs_is_dir(const char *path);
 

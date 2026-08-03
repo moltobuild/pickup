@@ -147,8 +147,11 @@ process_result process_wait(process_handle *handle) {
     return reap(handle->pid);
 }
 
-process_result process_capture(const char *const argv[], const char *input,
-                               char *out, size_t out_size) {
+/* Run `argv` and read back whichever of the child's streams is `captured_fd`,
+   silencing the other one. Both callers below want the same plumbing and differ
+   only in which stream carries the answer they are after. */
+static process_result capture_stream(const char *const argv[], const char *input,
+                                     int captured_fd, char *out, size_t out_size) {
     if (out == NULL || out_size == 0)
         return failed_result();
     out[0] = '\0';
@@ -178,9 +181,9 @@ process_result process_capture(const char *const argv[], const char *input,
         close(stdin_pipe[PIPE_WRITE]);
         dup2(stdin_pipe[PIPE_READ], STDIN_FILENO);
         close(stdin_pipe[PIPE_READ]);
-        dup2(out_pipe[PIPE_WRITE], STDOUT_FILENO);
+        dup2(out_pipe[PIPE_WRITE], captured_fd);
         close(out_pipe[PIPE_WRITE]);
-        silence(STDERR_FILENO);
+        silence(captured_fd == STDOUT_FILENO ? STDERR_FILENO : STDOUT_FILENO);
         execvp(argv[0], (char *const *)argv);
         _exit(EXIT_COMMAND_NOT_RUNNABLE);
     }
@@ -193,7 +196,7 @@ process_result process_capture(const char *const argv[], const char *input,
     }
     close(stdin_pipe[PIPE_WRITE]);
 
-    /* Drain stdout before waiting: a child that fills the pipe would block
+    /* Drain the stream before waiting: a child that fills the pipe would block
        forever if we waited first. */
     size_t total = 0;
     while (total + 1 < out_size) {
@@ -206,4 +209,14 @@ process_result process_capture(const char *const argv[], const char *input,
     close(out_pipe[PIPE_READ]);
 
     return reap(pid);
+}
+
+process_result process_capture(const char *const argv[], const char *input,
+                               char *out, size_t out_size) {
+    return capture_stream(argv, input, STDOUT_FILENO, out, out_size);
+}
+
+process_result process_capture_stderr(const char *const argv[], const char *input,
+                                      char *out, size_t out_size) {
+    return capture_stream(argv, input, STDERR_FILENO, out, out_size);
 }

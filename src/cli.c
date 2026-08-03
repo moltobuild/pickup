@@ -1,5 +1,6 @@
 #include <pickup/cli.h>
 
+#include <pickup/commands/doctor_command.h>
 #include <pickup/commands/install_command.h>
 #include <pickup/commands/list_command.h>
 #include <pickup/commands/resolve_command.h>
@@ -43,6 +44,8 @@ static const cli_option resolve_options[] = {
     { "--require", 'r', cli_opt_value, "<ids>",
       "Comma-separated features that must be present", NULL },
     { "--vendor", 'v', cli_opt_value, "<name>", "Restrict to one vendor", NULL },
+    { "--stdlib", 0, cli_opt_value, "<libstdc++|libc++>",
+      "C++ standard library the build must use", NULL },
     { "--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT },
 };
 
@@ -85,6 +88,7 @@ static int handle_resolve(const cli_args *args) {
         .standard = cli_args_option(args, "--std"),
         .features = cli_args_option(args, "--require"),
         .vendor = cli_args_option(args, "--vendor"),
+        .stdlib = cli_args_option(args, "--stdlib"),
     };
     return resolve_command_run(&request, wants_toml(args));
 }
@@ -116,6 +120,10 @@ static int handle_install(const cli_args *args) {
     return install_command_run(&request);
 }
 
+static int handle_doctor(const cli_args *args) {
+    return doctor_command_run(wants_toml(args));
+}
+
 static int handle_unimplemented(const cli_args *args) {
     fprintf(stderr, "pickup: '%s' is not implemented yet (see spec.md)\n",
             cli_args_command_name(args));
@@ -131,11 +139,14 @@ static const cli_command commands[] = {
       format_option, sizeof format_option / sizeof format_option[0], handle_show },
     { "scan", "Probe every compiler again and rewrite the cache", NULL,
       NULL, 0, handle_scan },
+    { "doctor", "Report what stops this machine from building, and what fixes it",
+      NULL, format_option, sizeof format_option / sizeof format_option[0],
+      handle_doctor },
     { "resolve", "Find the best toolchain for a set of requirements", NULL,
       resolve_options, sizeof resolve_options / sizeof resolve_options[0], handle_resolve },
-    { "search", "List the versions of a toolchain available to install", "<toolchain>",
+    { "search", "List the versions of a toolchain available to install", "<clang|gcc>",
       search_options, sizeof search_options / sizeof search_options[0], handle_search },
-    { "install", "Download and install a toolchain", "<toolchain>",
+    { "install", "Download and install a toolchain", "<clang|gcc>",
       install_options, sizeof install_options / sizeof install_options[0],
       handle_install },
     { "uninstall", "Remove an installed toolchain", "<toolchain>",

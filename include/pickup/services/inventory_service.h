@@ -40,10 +40,34 @@ typedef void (*inventory_watch)(size_t done, size_t total, void *context);
 /* Append a toolchain. Exposed so the cache can rebuild an inventory it read. */
 [[nodiscard]] bool inventory_append(inventory *list, const toolchain *chain);
 
+/*
+ * Put an inventory into the form every caller expects: each compiler once,
+ * named by its identity, in a fixed order.
+ *
+ * A single GCC answers to `cc`, `gcc-9`, `c89-gcc` and `g++-9`; those are one
+ * toolchain, and listing them separately says four things where there is one.
+ * Collapsing them keeps everything that was proven about each spelling, since
+ * they were probed independently and a `c++` alone reports no C++ features at
+ * all.
+ *
+ * Exposed because this is the part worth testing, and it cannot be tested
+ * through a discovery that depends on whichever compilers the machine running
+ * the tests happens to have.
+ */
+void inventory_settle(inventory *list);
+
 /* Release an inventory. Safe on an empty one. */
 void inventory_free(inventory *list);
 
-/* Find a toolchain by name ("gcc-12") or by path. NULL if there is none. */
+/* Find a toolchain by identity ("gcc@12.3.0"), by a shorter form of it
+   ("gcc@12", "gcc@latest", "gcc"), or by path. The highest version that
+   matches, since the inventory is ordered newest first. NULL if there is
+   none. */
 [[nodiscard]] const toolchain *inventory_find(const inventory *list, const char *name);
+
+/* How many toolchains `name` names. More than one means the query was too
+   loose to identify anything, which is worth telling a user rather than
+   silently answering with whichever came first. */
+[[nodiscard]] size_t inventory_count_matching(const inventory *list, const char *name);
 
 #endif /* PICKUP_INVENTORY_SERVICE_H */

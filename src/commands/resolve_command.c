@@ -1,10 +1,12 @@
 #include <pickup/commands/resolve_command.h>
 
 #include <pickup/commands/probe_progress.h>
+#include <pickup/detect/recipe.h>
 #include <pickup/exit_code.h>
 #include <pickup/services/inventory_service.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Separator between feature ids in --require. */
@@ -119,6 +121,78 @@ static void print_missing(const toolchain *chain, capability_lang lang,
     fprintf(stderr, "\n");
 }
 
+/* Parse the standard library named on the command line. `stdlib_unknown` with
+   a false return means the name was not one Pickup offers. */
+static bool parse_stdlib(const char *name, cxx_stdlib *out) {
+    if (name == NULL) {
+        *out = stdlib_unknown;
+        return true;
+    }
+    if (strcmp(name, "libstdc++") == 0) {
+        *out = stdlib_libstdcxx;
+        return true;
+    }
+    if (strcmp(name, "libc++") == 0) {
+        *out = stdlib_libcxx;
+        return true;
+    }
+    return false;
+}
+
+/*
+ * The best toolchain that can be built with, not merely the best that matches.
+ *
+ * Matching the requirements is about what a compiler implements; a recipe is
+ * about whether it produces a program that runs. They come apart in practice —
+ * a Clang can implement all of C++20 and still fail on `#include <iostream>`
+ * because the standard library it borrows is incomplete — and answering with
+ * the first without checking the second is how a caller ends up reading
+ * compiler errors instead of an answer.
+ *
+ * Candidates are tried highest version first, so the result is still
+ * deterministic: the same machine yields the same answer every time.
+ */
+static const toolchain *select_buildable(const inventory *list,
+                                         const resolve_request *request,
+                                         capability_lang lang, capability_set required,
+                                         cxx_stdlib wanted, link_recipe *recipe_out) {
+    bool *tried = calloc(list->count > 0 ? list->count : 1, sizeof *tried);
+    if (tried == NULL)
+        return NULL;
+
+    const toolchain *chosen = NULL;
+    for (;;) {
+        /* The best candidate not yet tried. */
+        size_t best = SIZE_MAX;
+        for (size_t i = 0; i < list->count; i++) {
+            if (tried[i] || !satisfies(&list->items[i], request, lang, required))
+                continue;
+            if (best == SIZE_MAX
+                || toolchain_version_compare(list->items[i].version,
+                                             list->items[best].version) > 0)
+                best = i;
+        }
+        if (best == SIZE_MAX)
+            break;
+        tried[best] = true;
+
+        /* The wanted library narrows the search inside the toolchain rather
+           than filtering its answer: the recipe it would prefer may use the
+           other one while a working recipe for this one exists further down
+           its candidate list. */
+        link_recipe recipe = recipe_discover_for(&list->items[best], lang, wanted);
+        if (!recipe.usable)
+            continue;
+
+        *recipe_out = recipe;
+        chosen = &list->items[best];
+        break;
+    }
+
+    free(tried);
+    return chosen;
+}
+
 static void print_text(const toolchain *chain, capability_lang lang) {
     char version[32];
     toolchain_version_format(chain->version, version, sizeof version);
@@ -126,12 +200,59 @@ static void print_text(const toolchain *chain, capability_lang lang) {
            version, lang == lang_cxx ? chain->cxx_path : chain->path);
 }
 
+/* Print a TOML array of strings on one line. */
+static void print_string_array(const char *key, const char rows[][RECIPE_FLAG_MAX],
+                               size_t count) {
+    printf("%s = [", key);
+    for (size_t i = 0; i < count; i++)
+        printf("%s\"%s\"", i == 0 ? "" : ", ", rows[i]);
+    printf("]\n");
+}
+
+static void print_dir_array(const char *key, const char rows[][PICKUP_PATHS_MAX],
+                            size_t count) {
+    printf("%s = [", key);
+    for (size_t i = 0; i < count; i++)
+        printf("%s\"%s\"", i == 0 ? "" : ", ", rows[i]);
+    printf("]\n");
+}
+
+/*
+ * How to build with what was resolved.
+ *
+ * A path alone is not enough to compile with, and a caller that has to work
+ * the rest out ends up hard-coding flags for the machine it was written on —
+ * the thing Pickup exists to prevent. Every field here was proven: the flags
+ * are the ones that were watched producing a program that compiled, linked and
+ * ran.
+ */
+static void print_recipe_toml(capability_lang lang, const link_recipe *recipe) {
+    printf("\n[%s]\n", lang == lang_cxx ? "cxx" : "c");
+
+    /* Which standard library the flags commit the build to. Published for C++
+       because it is an ABI, not a preference: objects built against libc++ and
+       against libstdc++ cannot be linked together, so a caller pulling in a
+       prebuilt library has to know which one it is looking at. */
+    if (lang == lang_cxx)
+        printf("stdlib = \"%s\"\n", recipe_stdlib_name(recipe->stdlib));
+
+    print_string_array("compile_flags", recipe->compile_flags, recipe->compile_count);
+    print_string_array("link_flags", recipe->link_flags, recipe->link_count);
+    /* Where the shared libraries the produced program needs actually live.
+       Linking is not running, and a caller that has to launch what it built,
+       or ship it, cannot derive these from the flags. */
+    print_dir_array("runtime_dirs", recipe->runtime_dirs, recipe->runtime_count);
+}
+
 static void print_toml(const toolchain *chain, capability_lang lang,
-                       const char *standard) {
+                       const char *standard, const link_recipe *recipe) {
     char version[32];
     toolchain_version_format(chain->version, version, sizeof version);
 
     printf("[compiler]\n");
+    /* The identity, so a caller can name this same toolchain again to `show`
+       or to a later resolve without holding on to a path. */
+    printf("id = \"%s\"\n", chain->id);
     printf("path = \"%s\"\n", lang == lang_cxx ? chain->cxx_path : chain->path);
     /* Both drivers, always. A project with C and C++ sources needs each one,
        and they must come from the same toolchain; `path` alone answers only
@@ -143,6 +264,8 @@ static void print_toml(const toolchain *chain, capability_lang lang,
     printf("target = \"%s\"\n", chain->target);
     if (standard != NULL)
         printf("std_flag = \"-std=%s\"\n", standard);
+
+    print_recipe_toml(lang, recipe);
 }
 
 int resolve_command_run(const resolve_request *request, bool as_toml) {
@@ -154,6 +277,19 @@ int resolve_command_run(const resolve_request *request, bool as_toml) {
     if (request->vendor != NULL
         && toolchain_vendor_parse(request->vendor) == vendor_unknown) {
         fprintf(stderr, "pickup: unknown vendor '%s'\n", request->vendor);
+        return exit_usage_error;
+    }
+
+    cxx_stdlib wanted_stdlib;
+    if (!parse_stdlib(request->stdlib, &wanted_stdlib)) {
+        fprintf(stderr, "pickup: unknown standard library '%s'\n", request->stdlib);
+        return exit_usage_error;
+    }
+    /* Naming a C++ standard library while asking for C is a request that
+       cannot be honoured, and honouring it silently would leave the caller
+       believing a constraint was applied. */
+    if (wanted_stdlib != stdlib_unknown && lang != lang_cxx) {
+        fprintf(stderr, "pickup: --stdlib applies to c++, not %s\n", LANG_C_NAME);
         return exit_usage_error;
     }
 
@@ -175,18 +311,9 @@ int resolve_command_run(const resolve_request *request, bool as_toml) {
         return exit_failure;
     }
 
-    /* Highest version wins. The inventory is already ordered, so scanning for
-       the best match yields the same answer on every run. */
-    const toolchain *best = NULL;
-    for (size_t i = 0; i < list.count; i++) {
-        const toolchain *chain = &list.items[i];
-        if (!satisfies(chain, request, lang, required))
-            continue;
-        if (best == NULL
-            || toolchain_version_compare(chain->version, best->version) > 0)
-            best = chain;
-    }
-
+    link_recipe recipe;
+    const toolchain *best = select_buildable(&list, request, lang, required,
+                                             wanted_stdlib, &recipe);
     if (best == NULL) {
         fprintf(stderr, "pickup: no %s compiler satisfies the request\n",
                 lang == lang_cxx ? LANG_CXX_NAME : LANG_C_NAME);
@@ -197,7 +324,7 @@ int resolve_command_run(const resolve_request *request, bool as_toml) {
     }
 
     if (as_toml)
-        print_toml(best, lang, request->standard);
+        print_toml(best, lang, request->standard, &recipe);
     else
         print_text(best, lang);
     inventory_free(&list);

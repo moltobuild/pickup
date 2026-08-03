@@ -13,6 +13,13 @@ STD    ?= c2x
 CFLAGS ?= -std=$(STD) -D_DEFAULT_SOURCE -Wall -Wextra -Wpedantic -Iinclude
 LDFLAGS ?=
 
+# Record which headers each object was built from, and read those records back
+# on the next run. Without this a change to a struct in a header rebuilds only
+# the files that happen to be newer, and the objects that were not rebuilt go
+# on using the old layout — which does not fail to link, it corrupts memory at
+# run time and looks like a bug in the code that was changed.
+DEPFLAGS := -MMD -MP
+
 BUILD_DIR := build
 BIN       := $(BUILD_DIR)/pickup
 TEST_BIN  := $(BUILD_DIR)/pickup_tests
@@ -40,7 +47,11 @@ $(BIN): $(LIB_OBJ) $(MAIN_OBJ)
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
+
+# The header dependencies written alongside each object. Absent on a clean
+# tree, which is why this is -include rather than include.
+-include $(LIB_OBJ:.o=.d) $(MAIN_OBJ:.o=.d)
 
 run: build
 	./$(BIN) $(ARGS)

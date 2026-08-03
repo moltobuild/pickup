@@ -93,6 +93,15 @@ Chooses the best toolchain that satisfies a set of requirements.
 
 Downloads and manages toolchains that are not present on the system.
 
+## Health and Recipe
+
+What the catalog does not measure: whether a compiler produces a program that
+runs, and which flags make it do so.
+
+## Diagnostics
+
+Why this machine cannot build, reported by cause rather than by symptom.
+
 ## CLI
 
 The `pickup` command.
@@ -175,6 +184,63 @@ Standards arrive piecemeal: a compiler may implement attributes but not
 of the other.
 
 A standard is reported as supported when every feature attributed to it passes.
+
+---
+
+# 7a. Health and the Build Recipe
+
+Feature probes deliberately avoid headers: they test the language, not the
+completeness of the library shipped beside it. That is the right boundary, and
+it leaves a second question unanswered — **can this compiler produce a program
+that runs?**
+
+A compiler can implement every feature of C++20 and fail on `#include
+<iostream>`, because on Linux it borrows its C++ standard library, its startup
+objects and libgcc from a GCC installation it locates at run time. If that
+installation is missing its C++ half, C compiles perfectly and C++ does not.
+
+So health is measured in the order that tells the causes apart:
+
+- the header resolves, or the standard library is missing
+- it links, or the runtime is missing
+- **the binary runs**, or its libraries are somewhere the loader will not look
+
+The last is not optional. A link that exits zero and an executable that dies on
+`cannot open shared object file` is a toolchain that passed every measurement
+and builds nothing — the one claim Pickup must never make.
+
+A toolchain is therefore a binary *plus the flags that make it work*, and those
+flags are the answer as much as the path is. They are discovered, not assumed:
+candidates are tried in order and the first that compiles, links and runs is
+published.
+
+libstdc++ is preferred over libc++ where both work. The two are not ABI
+compatible, and libstdc++ is what the rest of the machine was built against;
+the compiler's own library makes a toolchain self-contained at the cost of no
+longer linking against the system's. That is a real cost, so it is a last
+resort rather than a default.
+
+---
+
+# 7b. Diagnostics
+
+**A finding is a cause, not a symptom.**
+
+One GCC installed without its C++ half breaks every Clang that selects it and
+leaves a `g++` that is not there. Reported separately, those read as unrelated
+faults and send a reader chasing several problems where there is one; reported
+together, they name the single thing to fix and explain what was never obvious
+— why a package missing from GCC breaks Clang.
+
+Remedies are named, never applied. Repairing the system is not what a diagnosis
+is for, and the useful remedies are rarely equivalent: one repairs what is
+broken, another sidesteps it and leaves it broken. Which to take is the
+reader's decision, so each says what it does.
+
+Pickup names a package of the operating system without becoming its package
+manager. The distribution is read from `/etc/os-release`; only the package name
+comes from convention, and where the distribution is not recognised the
+suggestion is omitted rather than invented.
 
 ---
 
@@ -311,7 +377,30 @@ and several platforms at once, so the asset for the host is selected rather than
 assumed. Asset naming has changed across LLVM versions, so it is matched, never
 constructed.
 
-GCC publishes no binaries of its own and therefore has no source yet.
+The GNU project publishes no binaries of its own, so a GCC comes from
+conda-forge, read straight from the channel over HTTPS. No client is installed
+and no environment is activated: the channel answers JSON, which Pickup already
+parses, and ships packages as zip files holding tarballs, which it can already
+open.
+
+A compiler there is a closure of packages rather than one archive. Gathering it
+is a walk, not a search: take the newest build satisfying each requirement,
+follow what it names, stop when nothing new appears. There is no backtracking,
+because the constraints of one toolchain are already consistent — the channel
+built those packages against each other — and a toolchain whose constraints
+needed searching is one Pickup should refuse rather than guess at. A
+requirement that cannot be met stops the walk and is named, and nothing is
+downloaded.
+
+This does not make Pickup a package manager. It resolves the closure of a
+toolchain and nothing else.
+
+Packages record the path they were built under, so that path is rewritten to
+the real one on the way in. Binaries keep their length, since an ELF is full of
+offsets into itself, and the difference is made up with NUL bytes at the end of
+the string rather than immediately after the prefix — a linker embeds its own
+script as text, and padding in the middle of it truncates a path and leaves a
+script that will not parse.
 
 ## What gets installed
 
@@ -323,6 +412,12 @@ Pickup installs what the ecosystem uses — the compiler, a linker, the builtin
 headers, the runtime and libc++ — which comes to about 550 MB. Nothing else is
 ever written: the archive streams past and only matching entries are unpacked,
 so the full contents never need to fit on the disk at all.
+
+Whatever is unpacked is asked to compile, link and **run** a program before it
+is adopted. Counting proven features is not enough on its own: those probes
+avoid headers on purpose, so a compiler whose sysroot never arrived, or whose
+embedded paths were rewritten wrongly, passes every one of them and then fails
+on the first real translation unit.
 
 The selection is a claim about someone else's layout, and layouts change. So it
 is not trusted: once unpacked, the compiler is asked to compile, and a toolchain
@@ -360,6 +455,7 @@ Commands:
 
 - `list` — the inventory
 - `show <name|path>` — one toolchain in detail, feature by feature
+- `doctor` — what stops this machine from building, and what would fix it
 - `resolve` — the best toolchain for a set of requirements
 - `scan` — rebuild the inventory
 - `search <toolchain>` — the versions available to install

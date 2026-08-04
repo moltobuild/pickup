@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include <pickup/model/toolchain.h>
 #include <pickup/services/paths_service.h>
 
 /*
@@ -40,6 +41,9 @@ typedef struct {
     char name[TOOL_NAME_MAX];      /* "clang-format" */
     char path[PICKUP_PATHS_MAX];   /* where it was found */
     char version[TOOL_VERSION_MAX];/* what it said when asked */
+    /* Who is responsible for it, decided by where it lives — the same
+       distinction `list` draws for compilers. */
+    toolchain_source source;
 } dev_tool;
 
 /* The tools this machine has, searched on PATH and in the toolchains Pickup

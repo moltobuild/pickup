@@ -70,20 +70,49 @@ bool tools_kind_of(const char *name, tool_kind *kind) {
     return false;
 }
 
-/* Keep the part of what a tool printed that identifies it.
+/*
+ * Pull the version out of what a tool printed.
+ *
+ * Not simply the first line. clang-format answers with its version followed by
+ * the URL it was built from and a commit hash, which is provenance rather than
+ * identity; clang-tidy opens with a banner and puts the version on the second
+ * line:
+ *
+ *     LLVM (http://llvm.org/):
+ *       LLVM version 22.1.8
+ *
+ * So the line carrying the word is the one taken, and the parenthesis that
+ * usually follows is dropped. A tool that words it differently — cppcheck says
+ * "Cppcheck 2.21.0" — falls back to its first line, which is right for it.
+ */
+static void extract_version(char *text) {
+    char *chosen = NULL;
 
-   The first line, and of that only what comes before the parenthesis: a
-   conda-forge clang-format answers with its version followed by the URL of the
-   feedstock it was built from and a commit hash, which is provenance rather
-   than identity and pushes everything else off the line. */
-static void first_line(char *text) {
-    char *newline = strpbrk(text, "\r\n");
-    if (newline != NULL)
-        *newline = '\0';
+    for (char *line = text; line != NULL && *line != '\0'; ) {
+        char *end = strpbrk(line, "\r\n");
+        if (end != NULL)
+            *end = '\0';
 
-    char *paren = strstr(text, " (");
+        while (*line == ' ' || *line == '\t')
+            line++;
+        if (*line != '\0' && chosen == NULL)
+            chosen = line;                 /* the first line, as a fallback */
+        if (strstr(line, "version") != NULL) {
+            chosen = line;
+            break;
+        }
+        line = end != NULL ? end + 1 : NULL;
+    }
+
+    if (chosen == NULL) {
+        text[0] = '\0';
+        return;
+    }
+
+    char *paren = strstr(chosen, " (");
     if (paren != NULL)
         *paren = '\0';
+    memmove(text, chosen, strlen(chosen) + 1);
 }
 
 /* Ask the binary at `path` to identify itself. False when it does not answer,
@@ -95,7 +124,7 @@ static bool interrogate(const char *path, char *version, size_t version_size) {
     if (!result.completed || result.exit_code != 0)
         return false;
 
-    first_line(answer);
+    extract_version(answer);
     if (answer[0] == '\0')
         return false;
     /* Truncated rather than refused if it runs long: this is a line of text to
@@ -107,12 +136,12 @@ static bool interrogate(const char *path, char *version, size_t version_size) {
 
 /* Record `path` as `candidate`, if it runs. */
 static bool accept(const tool_candidate *candidate, const char *path,
-                   dev_tool *out) {
+                   toolchain_source source, dev_tool *out) {
     char version[TOOL_VERSION_MAX];
     if (!interrogate(path, version, sizeof version))
         return false;
 
-    *out = (dev_tool){ .kind = candidate->kind };
+    *out = (dev_tool){ .kind = candidate->kind, .source = source };
     (void)fs_format_path(out->name, sizeof out->name, "%s", candidate->name);
     (void)fs_format_path(out->path, sizeof out->path, "%s", path);
     (void)fs_format_path(out->version, sizeof out->version, "%s", version);
@@ -121,13 +150,13 @@ static bool accept(const tool_candidate *candidate, const char *path,
 
 /* Look for `candidate` inside one directory. */
 static bool find_in(const char *directory, const tool_candidate *candidate,
-                    dev_tool *out) {
+                    toolchain_source source, dev_tool *out) {
     char path[PICKUP_PATHS_MAX];
     if (!fs_format_path(path, sizeof path, "%s/%s", directory, candidate->name))
         return false;
     if (access(path, X_OK) != 0)
         return false;
-    return accept(candidate, path, out);
+    return accept(candidate, path, source, out);
 }
 
 /* Walk PATH looking for one candidate. */
@@ -146,7 +175,7 @@ static bool find_on_path(const tool_candidate *candidate, dev_tool *out) {
             char directory[PICKUP_PATHS_MAX];
             memcpy(directory, cursor, length);
             directory[length] = '\0';
-            if (find_in(directory, candidate, out))
+            if (find_in(directory, candidate, toolchain_source_system, out))
                 return true;
         }
 
@@ -174,7 +203,7 @@ static bool find_under(const char *root, const tool_candidate *candidate,
         char bin[PICKUP_PATHS_MAX];
         if (!fs_format_path(bin, sizeof bin, "%s/%s/bin", root, entry->d_name))
             continue;
-        found = find_in(bin, candidate, out);
+        found = find_in(bin, candidate, toolchain_source_pickup, out);
     }
     closedir(dir);
     return found;

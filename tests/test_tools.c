@@ -176,3 +176,59 @@ MOLTEST(tools_names_every_kind_and_what_provides_it) {
         EXPECT_TRUE(tools_kind_of(package, &kind));
     }
 }
+
+MOLTEST(tools_reads_a_version_that_is_not_on_the_first_line) {
+    tools_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    /* clang-tidy opens with a banner and puts the version underneath. Taking
+       the first line would report the tool as "LLVM". */
+    ASSERT_TRUE(plant_working(&fixture, "clang-tidy",
+                              "LLVM (http://llvm.org/):\\n  LLVM version 22.1.8\\n"
+                              "  Optimized build."));
+
+    dev_tool found[TOOLS_MAX];
+    size_t count = tools_discover(found, TOOLS_MAX);
+
+    const dev_tool *linter = of_kind(found, count, tool_linter);
+    ASSERT_TRUE(linter != NULL);
+    EXPECT_STREQ("LLVM version 22.1.8", linter->version);
+
+    fixture_teardown(&fixture);
+}
+
+MOLTEST(tools_keeps_a_version_worded_without_the_word) {
+    tools_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+    /* cppcheck says "Cppcheck 2.21.0" and nothing else; the fallback to the
+       first line is what makes that work. */
+    ASSERT_TRUE(plant_working(&fixture, "cppcheck", "Cppcheck 2.21.0"));
+
+    dev_tool found[TOOLS_MAX];
+    size_t count = tools_discover(found, TOOLS_MAX);
+
+    const dev_tool *linter = of_kind(found, count, tool_linter);
+    ASSERT_TRUE(linter != NULL);
+    EXPECT_STREQ("Cppcheck 2.21.0", linter->version);
+
+    fixture_teardown(&fixture);
+}
+
+MOLTEST(tools_says_where_a_tool_came_from) {
+    tools_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+    /* PATH is the fixture, so anything found there is the machine's own. */
+    ASSERT_TRUE(plant_working(&fixture, "clang-format", "clang-format version 22.1.8"));
+
+    dev_tool found[TOOLS_MAX];
+    size_t count = tools_discover(found, TOOLS_MAX);
+
+    const dev_tool *formatter = of_kind(found, count, tool_formatter);
+    ASSERT_TRUE(formatter != NULL);
+    EXPECT_EQ(toolchain_source_system, formatter->source);
+    /* And the path, which is the whole reason a caller asks. */
+    EXPECT_TRUE(strstr(formatter->path, fixture.root) != NULL);
+    EXPECT_TRUE(strstr(formatter->path, "clang-format") != NULL);
+
+    fixture_teardown(&fixture);
+}

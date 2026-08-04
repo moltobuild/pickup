@@ -45,6 +45,7 @@ make test
 ```sh
 pickup list                # the inventory
 pickup show <name>         # one toolchain, feature by feature
+pickup tools               # the formatter and linter this machine has, and where
 pickup doctor              # what stops this machine from building, and what fixes it
 pickup scan                # re-probe everything and rewrite the cache
 pickup resolve [options]   # the best toolchain for a set of requirements
@@ -240,6 +241,37 @@ What differs is the test they have to pass before being adopted: there is
 nothing here to compile, so it is that the installed binary runs and answers.
 They land under `~/.pickup/tools/`, apart from the toolchains, because nothing
 resolves against them.
+
+`pickup tools` says which ones are there and, in TOML, where:
+
+```
+$ pickup tools
+KIND       NAME          VERSION                      SOURCE
+formatter  clang-format  clang-format version 22.1.8  pickup
+linter     clang-tidy    LLVM version 22.1.8          pickup
+```
+
+```toml
+$ pickup tools --format toml
+[[tool]]
+kind = "formatter"
+name = "clang-format"
+path = "~/.pickup/toolchains/clang-22.1.8-…/bin/clang-format"
+version = "clang-format version 22.1.8"
+source = "pickup"
+```
+
+**`doctor` says whether one is missing; `tools` says which are there and what
+to invoke.** The same division as `doctor` and `list` for compilers, and for
+the same reason: a caller reading paths out of a report of problems is reading
+the wrong document. Only the TOML carries the path, because that is what a
+build needs and what would push every other column off a line meant for a
+person.
+
+The version is read from whichever line carries it. clang-format answers with
+its version followed by the URL it was built from; clang-tidy opens with a
+banner and puts the version underneath. Taking the first line would report the
+linter as "LLVM".
 
 A toolchain of LLVM carries both already, so `pickup install clang` keeps them
 rather than pruning them away — about 100 MB more, almost all of it

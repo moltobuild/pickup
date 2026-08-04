@@ -7,6 +7,7 @@
 #include <pickup/commands/scan_command.h>
 #include <pickup/commands/search_command.h>
 #include <pickup/commands/show_command.h>
+#include <pickup/commands/tools_command.h>
 #include <pickup/exit_code.h>
 #include <pickup/util/cli.h>
 #include <pickup/util/color.h>
@@ -127,6 +128,10 @@ static int handle_install(const cli_args *args) {
     return install_command_run(&request);
 }
 
+static int handle_tools(const cli_args *args) {
+    return tools_command_run(wants_toml(args));
+}
+
 static int handle_doctor(const cli_args *args) {
     return doctor_command_run(wants_toml(args), cli_args_flag(args, "--all"));
 }
@@ -146,6 +151,8 @@ static const cli_command commands[] = {
       format_option, sizeof format_option / sizeof format_option[0], handle_show },
     { "scan", "Probe every compiler again and rewrite the cache", NULL,
       NULL, 0, handle_scan },
+    { "tools", "List the formatter and linter this machine has, and where", NULL,
+      format_option, sizeof format_option / sizeof format_option[0], handle_tools },
     { "doctor", "Report what stops this machine from building, and what fixes it",
       NULL, doctor_options, sizeof doctor_options / sizeof doctor_options[0],
       handle_doctor },

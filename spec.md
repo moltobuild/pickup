@@ -246,6 +246,11 @@ Beyond compilers, a machine is reported on for the tools a project is worked on
 with — a formatter and a linter. Found the way compilers are, by name and then
 by asking: one that does not answer is a file with a name, not a tool.
 
+Diagnosing that one is missing and saying where the others are are different
+questions, and are answered by different commands. A caller that means to run a
+formatter needs its path, and a report of problems is the wrong place to look
+for one.
+
 Remedies are named, never applied. Repairing the system is not what a diagnosis
 is for, and the useful remedies are rarely equivalent: one repairs what is
 broken, another sidesteps it and leaves it broken. Which to take is the
@@ -469,6 +474,7 @@ Commands:
 
 - `list` — the inventory
 - `show <name|path>` — one toolchain in detail, feature by feature
+- `tools` — the formatter and linter this machine has, and where they are
 - `doctor` — what stops this machine from building, and what would fix it
 - `resolve` — the best toolchain for a set of requirements
 - `scan` — rebuild the inventory

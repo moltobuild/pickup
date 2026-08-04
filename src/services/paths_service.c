@@ -6,6 +6,7 @@
 
 /* Subdirectories of the pickup home. */
 #define TOOLCHAINS_DIRNAME "toolchains"
+#define TOOLS_DIRNAME      "tools"
 #define DOWNLOADS_DIRNAME  "downloads"
 #define CACHE_DIRNAME      "cache"
 
@@ -30,6 +31,10 @@ static bool home_subdir(const char *subdirectory, char *out, size_t out_size) {
 
 bool paths_toolchains(char *out, size_t out_size) {
     return home_subdir(TOOLCHAINS_DIRNAME, out, out_size);
+}
+
+bool paths_tools(char *out, size_t out_size) {
+    return home_subdir(TOOLS_DIRNAME, out, out_size);
 }
 
 bool paths_cache(char *out, size_t out_size) {

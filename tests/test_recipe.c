@@ -81,6 +81,7 @@ static bool write_driver(const fake_toolchain *fake, const fake_accepts *accepts
         "verbose=no\n"
         "gccinstall=no\n"
         "libcxx=no\n"
+        "nodefault=no\n"
         "printname=''\n"
         "for a in \"$@\"; do\n"
         "  case \"$a\" in\n"
@@ -88,9 +89,17 @@ static bool write_driver(const fake_toolchain *fake, const fake_accepts *accepts
         "    -fsyntax-only) syntax=yes ;;\n"
         "    --gcc-install-dir=*) gccinstall=yes ;;\n"
         "    -stdlib=libc++) libcxx=yes ;;\n"
+        "    --no-default-config) nodefault=yes ;;\n"
         "    -print-file-name=*) printname=\"${a#-print-file-name=}\" ;;\n"
         "  esac\n"
         "done\n"
+        /* Reads the configuration file beside it, the way clang does, unless
+           told not to. This is what makes a configured toolchain look like one
+           that needs no flags. */
+        "if [ \"$nodefault\" = no ] && [ -f \"$0.cfg\" ]; then\n"
+        "  grep -q -- '--gcc-install-dir=' \"$0.cfg\" && gccinstall=yes\n"
+        "  grep -q -- '-stdlib=libc++' \"$0.cfg\" && libcxx=yes\n"
+        "fi\n"
         /* -o takes its value in the next argument, so it needs a real walk. */
         "while [ $# -gt 0 ]; do\n"
         "  [ \"$1\" = '-o' ] && { shift; out=\"$1\"; }\n"
@@ -115,7 +124,12 @@ static bool write_driver(const fake_toolchain *fake, const fake_accepts *accepts
         "[ \"$gccinstall\" = yes ] && [ '%s' = yes ] && ok=yes\n"
         "[ \"$libcxx\" = yes ] && [ '%s' = yes ] && ok=yes\n"
         "[ \"$gccinstall\" = no ] && [ \"$libcxx\" = no ] && [ '%s' = yes ] && ok=yes\n"
-        "[ \"$ok\" = yes ] || exit 1\n"
+        /* A program that includes nothing needs no standard library, and a real
+           compiler builds it whatever its libstdc++ situation. Only what
+           reaches for a header depends on the flags. */
+        "case \"$src\" in\n"
+        "  *include*) [ \"$ok\" = yes ] || exit 1 ;;\n"
+        "esac\n"
         /* A program asking which standard library this is gets answered the
            way a real one would: by failing to compile against the other. Only
            -stdlib=libc++ reaches libc++ here, as on a real Linux driver. */
@@ -353,6 +367,33 @@ MOLTEST(recipe_writes_no_config_for_a_compiler_that_needs_none) {
     char config[PICKUP_PATHS_MAX];
     ASSERT_TRUE(fs_format_path(config, sizeof config, "%s.cfg", fake.driver));
     EXPECT_FALSE(fs_path_exists(config));
+
+    fake_teardown(&fake);
+}
+
+MOLTEST(recipe_describes_the_toolchain_and_not_its_config_file) {
+    fake_toolchain fake;
+    /* Needs --gcc-install-dir to build. */
+    fake_accepts accepts = { .gcc_install = true, .ships_libcxx = true };
+    ASSERT_TRUE(fake_setup(&fake, &accepts));
+
+    toolchain chain = chain_of(&fake);
+    link_recipe first = recipe_discover(&chain, lang_cxx);
+    ASSERT_TRUE(first.usable);
+    ASSERT_TRUE(recipe_gcc_flag(&first) != NULL);
+
+    /* Now the toolchain is configured, exactly as install leaves it. A driver
+       that reads that file builds with no flags at all — so a second discovery
+       that let it read the file would publish an empty recipe for a compiler
+       that does not build without those flags. It would still work, but only
+       for someone invoking that one binary, and a caller handed it would have
+       no way to tell. */
+    ASSERT_TRUE(recipe_write_config(fake.driver, &first));
+
+    link_recipe second = recipe_discover(&chain, lang_cxx);
+    ASSERT_TRUE(second.usable);
+    ASSERT_TRUE(recipe_gcc_flag(&second) != NULL);
+    EXPECT_STREQ(recipe_gcc_flag(&first), recipe_gcc_flag(&second));
 
     fake_teardown(&fake);
 }

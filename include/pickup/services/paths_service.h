@@ -35,6 +35,13 @@
 /* Where installed toolchains live, one directory each. */
 [[nodiscard]] bool paths_toolchains(char *out, size_t out_size);
 
+/* Where installed tools live — a formatter, a linter — one directory each.
+
+   Kept apart from the toolchains because they are not toolchains: nothing
+   resolves against them, `list` does not report them, and a scan that treated
+   a clang-format as a compiler candidate would waste a probe on every run. */
+[[nodiscard]] bool paths_tools(char *out, size_t out_size);
+
 /* Where answers worth keeping but never worth trusting blindly are stored:
    the probed inventory and the index of published releases. Deleting any of it
    costs time, never correctness. */

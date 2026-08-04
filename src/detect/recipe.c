@@ -41,6 +41,27 @@
    know about in its own right. */
 #define RPATH_FLAG_PREFIX "-Wl,-rpath,"
 
+/*
+ * Asking a driver to ignore the configuration file sitting beside it.
+ *
+ * `install` leaves a clang++.cfg next to the compiler holding the recipe it
+ * was proven to build with, and clang reads that file on every invocation —
+ * including the ones this module makes while working out what a toolchain
+ * needs. The result is a recipe describing what is needed *in addition to*
+ * what the file already applies, which on a configured toolchain is nothing at
+ * all: it publishes an empty recipe for a compiler that does not build without
+ * those flags.
+ *
+ * That recipe still works, but only for someone invoking that exact binary. It
+ * is an accident of where the file is, not a description of the toolchain, and
+ * a caller handed it has no way to know the difference.
+ *
+ * So the probes are run with the file ignored, and what comes out stands on
+ * its own. The flag is never published: it says how the answer was found, not
+ * how to build.
+ */
+#define FLAG_NO_DEFAULT_CONFIG "--no-default-config"
+
 #define ANSWER_SIZE 4096
 
 /* One configuration worth trying, held as borrowed strings so building the
@@ -126,6 +147,37 @@ static bool own_libstdcxx_dir(const char *compiler, char *out, size_t out_size) 
 static void add_flag(candidate *entry, const char *flag) {
     if (entry->count < RECIPE_MAX_FLAGS)
         entry->flags[entry->count++] = flag;
+}
+
+/* True if this driver understands being told to ignore its own config file.
+
+   Settled by asking rather than by vendor, because GCC has no such flag and
+   passing it there turns every probe into an unknown-option error.
+
+   Asked by compiling something, not by pairing the flag with `--version`:
+   `gcc --no-default-config --version` exits zero and prints its version,
+   because that mode never gets as far as rejecting the option. The same trap
+   this project exists to point out — a compiler accepting a flag is not a
+   compiler that implements it — and the same answer: hand it a program and
+   see whether it builds. */
+static bool takes_no_default_config(const char *driver) {
+    const char *argv[] = {
+        driver, FLAG_NO_DEFAULT_CONFIG, "-x", "c", "-fsyntax-only", "-", NULL
+    };
+    process_result result = process_try(argv, "int main(void){return 0;}\n");
+    return result.completed && result.exit_code == 0;
+}
+
+/* Lay out the flags a probe is run with: the candidate's own, plus the one
+   that keeps the driver's config file out of the answer. Returns how many. */
+static size_t probe_flags(bool ignore_config, const char *const *flags,
+                          size_t flag_count, const char **out, size_t max) {
+    size_t count = 0;
+    if (ignore_config && count < max)
+        out[count++] = FLAG_NO_DEFAULT_CONFIG;
+    for (size_t i = 0; i < flag_count && count < max; i++)
+        out[count++] = flags[i];
+    return count;
 }
 
 /*
@@ -363,14 +415,20 @@ bool recipe_align_gcc(const link_recipe *cxx, const char *driver, link_recipe *c
         return false;
 
     /* Checked before it is kept: C already worked without this, so a flag that
-       broke it would trade a mismatch for a compiler that builds nothing. */
-    const char *candidate[RECIPE_MAX_FLAGS + 1];
+       broke it would trade a mismatch for a compiler that builds nothing.
+       Checked the same way the recipe was discovered, with the driver's own
+       config file kept out of it. */
+    const char *wanted[RECIPE_MAX_FLAGS + 1];
     size_t count = 0;
     for (size_t i = 0; i < c->compile_count && count < RECIPE_MAX_FLAGS; i++)
-        candidate[count++] = c->compile_flags[i];
-    candidate[count++] = flag;
+        wanted[count++] = c->compile_flags[i];
+    wanted[count++] = flag;
 
-    if (health_probe(driver, lang_c, candidate, count) != health_ok)
+    const char *candidate[RECIPE_MAX_FLAGS + 2];
+    size_t probe_count = probe_flags(takes_no_default_config(driver), wanted, count,
+                                     candidate, sizeof candidate / sizeof candidate[0]);
+
+    if (health_probe(driver, lang_c, candidate, probe_count) != health_ok)
         return false;
 
     (void)fs_format_path(c->compile_flags[c->compile_count++], RECIPE_FLAG_MAX,
@@ -434,10 +492,18 @@ link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang,
     size_t count = build_candidates(chain, lang, driver, &storage,
                                     candidates, RECIPE_MAX_FLAGS);
 
+    /* Settled once: every probe below has to be run the same way, or the
+       candidate that wins would have been judged under different conditions
+       from the ones it was measured in. */
+    bool ignore_config = takes_no_default_config(driver);
+
     for (size_t i = 0; i < count; i++) {
-        health_status status = health_probe(driver, lang, candidates[i].flags,
-                                            candidates[i].count);
-        if (status != health_ok)
+        const char *probe[RECIPE_MAX_FLAGS + 2];
+        size_t probe_count = probe_flags(ignore_config, candidates[i].flags,
+                                         candidates[i].count, probe,
+                                         sizeof probe / sizeof probe[0]);
+
+        if (health_probe(driver, lang, probe, probe_count) != health_ok)
             continue;
 
         /* Which library it ended up using is read back from the compiler, not
@@ -445,7 +511,7 @@ link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang,
            library at all and still uses one, and which one that is depends on
            the platform. */
         cxx_stdlib stdlib = lang == lang_cxx
-            ? recipe_detect_stdlib(driver, candidates[i].flags, candidates[i].count)
+            ? recipe_detect_stdlib(driver, probe, probe_count)
             : stdlib_unknown;
 
         /* A caller that named a library is stating an ABI constraint, so a

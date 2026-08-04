@@ -2,6 +2,7 @@
 
 #include <pickup/exit_code.h>
 #include <pickup/services/install_service.h>
+#include <pickup/detect/tools.h>
 #include <pickup/sources/conda_closure.h>
 #include <pickup/sources/llvm_source.h>
 #include <pickup/util/color.h>
@@ -168,7 +169,8 @@ static int install_gcc(const install_command_request *request) {
         return code;
     }
 
-    install_report report = install_run_closure(&closure, request->allow_unverified);
+    const install_closure_request run = { .allow_unverified = request->allow_unverified };
+    install_report report = install_run_closure(&closure, &run);
     conda_closure_free(&closure);
 
     if (!install_succeeded(report.status)) {
@@ -200,14 +202,75 @@ static int install_gcc(const install_command_request *request) {
     return exit_ok;
 }
 
+/*
+ * Install a tool: a formatter, a linter.
+ *
+ * The same closure and the same deployment as a toolchain — conda-forge does
+ * not package these differently — and a different question at the end. There
+ * is nothing here to compile, so what it has to prove is that it runs.
+ */
+static int install_tool(const install_command_request *request) {
+    conda_closure closure;
+    progress_line line = { .drawn = false };
+    bool resolved = conda_resolve_watched(request->name, request->version,
+                                          request->refresh, watch_resolve,
+                                          &line, &closure);
+    progress_line_clear(stderr, &line);
+
+    if (!resolved) {
+        fprintf(stderr, "pickup: could not read the conda-forge channel\n");
+        conda_closure_free(&closure);
+        return exit_failure;
+    }
+    if (!closure.complete) {
+        fprintf(stderr, "pickup: no %s satisfies the request\n", request->name);
+        fprintf(stderr, "  missing: %s\n  nothing was downloaded\n", closure.missing);
+        conda_closure_free(&closure);
+        return exit_no_match;
+    }
+
+    if (request->dry_run) {
+        int code = report_closure_dry_run(&closure);
+        conda_closure_free(&closure);
+        return code;
+    }
+
+    const install_closure_request run = {
+        .tool = request->name,
+        .allow_unverified = request->allow_unverified,
+    };
+    install_report report = install_run_closure(&closure, &run);
+    conda_closure_free(&closure);
+
+    if (!install_succeeded(report.status)) {
+        fprintf(stderr, "%s%s%s %s: %s\n", color_error(), format_cross(), color_reset(),
+                request->name, install_status_message(report.status));
+        if (report.status == install_unverifiable)
+            fprintf(stderr, "  re-run with %s to install it anyway\n",
+                    ALLOW_UNVERIFIED_FLAG);
+        return exit_failure;
+    }
+
+    char size[FORMAT_SIZE_MAX];
+    format_size(report.installed_size, size, sizeof size);
+    printf("%s%s%s %s installed in %s%s (%s)%s\n",
+           color_ok(), format_check(), color_reset(), request->name,
+           color_dim(), report.directory, size, color_reset());
+    return exit_ok;
+}
+
 int install_command_run(const install_command_request *request) {
+    tool_kind kind;
+    if (tools_kind_of(request->name, &kind))
+        return install_tool(request);
     if (is_gcc(request->name))
         return install_gcc(request);
 
     if (!is_clang(request->name)) {
         fprintf(stderr, "pickup: nothing to install named '%s'\n",
                 request->name != NULL ? request->name : "");
-        fprintf(stderr, "  try: pickup install %s, or pickup install %s\n",
+        fprintf(stderr, "  try: pickup install %s or %s, "
+                        "or a tool: clang-format, clang-tidy, cppcheck\n",
                 TOOLCHAIN_CLANG, TOOLCHAIN_GCC);
         return exit_usage_error;
     }

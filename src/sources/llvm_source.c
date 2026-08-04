@@ -328,6 +328,14 @@ bool llvm_fetch_releases_watched(const char *version_filter, bool refresh,
 static const char *const minimal_patterns[] = {
     /* the compiler, its aliases, and the binary they point at */
     "*/bin/clang", "*/bin/clang++", "*/bin/clang-cpp", "*/bin/clang-[0-9]*",
+    /* the formatter and the linter.
+
+       They are in the archive already, which is downloaded whole either way,
+       so taking them costs unpacking rather than bandwidth — against fetching
+       clang-format from a package channel, which drags the whole of LLVM in
+       behind it for a gigabyte. clang-tidy is the larger part of the hundred
+       megabytes this adds, because it links half of LLVM itself. */
+    "*/bin/clang-format", "*/bin/clang-tidy",
     /* the linker, so the toolchain does not depend on the system having one */
     "*/bin/lld", "*/bin/ld.lld",
     /* builtin headers, compiler-rt and the sanitizer runtimes */

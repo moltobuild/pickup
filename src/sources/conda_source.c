@@ -128,6 +128,31 @@ static const char *basename_of(const char *path) {
     return slash != NULL ? slash + 1 : path;
 }
 
+/* Marks a version as something the project has not called finished. */
+static const char *const prerelease_marks[] = { "rc", "alpha", "beta", "dev", "pre" };
+#define PRERELEASE_COUNT (sizeof prerelease_marks / sizeof prerelease_marks[0])
+
+/*
+ * True if this version is a release candidate or similar.
+ *
+ * The channel publishes them alongside finished releases, and the newest build
+ * of a package is often one — `clang-format` at the time of writing resolves to
+ * 23.1.0.rc2. Installing one by accident is not something asking for the latest
+ * version should be able to cause, which is the same rule the LLVM source
+ * applies to GitHub's prerelease flag.
+ */
+static bool is_prerelease(const char *version) {
+    for (size_t i = 0; i < PRERELEASE_COUNT; i++) {
+        const char *found = strstr(version, prerelease_marks[i]);
+        /* Preceded by a digit or a dot, so a package whose name happens to
+           carry those letters is not mistaken for one. */
+        if (found != NULL && found != version
+            && (found[-1] == '.' || (found[-1] >= '0' && found[-1] <= '9')))
+            return true;
+    }
+    return false;
+}
+
 /* Read the dependency list, which is what makes a closure possible at all. */
 static void read_depends(json_value attrs, conda_package *out) {
     json_value depends = json_get(attrs, FIELD_DEPENDS);
@@ -219,6 +244,9 @@ bool conda_parse_packages(const char *json, const char *version_filter, conda_li
     for (size_t i = 0; ok && i < json_count(files); i++) {
         conda_package package;
         if (!read_package(json_at(files, i), name, &package))
+            continue;
+        /* Never offered, whatever the filter says. */
+        if (is_prerelease(package.version))
             continue;
         if (!version_matches(version_filter, package.version))
             continue;
@@ -429,6 +457,9 @@ bool conda_spec_parse(const char *text, conda_spec *out) {
     const char *lower = constraint;
     if (strncmp(lower, ">=", 2) == 0) {
         out->at_least = true;
+        lower += 2;
+    } else if (strncmp(lower, "==", 2) == 0) {
+        /* Exactly this version. The channel writes it both ways. */
         lower += 2;
     } else if (lower[0] == '=') {
         lower++;

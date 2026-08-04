@@ -49,6 +49,13 @@ static const cli_option resolve_options[] = {
     { "--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT },
 };
 
+/* What `pickup doctor` accepts. */
+static const cli_option doctor_options[] = {
+    { "--all", 'a', cli_opt_flag, NULL,
+      "Include what is true but not stopping anything", NULL },
+    { "--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT },
+};
+
 /* What `pickup search` accepts. */
 static const cli_option search_options[] = {
     { "--version", 'v', cli_opt_value, "<version>",
@@ -121,7 +128,7 @@ static int handle_install(const cli_args *args) {
 }
 
 static int handle_doctor(const cli_args *args) {
-    return doctor_command_run(wants_toml(args));
+    return doctor_command_run(wants_toml(args), cli_args_flag(args, "--all"));
 }
 
 static int handle_unimplemented(const cli_args *args) {
@@ -140,7 +147,7 @@ static const cli_command commands[] = {
     { "scan", "Probe every compiler again and rewrite the cache", NULL,
       NULL, 0, handle_scan },
     { "doctor", "Report what stops this machine from building, and what fixes it",
-      NULL, format_option, sizeof format_option / sizeof format_option[0],
+      NULL, doctor_options, sizeof doctor_options / sizeof doctor_options[0],
       handle_doctor },
     { "resolve", "Find the best toolchain for a set of requirements", NULL,
       resolve_options, sizeof resolve_options / sizeof resolve_options[0], handle_resolve },

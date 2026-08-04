@@ -1,5 +1,7 @@
 #include <pickup/commands/show_command.h>
 
+#include <pickup/commands/recipe_output.h>
+#include <pickup/detect/recipe.h>
 #include <pickup/exit_code.h>
 #include <pickup/services/inventory_service.h>
 
@@ -75,6 +77,23 @@ static void print_toml(const toolchain *chain) {
             first = false;
         }
         printf("]\n");
+    }
+
+    /*
+     * How to build with it, in the same shape `resolve` publishes.
+     *
+     * `resolve` answers "which toolchain for this job"; this answers "how do I
+     * use that one". A caller that pinned a toolchain by its identity would
+     * otherwise have to go back through resolve — and hope it chose the same
+     * one — to find out which flags it takes.
+     */
+    link_recipe c = recipe_discover(chain, lang_c);
+    if (c.usable)
+        recipe_print_toml(lang_c, &c);
+    if (chain->cxx_path[0] != '\0') {
+        link_recipe cxx = recipe_discover(chain, lang_cxx);
+        if (cxx.usable)
+            recipe_print_toml(lang_cxx, &cxx);
     }
 }
 

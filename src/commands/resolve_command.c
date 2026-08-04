@@ -1,6 +1,7 @@
 #include <pickup/commands/resolve_command.h>
 
 #include <pickup/commands/probe_progress.h>
+#include <pickup/commands/recipe_output.h>
 #include <pickup/detect/recipe.h>
 #include <pickup/exit_code.h>
 #include <pickup/services/inventory_service.h>
@@ -200,50 +201,6 @@ static void print_text(const toolchain *chain, capability_lang lang) {
            version, lang == lang_cxx ? chain->cxx_path : chain->path);
 }
 
-/* Print a TOML array of strings on one line. */
-static void print_string_array(const char *key, const char rows[][RECIPE_FLAG_MAX],
-                               size_t count) {
-    printf("%s = [", key);
-    for (size_t i = 0; i < count; i++)
-        printf("%s\"%s\"", i == 0 ? "" : ", ", rows[i]);
-    printf("]\n");
-}
-
-static void print_dir_array(const char *key, const char rows[][PICKUP_PATHS_MAX],
-                            size_t count) {
-    printf("%s = [", key);
-    for (size_t i = 0; i < count; i++)
-        printf("%s\"%s\"", i == 0 ? "" : ", ", rows[i]);
-    printf("]\n");
-}
-
-/*
- * How to build with what was resolved.
- *
- * A path alone is not enough to compile with, and a caller that has to work
- * the rest out ends up hard-coding flags for the machine it was written on —
- * the thing Pickup exists to prevent. Every field here was proven: the flags
- * are the ones that were watched producing a program that compiled, linked and
- * ran.
- */
-static void print_recipe_toml(capability_lang lang, const link_recipe *recipe) {
-    printf("\n[%s]\n", lang == lang_cxx ? "cxx" : "c");
-
-    /* Which standard library the flags commit the build to. Published for C++
-       because it is an ABI, not a preference: objects built against libc++ and
-       against libstdc++ cannot be linked together, so a caller pulling in a
-       prebuilt library has to know which one it is looking at. */
-    if (lang == lang_cxx)
-        printf("stdlib = \"%s\"\n", recipe_stdlib_name(recipe->stdlib));
-
-    print_string_array("compile_flags", recipe->compile_flags, recipe->compile_count);
-    print_string_array("link_flags", recipe->link_flags, recipe->link_count);
-    /* Where the shared libraries the produced program needs actually live.
-       Linking is not running, and a caller that has to launch what it built,
-       or ship it, cannot derive these from the flags. */
-    print_dir_array("runtime_dirs", recipe->runtime_dirs, recipe->runtime_count);
-}
-
 static void print_toml(const toolchain *chain, capability_lang lang,
                        const char *standard, const link_recipe *recipe) {
     char version[32];
@@ -265,7 +222,7 @@ static void print_toml(const toolchain *chain, capability_lang lang,
     if (standard != NULL)
         printf("std_flag = \"-std=%s\"\n", standard);
 
-    print_recipe_toml(lang, recipe);
+    recipe_print_toml(lang, recipe);
 }
 
 int resolve_command_run(const resolve_request *request, bool as_toml) {

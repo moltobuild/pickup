@@ -71,8 +71,23 @@ typedef struct {
  * separately, so `allow_unverified` covers the whole set rather than any
  * particular member: an install is either checked or it is not.
  */
+/*
+ * What a closure is expected to turn out to be, and how to tell.
+ *
+ * A toolchain has to compile, link and run something before it is adopted. A
+ * formatter has nothing to compile, so the equivalent test is that the binary
+ * it installed answers when asked — the same principle, applied to what the
+ * thing actually does. Nothing is adopted on the strength of having unpacked.
+ */
+typedef struct {
+    /* NULL for a toolchain. Otherwise the binary expected in `bin/`, which is
+       also what the installed directory is named after. */
+    const char *tool;
+    bool allow_unverified;
+} install_closure_request;
+
 [[nodiscard]] install_report install_run_closure(const conda_closure *closure,
-                                                 bool allow_unverified);
+                                                 const install_closure_request *request);
 
 /* A one-line explanation of a status, for a caller that reports to a user. */
 [[nodiscard]] const char *install_status_message(install_status status);

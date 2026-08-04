@@ -161,6 +161,7 @@ MOLTEST(diagnostics_reports_one_cause_rather_than_every_symptom) {
                           vendor_clang, 14));
     ASSERT_TRUE(add_chain(&list, "gcc-12", machine.gcc, "", vendor_gcc, 12));
 
+    inventory_settle(&list);
     diagnostics_report report = { 0 };
     ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
 
@@ -175,7 +176,7 @@ MOLTEST(diagnostics_reports_one_cause_rather_than_every_symptom) {
     ASSERT_EQ(2, (int)report.items[0].symptom_count);
     EXPECT_TRUE(strstr(report.items[0].symptoms[0], "clang") != NULL);
     EXPECT_TRUE(strstr(report.items[0].symptoms[0], "<iostream>") != NULL);
-    EXPECT_TRUE(strstr(report.items[0].symptoms[1], "gcc-12") != NULL);
+    EXPECT_TRUE(strstr(report.items[0].symptoms[1], "gcc@12") != NULL);
 
     inventory_free(&list);
     machine_teardown(&machine);
@@ -196,6 +197,7 @@ MOLTEST(diagnostics_blames_only_the_compilers_of_the_broken_installation) {
     ASSERT_TRUE(add_chain(&list, "elsewhere", "/opt/other/bin/gcc", "",
                           vendor_gcc, 12));
 
+    inventory_settle(&list);
     diagnostics_report report = { 0 };
     ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
 
@@ -225,6 +227,7 @@ MOLTEST(diagnostics_names_the_package_of_the_distribution_it_is_on) {
     ASSERT_TRUE(add_chain(&list, "clang", machine.clang, machine.clang,
                           vendor_clang, 14));
 
+    inventory_settle(&list);
     diagnostics_report report = { 0 };
     ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
     ASSERT_EQ(1, (int)report.count);
@@ -249,6 +252,7 @@ MOLTEST(diagnostics_suggests_no_package_it_cannot_name) {
     ASSERT_TRUE(add_chain(&list, "clang", machine.clang, machine.clang,
                           vendor_clang, 14));
 
+    inventory_settle(&list);
     diagnostics_report report = { 0 };
     /* On a distribution Pickup does not recognise the package name is
        unknown, and inventing one would send a reader looking for something
@@ -270,6 +274,7 @@ MOLTEST(diagnostics_finds_nothing_wrong_with_a_whole_installation) {
     ASSERT_TRUE(add_chain(&list, "clang", machine.clang, machine.clang,
                           vendor_clang, 14));
 
+    inventory_settle(&list);
     diagnostics_report report = { 0 };
     ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
 
@@ -291,6 +296,7 @@ MOLTEST(diagnostics_does_not_fault_a_c_compiler_for_having_no_cxx) {
        fault, and reporting it would bury the real findings in noise. */
     ASSERT_TRUE(add_chain(&list, "cc", machine.gcc, "", vendor_gcc, 9));
 
+    inventory_settle(&list);
     diagnostics_report report = { 0 };
     ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
     EXPECT_EQ(0, (int)findings_about(&report, "cc"));
@@ -301,6 +307,7 @@ MOLTEST(diagnostics_does_not_fault_a_c_compiler_for_having_no_cxx) {
 
 MOLTEST(diagnostics_reports_a_machine_with_no_compilers) {
     inventory list = { 0 };
+    inventory_settle(&list);
     diagnostics_report report = { 0 };
     ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
 
@@ -328,6 +335,111 @@ MOLTEST(diagnostics_names_every_severity) {
     const finding_severity all[] = { finding_ok, finding_warning, finding_error };
     for (size_t i = 0; i < sizeof all / sizeof all[0]; i++) {
         const char *name = finding_severity_name(all[i]);
+        ASSERT_TRUE(name != NULL);
+        EXPECT_TRUE(name[0] != '\0');
+    }
+}
+
+/*
+ * Severity by impact.
+ *
+ * The rule the whole report is built on: a thing is a failure when it stops
+ * someone, not when it is imperfect. The same broken GCC is blocking on a
+ * machine where nothing else builds C++ and merely true on one where three
+ * other toolchains do.
+ */
+
+MOLTEST(diagnostics_does_not_fail_over_what_something_else_covers) {
+    fake_machine broken;
+    fake_machine whole;
+    ASSERT_TRUE(machine_setup(&broken, false));
+    ASSERT_TRUE(machine_setup(&whole, true));
+
+    inventory list = { 0 };
+    /* One clang standing on the incomplete GCC, and another that builds C++
+       perfectly well. The first is still broken; nobody is stopped. */
+    ASSERT_TRUE(add_chain(&list, "clang", broken.clang, broken.clang,
+                          vendor_clang, 14));
+    ASSERT_TRUE(add_chain(&list, "clang", whole.clang, whole.clang,
+                          vendor_clang, 22));
+    inventory_settle(&list);
+
+    diagnostics_report report = { 0 };
+    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
+
+    const finding *installation = NULL;
+    for (size_t i = 0; i < report.count && installation == NULL; i++) {
+        if (report.items[i].section == section_compilers)
+            installation = &report.items[i];
+    }
+    ASSERT_TRUE(installation != NULL);
+
+    /* Reported, and not as a failure. That is what keeps the exit code
+       meaning "this machine cannot be worked on". */
+    EXPECT_FALSE(installation->blocking);
+    EXPECT_FALSE(diagnostics_is_blocked(&report));
+
+    inventory_free(&list);
+    machine_teardown(&broken);
+    machine_teardown(&whole);
+}
+
+MOLTEST(diagnostics_fails_when_nothing_covers_it) {
+    fake_machine machine;
+    ASSERT_TRUE(machine_setup(&machine, false));
+
+    inventory list = { 0 };
+    /* The same fault, alone. Now there is no C++ on this machine at all. */
+    ASSERT_TRUE(add_chain(&list, "clang", machine.clang, machine.clang,
+                          vendor_clang, 14));
+    inventory_settle(&list);
+
+    diagnostics_report report = { 0 };
+    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
+
+    EXPECT_TRUE(diagnostics_is_blocked(&report));
+    EXPECT_EQ(1, findings_about(&report, "gcc 12"));
+
+    inventory_free(&list);
+    machine_teardown(&machine);
+}
+
+MOLTEST(diagnostics_says_what_the_machine_has_even_when_all_is_well) {
+    fake_machine machine;
+    ASSERT_TRUE(machine_setup(&machine, true));
+
+    inventory list = { 0 };
+    ASSERT_TRUE(add_chain(&list, "clang", machine.clang, machine.clang,
+                          vendor_clang, 22));
+    inventory_settle(&list);
+
+    diagnostics_report report = { 0 };
+    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
+
+    /* "What is broken" is the question asked least often. A report with
+       nothing to complain about still has to answer "what does this machine
+       have", or it says nothing at all. */
+    ASSERT_TRUE(report.summary_count >= 2);
+    bool counted = false, ranged = false;
+    for (size_t i = 0; i < report.summary_count; i++) {
+        if (report.summary_section[i] != section_compilers)
+            continue;
+        ranged = ranged || strstr(report.summary[i], "clang") != NULL;
+        counted = counted || strstr(report.summary[i], "build C and C++") != NULL;
+    }
+    EXPECT_TRUE(ranged);
+    EXPECT_TRUE(counted);
+
+    inventory_free(&list);
+    machine_teardown(&machine);
+}
+
+MOLTEST(diagnostics_names_every_section) {
+    const finding_section all[] = {
+        section_compilers, section_tools, section_environment,
+    };
+    for (size_t i = 0; i < sizeof all / sizeof all[0]; i++) {
+        const char *name = finding_section_name(all[i]);
         ASSERT_TRUE(name != NULL);
         EXPECT_TRUE(name[0] != '\0');
     }

@@ -232,6 +232,20 @@ faults and send a reader chasing several problems where there is one; reported
 together, they name the single thing to fix and explain what was never obvious
 — why a package missing from GCC breaks Clang.
 
+**Severity is impact, not imperfection.** A thing can be broken and prevent
+nothing: a GCC without its C++ half, on a machine with other toolchains that
+build C and C++, stops nobody. Failing over it would make the exit code useless
+for what an exit code is for, so what counts is whether anything is left
+undoable. What that leaves out is still true, and still shown on request.
+
+A report that only lists problems answers *what is broken* and leaves *what
+does this machine have* unanswered, which is asked far more often. The state of
+things is stated whether or not anything is wrong.
+
+Beyond compilers, a machine is reported on for the tools a project is worked on
+with — a formatter and a linter. Found the way compilers are, by name and then
+by asking: one that does not answer is a file with a name, not a tool.
+
 Remedies are named, never applied. Repairing the system is not what a diagnosis
 is for, and the useful remedies are rarely equivalent: one repairs what is
 broken, another sidesteps it and leaves it broken. Which to take is the

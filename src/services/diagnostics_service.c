@@ -3,6 +3,7 @@
 #include <pickup/detect/distro.h>
 #include <pickup/detect/gcc_install.h>
 #include <pickup/detect/health.h>
+#include <pickup/detect/tools.h>
 #include <pickup/detect/recipe.h>
 #include <pickup/services/archive_service.h>
 #include <pickup/services/fs_service.h>
@@ -34,15 +35,59 @@ bool diagnostics_has_errors(const diagnostics_report *report) {
     return false;
 }
 
+static const char *const section_names[] = {
+    [section_compilers]   = "compilers",
+    [section_tools]       = "tools",
+    [section_environment] = "environment",
+};
+
+#define SECTION_COUNT (sizeof section_names / sizeof section_names[0])
+
+const char *finding_section_name(finding_section section) {
+    if ((size_t)section >= SECTION_COUNT)
+        return section_names[section_environment];
+    return section_names[section];
+}
+
+bool diagnostics_is_blocked(const diagnostics_report *report) {
+    for (size_t i = 0; i < report->count; i++) {
+        if (report->items[i].blocking)
+            return true;
+    }
+    return false;
+}
+
+/* Add a line stating how something stands, whether or not it is a problem. */
+static void add_summary(diagnostics_report *report, finding_section section,
+                        const char *format, ...)
+    __attribute__((format(printf, 3, 4)));
+
+static void add_summary(diagnostics_report *report, finding_section section,
+                        const char *format, ...) {
+    if (report->summary_count == SUMMARY_MAX)
+        return;
+    report->summary_section[report->summary_count] = section;
+
+    va_list args;
+    va_start(args, format);
+    (void)vsnprintf(report->summary[report->summary_count], FINDING_TEXT_MAX,
+                    format, args);
+    va_end(args);
+    report->summary_count++;
+}
+
 /* --- building a report --- */
 
 /* Start a finding and return it, or NULL when the report is full. */
 static finding *open_finding(diagnostics_report *report, finding_severity severity,
+                             finding_section section, bool blocking,
                              const char *subject) {
     if (report->count == DIAGNOSTICS_MAX_FINDINGS)
         return NULL;
     finding *entry = &report->items[report->count++];
-    *entry = (finding){ .severity = severity };
+    *entry = (finding){
+        .severity = severity, .section = section, .blocking = blocking,
+    };
     (void)fs_format_path(entry->subject, sizeof entry->subject, "%s", subject);
     return entry;
 }
@@ -85,16 +130,16 @@ static void add_remedy(finding *entry, const char *format, ...) {
 
 /* --- the environment Pickup itself depends on --- */
 
-static void check_tools(diagnostics_report *report) {
+static void check_environment(diagnostics_report *report) {
     if (!http_available()) {
-        finding *entry = open_finding(report, finding_error, "curl");
+        finding *entry = open_finding(report, finding_error, section_environment, true, "curl");
         if (entry == NULL)
             return;
         set_detail(entry, "not found; nothing can be downloaded");
         add_remedy(entry, "install %s", http_requirement());
     }
     if (!archive_available()) {
-        finding *entry = open_finding(report, finding_error, "tar");
+        finding *entry = open_finding(report, finding_error, section_environment, true, "tar");
         if (entry == NULL)
             return;
         set_detail(entry, "not found; nothing can be unpacked");
@@ -105,7 +150,7 @@ static void check_tools(diagnostics_report *report) {
 static void check_home(diagnostics_report *report) {
     char home[PICKUP_PATHS_MAX];
     if (!paths_home(home, sizeof home)) {
-        finding *entry = open_finding(report, finding_error, "pickup home");
+        finding *entry = open_finding(report, finding_error, section_environment, true, "pickup home");
         if (entry == NULL)
             return;
         set_detail(entry, "neither $%s nor a home directory is set",
@@ -118,12 +163,53 @@ static void check_home(diagnostics_report *report) {
     /* Only reported when it exists and cannot be used. A home that is not
        there yet is the ordinary state before the first install. */
     if (fs_path_exists(home) && !fs_is_dir(home)) {
-        finding *entry = open_finding(report, finding_error, "pickup home");
+        finding *entry = open_finding(report, finding_error, section_environment, true, "pickup home");
         if (entry == NULL)
             return;
         (void)fs_format_path(entry->location, sizeof entry->location, "%s", home);
         set_detail(entry, "exists and is not a directory");
         add_remedy(entry, "remove it, or point %s elsewhere", PICKUP_HOME_ENV);
+    }
+}
+
+/* --- what a project is worked on with --- */
+
+/*
+ * Formatter and linter.
+ *
+ * Neither blocks a build, and both are missing from a machine far more often
+ * than a compiler is: a report that never mentions them answers "can this
+ * machine compile" and leaves "can this machine be worked on" unasked, which
+ * is the question with the shorter answer and the more useful one.
+ */
+static void check_dev_tools(diagnostics_report *report) {
+    dev_tool found[TOOLS_MAX];
+    size_t count = tools_discover(found, TOOLS_MAX);
+
+    const tool_kind kinds[] = { tool_formatter, tool_linter };
+    for (size_t k = 0; k < sizeof kinds / sizeof kinds[0]; k++) {
+        const dev_tool *have = NULL;
+        for (size_t i = 0; i < count && have == NULL; i++) {
+            if (found[i].kind == kinds[k])
+                have = &found[i];
+        }
+
+        if (have != NULL) {
+            add_summary(report, section_tools, "%-10s %s",
+                        tool_kind_name(kinds[k]), have->version);
+            continue;
+        }
+
+        /* Missing, and nothing covers it — which is the same rule the
+           compilers are judged by. A broken GCC beside three working
+           toolchains stops nobody; a formatter that is not there has no
+           stand-in, so it is a thing this machine cannot do. */
+        finding *entry = open_finding(report, finding_error, section_tools,
+                                      true, tool_kind_name(kinds[k]));
+        if (entry == NULL)
+            return;
+        set_detail(entry, "none found");
+        add_remedy(entry, "pickup install %s", tool_kind_package(kinds[k]));
     }
 }
 
@@ -146,11 +232,85 @@ static void survey_toolchain(const toolchain *chain, toolchain_survey *out) {
         (void)gcc_install_query(chain->path, &out->installs);
 }
 
-/* A toolchain described the way a report names it: "clang 22.1.8". */
+/* A toolchain described the way a report names it: "clang@22.1.8". */
 static void describe(const toolchain *chain, char *out, size_t out_size) {
-    char version[VERSION_SIZE];
-    toolchain_version_format(chain->version, version, sizeof version);
-    (void)snprintf(out, out_size, "%s %s", chain->name, version);
+    (void)snprintf(out, out_size, "%s", chain->id);
+}
+
+/*
+ * What this machine can build, taken as a whole.
+ *
+ * A fault matters when nothing else covers it. One broken compiler among four
+ * working ones stops nobody; the same compiler on a machine where it is the
+ * only one stops everything. Counting first is what lets every check below
+ * answer that question instead of guessing at it.
+ */
+typedef struct {
+    size_t total;
+    size_t builds_c;
+    size_t builds_cxx;
+} coverage;
+
+/*
+ * The compilers, said as a range per vendor.
+ *
+ * "gcc 9.5.0 to 12.3.0" is how people hold this in their heads, and it fits on
+ * one line where six rows would not. The inventory is already deduplicated and
+ * ordered newest first, so the ends of each run are the ends of the range and
+ * nothing has to be probed to say it.
+ */
+static void summarise_vendors(const inventory *list, char *out, size_t out_size) {
+    out[0] = '\0';
+    size_t used = 0;
+
+    for (size_t i = 0; i < list->count; ) {
+        toolchain_vendor vendor = list->items[i].vendor;
+        size_t last = i;
+        while (last + 1 < list->count && list->items[last + 1].vendor == vendor)
+            last++;
+
+        char newest[VERSION_SIZE], oldest[VERSION_SIZE];
+        toolchain_version_format(list->items[i].version, newest, sizeof newest);
+        toolchain_version_format(list->items[last].version, oldest, sizeof oldest);
+
+        int written = snprintf(out + used, out_size - used, "%s%s %s",
+                               used == 0 ? "" : ", ",
+                               toolchain_vendor_name(vendor), oldest);
+        if (written > 0 && (size_t)written < out_size - used)
+            used += (size_t)written;
+        /* One version is not a range, and saying "9.5.0 to 9.5.0" reads like a
+           mistake. */
+        if (last != i) {
+            written = snprintf(out + used, out_size - used, " to %s", newest);
+            if (written > 0 && (size_t)written < out_size - used)
+                used += (size_t)written;
+        }
+        i = last + 1;
+    }
+}
+
+static void summarise_compilers(const inventory *list, coverage found,
+                                diagnostics_report *report) {
+    char vendors[FINDING_TEXT_MAX];
+    summarise_vendors(list, vendors, sizeof vendors);
+    add_summary(report, section_compilers, "%zu found - %s", found.total, vendors);
+
+    /* The line that answers "is there one that builds C and not C++?" without
+       listing them: when this is short of the total, there are, and --all
+       names them. */
+    add_summary(report, section_compilers, "%zu of them build C and C++",
+                found.builds_cxx);
+}
+
+static coverage measure(const inventory *list, const toolchain_survey *surveys) {
+    coverage found = { .total = list->count };
+    for (size_t i = 0; i < list->count; i++) {
+        if (surveys[i].c.usable)
+            found.builds_c++;
+        if (surveys[i].cxx.usable)
+            found.builds_cxx++;
+    }
+    return found;
 }
 
 /*
@@ -215,7 +375,7 @@ static void suggest_gxx_package(finding *entry, distro_family family, int major)
  */
 static void check_gcc_installations(const inventory *list,
                                     const toolchain_survey *surveys,
-                                    distro_family family,
+                                    distro_family family, coverage found,
                                     diagnostics_report *report,
                                     bool *explained) {
     for (size_t i = 0; i < list->count; i++) {
@@ -237,7 +397,12 @@ static void check_gcc_installations(const inventory *list,
         char subject[FINDING_SUBJECT_MAX];
         (void)snprintf(subject, sizeof subject, "gcc %s", version);
 
-        finding *entry = open_finding(report, finding_error, subject);
+        /* Broken, and blocking only where nothing else builds C++. The
+           installation is just as incomplete either way; what changes is
+           whether the reader has anything to do about it today. */
+        bool blocks = found.builds_cxx == 0;
+        finding *entry = open_finding(report, blocks ? finding_error : finding_warning,
+                                      section_compilers, blocks, subject);
         if (entry == NULL)
             return;
         (void)fs_format_path(entry->location, sizeof entry->location, "%s", broken);
@@ -295,7 +460,8 @@ static void check_gcc_installations(const inventory *list,
 /* Whatever is left: a toolchain that cannot build and was not explained by an
    incomplete GCC. */
 static void check_remaining(const inventory *list, const toolchain_survey *surveys,
-                            const bool *explained, diagnostics_report *report) {
+                            const bool *explained, coverage found,
+                            diagnostics_report *report) {
     for (size_t i = 0; i < list->count; i++) {
         const toolchain *chain = &list->items[i];
         if (explained[i])
@@ -306,7 +472,10 @@ static void check_remaining(const inventory *list, const toolchain_survey *surve
 
         if (!surveys[i].c.usable) {
             /* A compiler that cannot build C is not usable for anything. */
-            finding *entry = open_finding(report, finding_error, subject);
+            bool blocks = found.builds_c == 0;
+            finding *entry = open_finding(report,
+                                          blocks ? finding_error : finding_warning,
+                                          section_compilers, blocks, subject);
             if (entry == NULL)
                 return;
             (void)fs_format_path(entry->location, sizeof entry->location,
@@ -319,7 +488,10 @@ static void check_remaining(const inventory *list, const toolchain_survey *surve
         if (chain->cxx_path[0] == '\0' || surveys[i].cxx.usable)
             continue;
 
-        finding *entry = open_finding(report, finding_warning, subject);
+        bool blocks = found.builds_cxx == 0;
+        finding *entry = open_finding(report,
+                                      blocks ? finding_error : finding_warning,
+                                      section_compilers, blocks, subject);
         if (entry == NULL)
             return;
         (void)fs_format_path(entry->location, sizeof entry->location,
@@ -332,7 +504,7 @@ static void check_remaining(const inventory *list, const toolchain_survey *surve
 bool diagnostics_examine(const inventory *list, distro_family family,
                          diagnostics_report *out) {
     if (list->count == 0) {
-        finding *entry = open_finding(out, finding_error, "compilers");
+        finding *entry = open_finding(out, finding_error, section_compilers, true, "compilers");
         if (entry != NULL) {
             set_detail(entry, "none found on this machine");
             add_remedy(entry, "pickup install clang");
@@ -353,8 +525,10 @@ bool diagnostics_examine(const inventory *list, distro_family family,
 
     /* Causes before leftovers, so that a toolchain already accounted for by a
        broken GCC is not reported a second time on its own. */
-    check_gcc_installations(list, surveys, family, out, explained);
-    check_remaining(list, surveys, explained, out);
+    coverage found = measure(list, surveys);
+    summarise_compilers(list, found, out);
+    check_gcc_installations(list, surveys, family, found, out, explained);
+    check_remaining(list, surveys, explained, found, out);
 
     free(surveys);
     free(explained);
@@ -364,8 +538,9 @@ bool diagnostics_examine(const inventory *list, distro_family family,
 bool diagnostics_run(diagnostics_report *out) {
     *out = (diagnostics_report){ .count = 0 };
 
-    check_tools(out);
+    check_environment(out);
     check_home(out);
+    check_dev_tools(out);
 
     inventory list;
     if (!inventory_load(&list, false))

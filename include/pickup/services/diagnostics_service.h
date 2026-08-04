@@ -32,6 +32,19 @@ typedef enum {
     finding_error,    /* something cannot be built */
 } finding_severity;
 
+/*
+ * Where a finding belongs in the report.
+ *
+ * The sections are the questions someone actually has about a machine: what
+ * can it compile, what can it be worked on with, and is Pickup itself able to
+ * operate here.
+ */
+typedef enum {
+    section_compilers,
+    section_tools,
+    section_environment,
+} finding_section;
+
 #define FINDING_TEXT_MAX     512
 #define FINDING_SUBJECT_MAX  128
 #define FINDING_MAX_SYMPTOMS 16
@@ -40,6 +53,23 @@ typedef enum {
 
 typedef struct {
     finding_severity severity;
+    finding_section section;
+
+    /*
+     * Whether this is what stops someone from working.
+     *
+     * A thing can be broken and not matter. A GCC installed without its C++
+     * half is broken and will stay broken, but on a machine with three other
+     * toolchains that build C and C++ it prevents nothing; reporting it as a
+     * failure spends the reader's attention on something they need not act on
+     * and buries whatever actually does need doing.
+     *
+     * So this, and not the severity, is what the exit code and the default
+     * output are built on. `--all` shows everything regardless: what is left
+     * out is left out because it is not urgent, never because it is untrue.
+     */
+    bool blocking;
+
     char subject[FINDING_SUBJECT_MAX];   /* "gcc 12", "curl", "pickup home" */
     char location[PICKUP_PATHS_MAX];     /* where it is; "" when it has no place */
     char detail[FINDING_TEXT_MAX];       /* what is wrong with it */
@@ -54,10 +84,33 @@ typedef struct {
     size_t remedy_count;
 } finding;
 
+/* What a section says when nothing in it is wrong: the summary lines that make
+   a report useful even on a healthy machine. */
+#define SUMMARY_MAX 4
+
 typedef struct {
     finding items[DIAGNOSTICS_MAX_FINDINGS];
     size_t count;
+
+    /*
+     * The state of things, said plainly, whether or not anything is wrong.
+     *
+     * A report that only lists problems answers "what is broken" and leaves
+     * "what does this machine have" unanswered — which is the question asked
+     * far more often. How many compilers there are and which versions they
+     * span is not a finding; it is the answer.
+     */
+    char summary[SUMMARY_MAX][FINDING_TEXT_MAX];
+    finding_section summary_section[SUMMARY_MAX];
+    size_t summary_count;
 } diagnostics_report;
+
+/* The name of a section, for reports. Never NULL. */
+[[nodiscard]] const char *finding_section_name(finding_section section);
+
+/* True if anything in the report stops this machine from being worked on. This
+   is what the exit code is built on, not the severities. */
+[[nodiscard]] bool diagnostics_is_blocked(const diagnostics_report *report);
 
 /* Examine the machine and fill `out`. False only when the inventory could not
    be built at all; a machine with nothing wrong yields an empty report, which

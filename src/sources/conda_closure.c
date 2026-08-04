@@ -4,10 +4,20 @@
 
 #include <string.h>
 
-/* Requirements waiting to be met, and who asked for each. */
+/*
+ * Requirements waiting to be met, and who asked for each.
+ *
+ * Sized well above the number of packages a closure ends up with, because most
+ * requirements are for something already chosen: eleven packages of LLVM name
+ * zstd, libgcc and libstdcxx between them a dozen times over. A queue the size
+ * of the answer overflows long before the walk is finished, and the overflow
+ * looks exactly like a package that could not be found.
+ */
+#define CONDA_MAX_QUEUE 512
+
 typedef struct {
-    char specs[CONDA_MAX_CLOSURE][CONDA_SPEC_MAX];
-    char askers[CONDA_MAX_CLOSURE][CONDA_NAME_MAX];
+    char specs[CONDA_MAX_QUEUE][CONDA_SPEC_MAX];
+    char askers[CONDA_MAX_QUEUE][CONDA_NAME_MAX];
     size_t count;
     size_t taken;
 } spec_queue;
@@ -39,7 +49,7 @@ long long conda_closure_size(const conda_closure *closure) {
 }
 
 static bool queue_push(spec_queue *queue, const char *spec, const char *asker) {
-    if (queue->count == CONDA_MAX_CLOSURE)
+    if (queue->count == CONDA_MAX_QUEUE)
         return false;
     (void)fs_format_path(queue->specs[queue->count], CONDA_SPEC_MAX, "%s", spec);
     (void)fs_format_path(queue->askers[queue->count], CONDA_NAME_MAX, "%s",
@@ -145,7 +155,10 @@ static bool walk(const resolver *how, spec_queue *queue, conda_closure *out) {
 
         for (size_t i = 0; i < package.depend_count; i++) {
             if (!queue_push(queue, package.depends[i], package.name)) {
-                give_up(out, package.depends[i], package.name);
+                /* Not a missing package: more requirements than the walk was
+                   built to hold. Saying "missing" here would send a reader
+                   looking for something that is on the channel. */
+                give_up(out, "too many requirements to follow", package.name);
                 return true;
             }
         }

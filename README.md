@@ -173,10 +173,40 @@ produce a program that runs?
 
 ```
 $ pickup doctor
-x  gcc 12  /usr/lib/gcc/x86_64-linux-gnu/12
+compilers
+  ✓ 6 found - clang 14.0.0 to 22.1.8, gcc 9.5.0 to 12.3.0
+  ✓ 4 of them build C and C++
+
+tools
+  ✗ formatter none found
+      -> pickup install clang-format
+  ✗ linter    none found
+      -> pickup install clang-tidy
+
+1 more thing worth knowing; pickup doctor --all
+```
+
+**`✗` is what leaves you unable to do something.** A GCC installed without its
+C++ half is broken and will stay broken, but on a machine with four toolchains
+that build C and C++ it prevents nothing — and a command that failed over it
+would be one no script could act on. The exit code follows the same rule.
+
+A report that only lists problems answers *what is broken* and leaves *what
+does this machine have* unanswered, which is the question asked far more often.
+So the summary lines come first, and appear whether or not anything is wrong.
+
+Nothing is hidden silently: the count at the end says how much was left out,
+and `--all` shows it with its remedies.
+
+```
+$ pickup doctor --all
+compilers
+  ✓ 6 found - clang 14.0.0 to 22.1.8, gcc 9.5.0 to 12.3.0
+  ✓ 4 of them build C and C++
+  ✓ gcc 12  /usr/lib/gcc/x86_64-linux-gnu/12
       installed without C++ support: no libstdc++ headers
-        clang 14.0.0 selects this GCC and cannot find <iostream>
-        gcc-12 12.3.0 has no C++ driver, so it compiles C only
+        clang@14.0.0 selects this GCC and cannot find <iostream>
+        gcc@12.3.0 has no C++ driver, so it compiles C only
       -> install the g++-12 package - completes this GCC, and fixes everything above
       -> pickup install gcc --version 12 - a separate toolchain, no root; leaves the one above untouched
 ```
@@ -191,8 +221,31 @@ first repairs the installation, and with it every compiler standing on it. The
 second installs a toolchain of Pickup's own without administrator rights and
 leaves the broken one exactly where it was.
 
-Remedies are named, never applied. Exit code 1 when something cannot be built,
-0 when it can; a warning on its own does not make a machine a failure.
+Remedies are named, never applied.
+
+### The tools a project is worked on with
+
+A machine that compiles is not a machine that can be worked on. `doctor` looks
+for a formatter and a linter — `clang-format`, `clang-tidy`, `cppcheck` — on
+PATH and in what Pickup installed, and asks each one to identify itself: a file
+with the right name that does not answer is a file, not a tool.
+
+```sh
+pickup install clang-format
+pickup install clang-tidy
+```
+
+Both come from conda-forge, through the same closure resolution as a compiler.
+What differs is the test they have to pass before being adopted: there is
+nothing here to compile, so it is that the installed binary runs and answers.
+They land under `~/.pickup/tools/`, apart from the toolchains, because nothing
+resolves against them.
+
+A toolchain of LLVM carries both already, so `pickup install clang` keeps them
+rather than pruning them away — about 100 MB more, almost all of it
+`clang-tidy`, out of an archive that is downloaded whole either way. Worth it
+against the alternative: `clang-format` from the channel drags the whole of
+LLVM in behind it, and comes to 1.2 GB.
 
 ### Asking for a toolchain
 

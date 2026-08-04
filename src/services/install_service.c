@@ -8,6 +8,7 @@
 #include <pickup/services/conda_service.h>
 #include <pickup/services/fs_service.h>
 #include <pickup/services/http_service.h>
+#include <pickup/services/process_service.h>
 #include <pickup/util/progress.h>
 #include <pickup/util/str_list.h>
 
@@ -258,6 +259,49 @@ static bool identify_in_prefix(const char *prefix, toolchain *out) {
     return identify_by_scanning(bin, out);
 }
 
+/*
+ * The test a tool has to pass before it is adopted.
+ *
+ * A formatter has nothing to compile, so what stands in for "it builds" is "it
+ * answers": the binary is run and asked to identify itself. Same principle as
+ * the toolchain check — nothing is adopted for having unpacked — applied to
+ * what this kind of thing actually does.
+ */
+static bool tool_answers(const char *prefix, const char *tool) {
+    char path[PICKUP_PATHS_MAX];
+    if (!fs_format_path(path, sizeof path, "%s/%s/%s", prefix, CONDA_BIN, tool))
+        return false;
+    if (!fs_path_exists(path))
+        return false;
+
+    const char *argv[] = { path, "--version", NULL };
+    process_result result = process_try(argv, NULL);
+    return result.completed && result.exit_code == 0;
+}
+
+/* Move a finished tool to the name it is found under from now on.
+
+   Named after the package and the version that was resolved, so two versions
+   of one tool do not collide and neither shadows the other. */
+static bool adopt_tool(const char *partial, const char *tool,
+                       const conda_closure *closure, char *final_path,
+                       size_t final_size) {
+    char tools[PICKUP_PATHS_MAX];
+    if (!paths_tools(tools, sizeof tools) || !fs_make_dirs(tools))
+        return false;
+
+    /* The root of the closure is what was asked for, and its version is the
+       one worth naming; the rest are things it happened to need. */
+    const char *version = closure->packages.count > 0
+        ? closure->packages.items[0].version : "unknown";
+    if (!fs_format_path(final_path, final_size, "%s/%s-%s", tools, tool, version))
+        return false;
+
+    if (!fs_remove_tree(final_path))
+        return false;
+    return fs_rename(partial, final_path);
+}
+
 /* Bring one package down and check it against the digest the channel
    published for it. */
 static bool fetch_and_verify(conda_package *package, bool allow_unverified,
@@ -293,7 +337,8 @@ static bool fetch_and_verify(conda_package *package, bool allow_unverified,
     return true;
 }
 
-install_report install_run_closure(const conda_closure *closure, bool allow_unverified) {
+install_report install_run_closure(const conda_closure *closure,
+                                   const install_closure_request *request) {
     if (!http_available())
         return report_of(install_no_downloader);
     if (!archive_available())
@@ -312,7 +357,7 @@ install_report install_run_closure(const conda_closure *closure, bool allow_unve
         conda_package package = closure->packages.items[i];
 
         char archive[PICKUP_PATHS_MAX];
-        if (!fetch_and_verify(&package, allow_unverified, archive,
+        if (!fetch_and_verify(&package, request->allow_unverified, archive,
                               sizeof archive, &report)) {
             (void)fs_remove_tree(partial);
             /* A digest that was published and did not match is a different
@@ -332,6 +377,23 @@ install_report install_run_closure(const conda_closure *closure, bool allow_unve
             (void)fs_remove_tree(partial);
             return report_of(install_extract_failed);
         }
+    }
+
+    /* A tool is not a compiler, and asking it to compile would fail it for not
+       being one. What it has to prove is that it runs. */
+    if (request->tool != NULL) {
+        if (!tool_answers(partial, request->tool)) {
+            (void)fs_remove_tree(partial);
+            return report_of(install_not_a_toolchain);
+        }
+        (void)fs_tree_size(partial, &report.installed_size);
+        if (!adopt_tool(partial, request->tool, closure,
+                        report.directory, sizeof report.directory)) {
+            (void)fs_remove_tree(partial);
+            return report_of(install_path_error);
+        }
+        report.status = verified_all ? install_ok : install_ok_unverified;
+        return report;
     }
 
     if (!identify_in_prefix(partial, &report.installed)) {

@@ -56,3 +56,27 @@ MOLTEST(scanner_survives_directories_that_do_not_exist) {
     EXPECT_TRUE(scanner_collect(NULL, &found));
     str_list_free(&found);
 }
+
+MOLTEST(scanner_ignores_the_binutils_wrappers_beside_a_compiler) {
+    /* A GCC installation puts these next to the compiler, once per version.
+       They are binutils wrappers with no compiler in them, and accepting the
+       name would have each one interrogated on every scan — nine of the
+       twenty-four candidates on an ordinary machine — only to be found not to
+       be a compiler at all. */
+    EXPECT_FALSE(scanner_is_candidate_name("gcc-ar"));
+    EXPECT_FALSE(scanner_is_candidate_name("gcc-nm"));
+    EXPECT_FALSE(scanner_is_candidate_name("gcc-ranlib"));
+    EXPECT_FALSE(scanner_is_candidate_name("gcc-ar-12"));
+    EXPECT_FALSE(scanner_is_candidate_name("gcc-ranlib-9"));
+
+    /* What follows the name has to be a version, and every real spelling of a
+       compiler still is one. */
+    EXPECT_TRUE(scanner_is_candidate_name("gcc"));
+    EXPECT_TRUE(scanner_is_candidate_name("gcc-12"));
+    EXPECT_TRUE(scanner_is_candidate_name("g++-9"));
+    EXPECT_TRUE(scanner_is_candidate_name("clang-19"));
+    EXPECT_TRUE(scanner_is_candidate_name("c89-gcc"));
+    EXPECT_TRUE(scanner_is_candidate_name("c99-gcc"));
+    EXPECT_TRUE(scanner_is_candidate_name("x86_64-linux-gnu-gcc-12"));
+    EXPECT_TRUE(scanner_is_candidate_name("arm-none-eabi-gcc"));
+}

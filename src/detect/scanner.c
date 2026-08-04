@@ -30,21 +30,28 @@ static const char *const candidate_exact[] = {
 #define PREFIX_COUNT (sizeof candidate_prefixes / sizeof candidate_prefixes[0])
 #define EXACT_COUNT  (sizeof candidate_exact / sizeof candidate_exact[0])
 
-/* True if `name` continues with a version suffix after `prefix`, i.e. the
-   prefix is followed by nothing or by '-'. Rejects "gccfoo", accepts "gcc-12". */
-static bool matches_prefix(const char *name, const char *prefix) {
-    size_t length = strlen(prefix);
-    if (strncmp(name, prefix, length) != 0)
-        return false;
-    return name[length] == '\0' || name[length] == '-';
-}
-
 /* True if `text` is a version suffix: empty, or "-" followed by a digit.
    Distinguishes arm-none-eabi-gcc-12 from arm-none-eabi-gcc-wrapper. */
 static bool is_version_suffix(const char *text) {
     if (text[0] == '\0')
         return true;
     return text[0] == '-' && text[1] >= '0' && text[1] <= '9';
+}
+
+/*
+ * True if `name` is the prefix followed by nothing or by a version.
+ *
+ * What follows has to be a version and not merely a dash. A GCC installation
+ * puts `gcc-ar`, `gcc-nm` and `gcc-ranlib` beside the compiler, once per
+ * version, and those are binutils wrappers with no compiler in them: on an
+ * ordinary machine they are nine of the twenty-four candidates, each one
+ * interrogated on every scan only to be found not to be a compiler at all.
+ */
+static bool matches_prefix(const char *name, const char *prefix) {
+    size_t length = strlen(prefix);
+    if (strncmp(name, prefix, length) != 0)
+        return false;
+    return is_version_suffix(name + length);
 }
 
 /* True if `name` carries `tool` as a trailing component, with or without a

@@ -46,15 +46,25 @@ bool inventory_append(inventory *list, const toolchain *chain) {
 static const char *const preferred_names[] = { "gcc", "clang", "cc" };
 #define PREFERRED_COUNT (sizeof preferred_names / sizeof preferred_names[0])
 
-/* Lower is better. */
+/* Names that are already the C++ side, and so lead nowhere when the C++ driver
+   is looked for by transforming them. */
+static bool names_a_cxx_driver(const char *name) {
+    return strcmp(name, "c++") == 0
+        || strncmp(name, "g++", 3) == 0
+        || strncmp(name, "clang++", 7) == 0;
+}
+
+/* Lower is better. Decided from the name alone, because this runs before
+   anything has been probed. */
 static int name_rank(const toolchain *chain) {
     for (size_t i = 0; i < PREFERRED_COUNT; i++) {
         if (strcmp(chain->name, preferred_names[i]) == 0)
             return (int)i;
     }
-    /* Anything that at least has a C++ driver beats anything that does not. */
-    return chain->cxx_path[0] != '\0' ? (int)PREFERRED_COUNT
-                                      : (int)PREFERRED_COUNT + 1;
+    /* Anything is better than a C++ driver: `gcc` leads to `g++`, and `g++`
+       leads nowhere. */
+    return names_a_cxx_driver(chain->name) ? (int)PREFERRED_COUNT + 1
+                                           : (int)PREFERRED_COUNT;
 }
 
 /* True if both spellings are the same installed compiler.
@@ -139,6 +149,9 @@ static int compare_toolchains(const void *left, const void *right) {
     return strcmp(a->path, b->path);
 }
 
+/* Defined below, beside the rule that decides where a toolchain came from. */
+static void assign_sources(inventory *list);
+
 static void notify(inventory_watch watch, void *context, size_t done, size_t total) {
     if (watch != NULL)
         watch(done, total, context);
@@ -148,28 +161,46 @@ static void notify(inventory_watch watch, void *context, size_t done, size_t tot
    paths, which differ only in where the candidate list comes from. */
 static bool probe_candidates(const str_list *candidates, inventory *out,
                              inventory_watch watch, void *context) {
+    /*
+     * Identify everything first, collapse the aliases, and only then ask what
+     * is left to compile.
+     *
+     * The two steps cost wildly different amounts. Asking a compiler what it
+     * is takes two invocations; asking what it can compile takes one per
+     * feature in the catalog. A machine offering `cc`, `gcc-9`, `c89-gcc` and
+     * `g++-9` has one GCC behind them, and probing each of the four means
+     * doing the expensive half four times to arrive at a single answer that
+     * would then be merged anyway.
+     */
     size_t total = str_list_count(candidates);
     bool ok = true;
     for (size_t i = 0; ok && i < total; i++) {
-        /* Announced before the work rather than after it, so the first
-           candidate is not probed in silence. */
-        notify(watch, context, i, total);
-
         toolchain chain;
         /* A candidate that cannot describe itself is not a compiler we can
            use; skipping it is the answer, not an error. */
         if (!probe_identify(str_list_get(candidates, i), &chain))
             continue;
-        probe_find_cxx_driver(&chain);
-        probe_capabilities(&chain);
         ok = inventory_append(out, &chain);
     }
-    if (ok)
-        notify(watch, context, total, total);
     if (!ok) {
         inventory_free(out);
         return false;
     }
+
+    assign_sources(out);
+    inventory_merge(out);
+
+    /* Now the slow half, once per compiler rather than once per name it
+       answers to. The count reported is the number of compilers, which is also
+       what is actually being worked through. */
+    for (size_t i = 0; i < out->count; i++) {
+        /* Announced before the work rather than after it, so the first
+           compiler is not probed in silence. */
+        notify(watch, context, i, out->count);
+        probe_find_cxx_driver(&out->items[i]);
+        probe_capabilities(&out->items[i]);
+    }
+    notify(watch, context, out->count, out->count);
     return true;
 }
 
@@ -205,14 +236,19 @@ static toolchain_source source_of(const char *path) {
     return path[length] == '/' ? toolchain_source_pickup : toolchain_source_system;
 }
 
+/* Where each entry came from. Split out because the merging needs it: two
+   compilers are the same toolchain only if they came from the same place. */
+static void assign_sources(inventory *list) {
+    for (size_t i = 0; i < list->count; i++)
+        list->items[i].source = source_of(list->items[i].path);
+}
+
 /* Done in one place because it has to happen identically whether the entries
    were just probed or read back from the cache: an inventory deduplicated on
    one path and not the other would describe a different machine depending on
    whether anything had changed since the last run. */
 void inventory_settle(inventory *list) {
-    for (size_t i = 0; i < list->count; i++)
-        list->items[i].source = source_of(list->items[i].path);
-
+    assign_sources(list);
     inventory_merge(list);
     if (list->count > 1)
         qsort(list->items, list->count, sizeof(toolchain), compare_toolchains);

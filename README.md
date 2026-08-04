@@ -107,7 +107,7 @@ Columns are measured against what is in them, so a name as long as
 line. Nothing is padded past the last column, which keeps the output readable
 by `awk` and `cut`.
 
-The first `list` on a machine has to probe, and probing is seventeen compilers
+The first `list` on a machine has to probe, and probing is every compiler on it
 being made to compile. That is long enough to look like a hang, so it says how
 far it has got:
 

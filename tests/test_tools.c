@@ -20,8 +20,19 @@
 typedef struct {
     char root[64];
     char previous_path[4096];
+    char previous_home[PICKUP_PATHS_MAX];
+    bool had_home;
 } tools_fixture;
 
+/*
+ * Both places tools are looked for have to be pointed at the fixture: PATH,
+ * and the pickup home.
+ *
+ * Leaving the home alone makes the test depend on what the person running it
+ * happens to have installed — a real clang-format under ~/.pickup/tools turns
+ * "finds nothing on a bare machine" into a failure that says nothing about the
+ * code.
+ */
 static bool fixture_setup(tools_fixture *fixture) {
     snprintf(fixture->root, sizeof fixture->root, "%s", "/tmp/pickup_tools_XXXXXX");
     if (mkdtemp(fixture->root) == NULL)
@@ -30,13 +41,22 @@ static bool fixture_setup(tools_fixture *fixture) {
     const char *path = getenv("PATH");
     snprintf(fixture->previous_path, sizeof fixture->previous_path, "%s",
              path != NULL ? path : "");
-    /* Only the fixture, so the machine running the tests cannot supply a real
-       clang-format and make the result depend on where it is run. */
-    return setenv("PATH", fixture->root, 1) == 0;
+
+    const char *home = getenv(PICKUP_HOME_ENV);
+    fixture->had_home = home != NULL;
+    if (home != NULL)
+        snprintf(fixture->previous_home, sizeof fixture->previous_home, "%s", home);
+
+    return setenv("PATH", fixture->root, 1) == 0
+        && setenv(PICKUP_HOME_ENV, fixture->root, 1) == 0;
 }
 
 static void fixture_teardown(tools_fixture *fixture) {
     (void)setenv("PATH", fixture->previous_path, 1);
+    if (fixture->had_home)
+        (void)setenv(PICKUP_HOME_ENV, fixture->previous_home, 1);
+    else
+        (void)unsetenv(PICKUP_HOME_ENV);
     (void)fs_remove_tree(fixture->root);
 }
 

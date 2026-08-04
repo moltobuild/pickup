@@ -1,6 +1,6 @@
 # Pickup Specification
 
-Version: 0.1.0-draft
+Version: 0.2.0-draft
 
 Status: Draft
 
@@ -597,11 +597,16 @@ Version 0.1
 
 Version 0.2
 
-- Installation
-- Default toolchain
+- Installation, from LLVM's own releases and from conda-forge
+- Health: whether a compiler produces a program that runs
+- The build recipe, discovered and published for the caller
+- Diagnostics
+- Formatter and linter
 
 Version 0.3
 
+- Default toolchain
+- Uninstall
 - Windows and macOS
 - Cross-compilation targets
 

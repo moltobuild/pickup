@@ -16,6 +16,11 @@
 #define ARG_SYNTAX_ONLY "-fsyntax-only"
 #define ARG_STDIN       "-"
 
+/* Keeps the driver's own configuration file out of the answer. Understood by
+   Clang and by nothing else, which is why it is only ever passed to a driver
+   that has already been seen to accept it. */
+#define ARG_NO_DEFAULT_CONFIG "--no-default-config"
+
 /* An empty program: nothing has to compile for the driver to say which GCC it
    picked, and the emptier the input the fewer other diagnostics appear. */
 #define EMPTY_PROGRAM "\n"
@@ -152,15 +157,21 @@ bool gcc_install_parse(const char *verbose_output, gcc_install_list *out) {
     return true;
 }
 
-bool gcc_install_query(const char *clang_path, gcc_install_list *out) {
+bool gcc_install_query(const char *clang_path, bool ignore_config,
+                       gcc_install_list *out) {
     *out = (gcc_install_list){ .count = 0, .selected = GCC_INSTALL_NONE };
     if (clang_path == NULL || clang_path[0] == '\0')
         return false;
 
-    const char *argv[] = {
+    const char *bare[] = {
+        clang_path, ARG_NO_DEFAULT_CONFIG, ARG_VERBOSE, ARG_LANG, LANG_CXX_NAME,
+        ARG_SYNTAX_ONLY, ARG_STDIN, NULL
+    };
+    const char *configured[] = {
         clang_path, ARG_VERBOSE, ARG_LANG, LANG_CXX_NAME,
         ARG_SYNTAX_ONLY, ARG_STDIN, NULL
     };
+    const char *const *argv = ignore_config ? bare : configured;
     char answer[VERBOSE_SIZE];
     /* The report goes to stderr; stdout carries nothing here. */
     process_result result = process_capture_stderr(argv, EMPTY_PROGRAM,

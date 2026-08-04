@@ -45,11 +45,26 @@ typedef struct {
     size_t selected;  /* index into items, or GCC_INSTALL_NONE */
 } gcc_install_list;
 
-/* Ask `clang_path` which GCC installations it found and which it chose.
-   False if the driver could not be run at all. A compiler that reports none —
-   every non-Clang one — yields an empty list, which is an answer, not a
-   failure. */
-[[nodiscard]] bool gcc_install_query(const char *clang_path, gcc_install_list *out);
+/*
+ * Ask `clang_path` which GCC installations it found and which it chose.
+ *
+ * `ignore_config` decides which of two different questions is being asked, and
+ * they are not interchangeable:
+ *
+ *   false — what this driver actually does when invoked. A configuration file
+ *           beside it pinning a GCC is part of that, and a diagnosis that
+ *           ignored it would describe a compiler nobody is running.
+ *   true  — what this machine offers. A pinned GCC stops the driver from
+ *           enumerating the others at all, so anything choosing between them
+ *           has to ask with the file out of the way, or it will only ever see
+ *           the choice already made.
+ *
+ * False if the driver could not be run at all. A compiler that reports none —
+ * every non-Clang one — yields an empty list, which is an answer, not a
+ * failure.
+ */
+[[nodiscard]] bool gcc_install_query(const char *clang_path, bool ignore_config,
+                                     gcc_install_list *out);
 
 /* Read the same out of text `clang -v` already produced.
 

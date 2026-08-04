@@ -251,6 +251,13 @@ questions, and are answered by different commands. A caller that means to run a
 formatter needs its path, and a report of problems is the wrong place to look
 for one.
 
+One thing is done rather than reported, and it stays on Pickup's own side of
+the line. A toolchain's configuration file records a decision made when it was
+installed and nothing revalidates it, so it can go on naming a compiler that
+has since stopped being the right one. Since the recipes have just been worked
+out afresh, bringing the file into step costs nothing — and only ever for
+toolchains Pickup installed, only for files Pickup wrote, and never in silence.
+
 Remedies are named, never applied. Repairing the system is not what a diagnosis
 is for, and the useful remedies are rarely equivalent: one repairs what is
 broken, another sidesteps it and leaves it broken. Which to take is the

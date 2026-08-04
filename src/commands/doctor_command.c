@@ -4,6 +4,7 @@
 #include <pickup/services/diagnostics_service.h>
 #include <pickup/util/color.h>
 #include <pickup/util/format.h>
+#include <pickup/util/progress.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -182,9 +183,30 @@ static void print_toml(const diagnostics_report *report) {
     }
 }
 
+/* What the bar says while every compiler is made to build something. */
+#define EXAMINE_LABEL "examining toolchains"
+
+/* On stderr, for the same reason the report is on stdout: one of them is the
+   answer and the other is not. */
+static void watch_examine(const char *subject, size_t done, size_t total,
+                          void *context) {
+    progress_line *line = context;
+    (void)subject;
+    if (!progress_is_interactive(stderr))
+        return;
+    progress_draw_steps(stderr, EXAMINE_LABEL, (long long)done, (long long)total);
+    line->drawn = true;
+}
+
 int doctor_command_run(bool as_toml, bool all) {
     diagnostics_report report;
-    if (!diagnostics_run(&report)) {
+    progress_line line = { .drawn = false };
+    bool examined = diagnostics_run_watched(watch_examine, &line, &report);
+    /* Wiped whether it worked or not: a failure prints a message of its own,
+       and half a bar in front of it reads as part of the message. */
+    progress_line_clear(stderr, &line);
+
+    if (!examined) {
         fprintf(stderr, "pickup: could not examine this machine\n");
         return exit_failure;
     }

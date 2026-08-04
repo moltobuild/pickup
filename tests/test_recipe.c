@@ -468,3 +468,97 @@ MOLTEST(recipe_finds_no_libcxx_where_there_is_none) {
                                        directory, sizeof directory));
     EXPECT_FALSE(recipe_own_libcxx_dir(NULL, directory, sizeof directory));
 }
+
+/*
+ * Keeping a configuration file in step with what now works.
+ *
+ * The file records a decision made at install time and nothing revalidates it,
+ * so it can go on naming a GCC that has since stopped being the right one.
+ * Rewriting it is the one thing a diagnosis does rather than reports, so what
+ * matters most here is what it refuses to touch.
+ */
+
+MOLTEST(recipe_refreshes_a_configuration_that_has_fallen_behind) {
+    fake_toolchain fake;
+    fake_accepts accepts = { .gcc_install = true, .ships_libcxx = true };
+    ASSERT_TRUE(fake_setup(&fake, &accepts));
+
+    char config[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(config, sizeof config, "%s.cfg", fake.driver));
+    ASSERT_TRUE(fs_write_file(config,
+        "# Written by pickup: the configuration this toolchain was proven to build with.\n"
+        "--gcc-install-dir=/somewhere/that/moved/on\n"));
+
+    toolchain chain = chain_of(&fake);
+    link_recipe recipe = recipe_discover(&chain, lang_cxx);
+    ASSERT_TRUE(recipe.usable);
+
+    ASSERT_TRUE(recipe_refresh_config(fake.driver, &recipe));
+
+    char *after = fs_read_file(config);
+    ASSERT_TRUE(after != NULL);
+    EXPECT_TRUE(strstr(after, fake.gcc_dir) != NULL);
+    EXPECT_TRUE(strstr(after, "/somewhere/that/moved/on") == NULL);
+    free(after);
+
+    fake_teardown(&fake);
+}
+
+MOLTEST(recipe_leaves_a_configuration_someone_wrote_by_hand) {
+    fake_toolchain fake;
+    fake_accepts accepts = { .gcc_install = true, .ships_libcxx = true };
+    ASSERT_TRUE(fake_setup(&fake, &accepts));
+
+    char config[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(config, sizeof config, "%s.cfg", fake.driver));
+    /* No pickup header: someone put this here on purpose. A flag added by hand
+       is a decision, and overwriting it without asking would undo it
+       silently. */
+    static const char theirs[] = "--gcc-install-dir=/their/choice\n-DTHEIR_FLAG\n";
+    ASSERT_TRUE(fs_write_file(config, theirs));
+
+    toolchain chain = chain_of(&fake);
+    link_recipe recipe = recipe_discover(&chain, lang_cxx);
+    ASSERT_TRUE(recipe.usable);
+
+    EXPECT_FALSE(recipe_refresh_config(fake.driver, &recipe));
+
+    char *after = fs_read_file(config);
+    ASSERT_TRUE(after != NULL);
+    EXPECT_STREQ(theirs, after);
+    free(after);
+
+    fake_teardown(&fake);
+}
+
+MOLTEST(recipe_reports_no_change_when_there_is_none) {
+    fake_toolchain fake;
+    fake_accepts accepts = { .gcc_install = true, .ships_libcxx = true };
+    ASSERT_TRUE(fake_setup(&fake, &accepts));
+
+    toolchain chain = chain_of(&fake);
+    link_recipe recipe = recipe_discover(&chain, lang_cxx);
+    ASSERT_TRUE(recipe.usable);
+    ASSERT_TRUE(recipe_write_config(fake.driver, &recipe));
+
+    /* Already says exactly this. An identical rewrite would have doctor
+       announce a change that did not happen. */
+    EXPECT_FALSE(recipe_refresh_config(fake.driver, &recipe));
+
+    fake_teardown(&fake);
+}
+
+MOLTEST(recipe_writes_a_configuration_that_was_never_there) {
+    fake_toolchain fake;
+    fake_accepts accepts = { .gcc_install = true, .ships_libcxx = true };
+    ASSERT_TRUE(fake_setup(&fake, &accepts));
+
+    toolchain chain = chain_of(&fake);
+    link_recipe recipe = recipe_discover(&chain, lang_cxx);
+    ASSERT_TRUE(recipe.usable);
+
+    /* Nothing to preserve, so there is nothing to refuse. */
+    EXPECT_TRUE(recipe_refresh_config(fake.driver, &recipe));
+
+    fake_teardown(&fake);
+}

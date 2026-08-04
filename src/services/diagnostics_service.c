@@ -229,7 +229,56 @@ static void survey_toolchain(const toolchain *chain, toolchain_survey *out) {
     out->cxx = recipe_discover(chain, lang_cxx);
     /* Only Clang borrows a GCC, and only Clang answers this. */
     if (chain->vendor == vendor_clang || chain->vendor == vendor_apple_clang)
-        (void)gcc_install_query(chain->path, &out->installs);
+        /* Asked as the driver is actually invoked, config file and all: what
+           it does is the thing being diagnosed. */
+        (void)gcc_install_query(chain->path, false, &out->installs);
+}
+
+/*
+ * Put a toolchain's own configuration back in step with what now works.
+ *
+ * A `.cfg` records a decision made at install time and nothing revalidates it,
+ * so it can go on naming a GCC that has since lost its C++ half, or miss a
+ * newer one that has since gained it. The recipes above were just worked out
+ * afresh, so bringing the file into line costs nothing more than writing it.
+ *
+ * This is the one thing a diagnosis does rather than merely reports, and the
+ * line it does not cross is the same one `install` respects: Pickup maintains
+ * what Pickup installed and never touches the system. Repairing a GCC in /usr
+ * is the reader's decision; keeping a file under the pickup home in step with
+ * reality is not a decision at all.
+ *
+ * Whatever changes is said out loud. Nothing here happens quietly.
+ */
+static void refresh_configuration(const toolchain *chain,
+                                  const toolchain_survey *survey,
+                                  diagnostics_report *report) {
+    /* Nothing outside the pickup home, and nothing that does not read a
+       configuration file in the first place. */
+    if (chain->source != toolchain_source_pickup)
+        return;
+    if (chain->vendor != vendor_clang && chain->vendor != vendor_apple_clang)
+        return;
+
+    bool changed = false;
+    if (chain->cxx_path[0] != '\0')
+        changed = recipe_refresh_config(chain->cxx_path, &survey->cxx);
+    changed = recipe_refresh_config(chain->path, &survey->c) || changed;
+    if (!changed)
+        return;
+
+    const char *pinned = recipe_gcc_flag(&survey->cxx);
+    if (pinned == NULL)
+        pinned = recipe_gcc_flag(&survey->c);
+
+    /* The directory, not the flag carrying it: a reader wants to know which
+       GCC it now stands on, and the spelling of the option is noise. */
+    const char *value = pinned != NULL ? strchr(pinned, '=') : NULL;
+    if (value != NULL)
+        add_summary(report, section_compilers, "%s reconfigured - now uses %s",
+                    chain->id, value + 1);
+    else
+        add_summary(report, section_compilers, "%s reconfigured", chain->id);
 }
 
 /* A toolchain described the way a report names it: "clang@22.1.8". */
@@ -501,6 +550,15 @@ static void check_remaining(const inventory *list, const toolchain_survey *surve
     }
 }
 
+/* Set while a report is being built, so the toolchain loop can say where it
+   is without threading a parameter through every check. */
+typedef struct {
+    diagnostics_watch watch;
+    void *context;
+} progress;
+
+static progress reporting = { 0 };
+
 bool diagnostics_examine(const inventory *list, distro_family family,
                          diagnostics_report *out) {
     if (list->count == 0) {
@@ -520,13 +578,25 @@ bool diagnostics_examine(const inventory *list, distro_family family,
         return false;
     }
 
-    for (size_t i = 0; i < list->count; i++)
+    for (size_t i = 0; i < list->count; i++) {
+        /* Announced before the work rather than after it, so the first
+           toolchain is not examined in silence. */
+        if (reporting.watch != NULL)
+            reporting.watch(list->items[i].id, i, list->count, reporting.context);
         survey_toolchain(&list->items[i], &surveys[i]);
+    }
+    if (reporting.watch != NULL)
+        reporting.watch("", list->count, list->count, reporting.context);
 
     /* Causes before leftovers, so that a toolchain already accounted for by a
        broken GCC is not reported a second time on its own. */
     coverage found = measure(list, surveys);
     summarise_compilers(list, found, out);
+
+    /* After the summary, so a reader sees what the machine has before what
+       changed about it. */
+    for (size_t i = 0; i < list->count; i++)
+        refresh_configuration(&list->items[i], &surveys[i], out);
     check_gcc_installations(list, surveys, family, found, out, explained);
     check_remaining(list, surveys, explained, found, out);
 
@@ -536,7 +606,13 @@ bool diagnostics_examine(const inventory *list, distro_family family,
 }
 
 bool diagnostics_run(diagnostics_report *out) {
+    return diagnostics_run_watched(NULL, NULL, out);
+}
+
+bool diagnostics_run_watched(diagnostics_watch watch, void *context,
+                             diagnostics_report *out) {
     *out = (diagnostics_report){ .count = 0 };
+    reporting = (progress){ .watch = watch, .context = context };
 
     check_environment(out);
     check_home(out);
@@ -548,5 +624,6 @@ bool diagnostics_run(diagnostics_report *out) {
 
     bool examined = diagnostics_examine(&list, distro_detect(), out);
     inventory_free(&list);
+    reporting = (progress){ 0 };
     return examined;
 }

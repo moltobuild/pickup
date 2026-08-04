@@ -85,8 +85,9 @@ typedef struct {
 } finding;
 
 /* What a section says when nothing in it is wrong: the summary lines that make
-   a report useful even on a healthy machine. */
-#define SUMMARY_MAX 4
+   a report useful even on a healthy machine. Room for every section to speak
+   and for a toolchain or two to report having been brought up to date. */
+#define SUMMARY_MAX 12
 
 typedef struct {
     finding items[DIAGNOSTICS_MAX_FINDINGS];
@@ -112,10 +113,23 @@ typedef struct {
    is what the exit code is built on, not the severities. */
 [[nodiscard]] bool diagnostics_is_blocked(const diagnostics_report *report);
 
+/* Told which toolchain is being examined, and how far along it is.
+
+   Examining means asking every compiler to build, link and run something,
+   several times over while the flags that make it work are found. That is
+   seconds of silence otherwise, and silence is what makes people think a
+   command has hung. */
+typedef void (*diagnostics_watch)(const char *subject, size_t done, size_t total,
+                                  void *context);
+
 /* Examine the machine and fill `out`. False only when the inventory could not
    be built at all; a machine with nothing wrong yields an empty report, which
    is a result rather than a failure. */
 [[nodiscard]] bool diagnostics_run(diagnostics_report *out);
+
+/* The same, reporting as it goes. A NULL `watch` is the quiet one. */
+[[nodiscard]] bool diagnostics_run_watched(diagnostics_watch watch, void *context,
+                                           diagnostics_report *out);
 
 /* Examine an inventory that has already been built, against a known
    distribution.

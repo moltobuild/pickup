@@ -123,6 +123,30 @@ typedef struct {
    False when there is nothing worth writing or the file could not be created. */
 [[nodiscard]] bool recipe_write_config(const char *driver, const link_recipe *recipe);
 
+/*
+ * Bring the configuration file beside `driver` into line with `recipe`.
+ *
+ * The file records a decision made when the toolchain was installed, and the
+ * machine moves on: a GCC it pinned can lose its C++ half, or a newer one can
+ * become complete. Nothing revalidates it, so a toolchain can go on being
+ * configured for a state of the world that has passed — while `resolve`, which
+ * works the recipe out afresh every time, says something else.
+ *
+ * Rewritten only when all three hold, which is what keeps this from being a
+ * command that touches things it should not:
+ *
+ *   - the file is one Pickup wrote, recognised by the line it opens with. One
+ *     edited by hand is left exactly as it is.
+ *   - the recipe differs from what is on disk. An identical rewrite would
+ *     report a change that did not happen.
+ *   - the caller is looking at a toolchain Pickup installed. Nothing under
+ *     /usr is Pickup's to maintain.
+ *
+ * The last is the caller's to check. Returns true when the file was changed,
+ * which is also the caller's cue to say so: nothing here happens silently.
+ */
+[[nodiscard]] bool recipe_refresh_config(const char *driver, const link_recipe *recipe);
+
 /* Which standard library `compiler` reaches for when invoked with `flags`.
 
    Read out of the library's own version macro through the preprocessor, the

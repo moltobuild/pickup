@@ -304,7 +304,9 @@ static size_t build_candidates(const toolchain *chain, capability_lang lang,
           that picked the highest-numbered GCC and found no C++ in it. */
     gcc_install_list installs;
     gcc_install best;
-    bool have_best = gcc_install_query(driver, &installs) && installs.count > 0
+    /* Asked with the driver's own config out of the way: a pinned GCC stops it
+       from listing the others, and this is the code that has to choose. */
+    bool have_best = gcc_install_query(driver, true, &installs) && installs.count > 0
         && gcc_install_best(&installs, &best);
 
     if (have_best
@@ -442,37 +444,76 @@ bool recipe_align_gcc(const link_recipe *cxx, const char *driver, link_recipe *c
    this appended, in the directory the driver sits in. */
 #define CONFIG_SUFFIX ".cfg"
 
-bool recipe_write_config(const char *driver, const link_recipe *recipe) {
-    if (driver == NULL || driver[0] == '\0' || !recipe->usable)
+/* The line a file Pickup wrote opens with. It is what tells one apart from a
+   file someone edited by hand, which is never overwritten. */
+#define CONFIG_HEADER \
+    "# Written by pickup: the configuration this toolchain was proven to build with.\n"
+
+/* Room for the whole file. */
+#define CONFIG_SIZE (RECIPE_MAX_FLAGS * RECIPE_FLAG_MAX + 256)
+
+/* Lay out what the file should say. False when there is nothing to write. */
+static bool compose_config(const link_recipe *recipe, char *out, size_t out_size) {
+    if (!recipe->usable)
         return false;
     /* A recipe with no flags is the compiler working as it is. Writing an
        empty file would only leave something to wonder about later. */
     if (recipe->link_count == 0)
         return false;
 
-    char path[PICKUP_PATHS_MAX];
-    if (!fs_format_path(path, sizeof path, "%s" CONFIG_SUFFIX, driver))
+    int written = snprintf(out, out_size, "%s", CONFIG_HEADER);
+    if (written < 0)
         return false;
 
     /* One flag per line, which is the format these files take. The link flags
        are the superset: everything needed to compile is needed to link too,
        and a flag that only matters to the linker is ignored when compiling. */
-    char contents[RECIPE_MAX_FLAGS * RECIPE_FLAG_MAX + 256];
-    int written = snprintf(contents, sizeof contents,
-                           "# Written by pickup: the configuration this "
-                           "toolchain was proven to build with.\n");
-    if (written < 0)
-        return false;
-
     size_t used = (size_t)written;
-    for (size_t i = 0; i < recipe->link_count && used < sizeof contents; i++) {
-        int line = snprintf(contents + used, sizeof contents - used, "%s\n",
+    for (size_t i = 0; i < recipe->link_count && used < out_size; i++) {
+        int line = snprintf(out + used, out_size - used, "%s\n",
                             recipe->link_flags[i]);
         if (line < 0)
             return false;
         used += (size_t)line;
     }
+    return true;
+}
+
+static bool config_path(const char *driver, char *out, size_t out_size) {
+    if (driver == NULL || driver[0] == '\0')
+        return false;
+    return fs_format_path(out, out_size, "%s" CONFIG_SUFFIX, driver);
+}
+
+bool recipe_write_config(const char *driver, const link_recipe *recipe) {
+    char path[PICKUP_PATHS_MAX];
+    char contents[CONFIG_SIZE];
+    if (!config_path(driver, path, sizeof path)
+        || !compose_config(recipe, contents, sizeof contents))
+        return false;
     return fs_write_file(path, contents);
+}
+
+bool recipe_refresh_config(const char *driver, const link_recipe *recipe) {
+    char path[PICKUP_PATHS_MAX];
+    char wanted[CONFIG_SIZE];
+    if (!config_path(driver, path, sizeof path)
+        || !compose_config(recipe, wanted, sizeof wanted))
+        return false;
+
+    char *current = fs_read_file(path);
+    if (current != NULL) {
+        /* Someone else's file. Leaving it alone matters more than being right
+           about it: a flag added by hand is a decision, and overwriting it
+           without asking would undo that decision silently. */
+        bool ours = strncmp(current, CONFIG_HEADER, sizeof CONFIG_HEADER - 1) == 0;
+        bool same = strcmp(current, wanted) == 0;
+        free(current);
+        if (!ours || same)
+            return false;
+    }
+
+    return fs_write_file(path, wanted);
 }
 
 link_recipe recipe_discover(const toolchain *chain, capability_lang lang) {

@@ -222,7 +222,29 @@ first repairs the installation, and with it every compiler standing on it. The
 second installs a toolchain of Pickup's own without administrator rights and
 leaves the broken one exactly where it was.
 
-Remedies are named, never applied.
+Remedies are named, never applied — with one exception, and it stays on
+Pickup's own side of the line. A toolchain's `.cfg` records a decision made
+when it was installed, and nothing revalidates it: install `g++-12` and the
+file may go on naming a GCC that is no longer the right one, while `resolve`,
+which works the recipe out afresh every time, says something else. So `doctor`
+puts it back in step, and says it did:
+
+```
+  ✓ clang@22.1.8 reconfigured - now uses /usr/lib/gcc/x86_64-linux-gnu/12
+```
+
+Repairing a GCC in `/usr` is the reader's decision; keeping a file under the
+pickup home in step with reality is not a decision at all. Three conditions
+keep it there: only toolchains Pickup installed, only files Pickup wrote —
+recognised by the line they open with, so one edited by hand is left exactly as
+it is — and only when the recipe actually differs.
+
+Examining means asking every compiler to build, link and run something, several
+times over, so it says how far it has got:
+
+```
+examining toolchains  [████████████████████░░░░░]   83%  5/6
+```
 
 ### The tools a project is worked on with
 

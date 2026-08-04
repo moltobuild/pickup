@@ -5,6 +5,7 @@
 #include <pickup/detect/recipe.h>
 #include <pickup/exit_code.h>
 #include <pickup/services/inventory_service.h>
+#include <pickup/services/preference_service.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -141,6 +142,26 @@ static bool parse_stdlib(const char *name, cxx_stdlib *out) {
 }
 
 /*
+ * Where the user's default sits in this inventory, or SIZE_MAX.
+ *
+ * Matched on the identity exactly, because that is what `pickup default`
+ * stored: a preference is a decision about one toolchain, and re-reading it as
+ * a loose query would let it drift onto another the next time something is
+ * installed.
+ */
+static size_t preferred_index(const inventory *list) {
+    char id[PREFERENCE_VALUE_MAX];
+    if (!preference_default_get(id, sizeof id))
+        return SIZE_MAX;
+
+    for (size_t i = 0; i < list->count; i++) {
+        if (strcmp(list->items[i].id, id) == 0)
+            return i;
+    }
+    return SIZE_MAX;
+}
+
+/*
  * The best toolchain that can be built with, not merely the best that matches.
  *
  * Matching the requirements is about what a compiler implements; a recipe is
@@ -152,6 +173,13 @@ static bool parse_stdlib(const char *name, cxx_stdlib *out) {
  *
  * Candidates are tried highest version first, so the result is still
  * deterministic: the same machine yields the same answer every time.
+ *
+ * The user's default goes first when there is one. It is a preference and not
+ * a constraint: a default that cannot do what was asked is passed over rather
+ * than reported as failure, because `resolve` answers "the best for this job",
+ * and refusing to answer would make every request the default cannot serve an
+ * error the caller has to work around. That it was passed over is said aloud,
+ * on stderr, by warn_if_default_unused.
  */
 static const toolchain *select_buildable(const inventory *list,
                                          const resolve_request *request,
@@ -161,11 +189,19 @@ static const toolchain *select_buildable(const inventory *list,
     if (tried == NULL)
         return NULL;
 
+    const size_t preferred = preferred_index(list);
+
     const toolchain *chosen = NULL;
     for (;;) {
-        /* The best candidate not yet tried. */
+        /* The preferred one while it is still untried and can serve the
+           request, and the best candidate not yet tried after that. */
         size_t best = SIZE_MAX;
-        for (size_t i = 0; i < list->count; i++) {
+        bool took_preferred = preferred != SIZE_MAX && !tried[preferred]
+            && satisfies(&list->items[preferred], request, lang, required);
+        if (took_preferred)
+            best = preferred;
+
+        for (size_t i = 0; !took_preferred && i < list->count; i++) {
             if (tried[i] || !satisfies(&list->items[i], request, lang, required))
                 continue;
             if (best == SIZE_MAX
@@ -192,6 +228,33 @@ static const toolchain *select_buildable(const inventory *list,
 
     free(tried);
     return chosen;
+}
+
+/*
+ * Say when the answer is not what the user pinned, and why.
+ *
+ * Silence here is the failure mode worth avoiding: someone who set a default
+ * and then reads a different compiler in the answer has no way to tell whether
+ * the preference was ignored, forgotten, or simply unable to do the job. It
+ * goes to stderr, so a caller parsing the TOML on stdout is unaffected.
+ */
+static void warn_if_default_unused(const inventory *list, const toolchain *chosen) {
+    char id[PREFERENCE_VALUE_MAX];
+    if (!preference_default_get(id, sizeof id))
+        return;
+    if (strcmp(chosen->id, id) == 0)
+        return;
+
+    bool installed = false;
+    for (size_t i = 0; i < list->count && !installed; i++)
+        installed = strcmp(list->items[i].id, id) == 0;
+
+    if (installed)
+        fprintf(stderr, "pickup: the default %s cannot serve this request; chose %s\n",
+                id, chosen->id);
+    else
+        fprintf(stderr, "pickup: the default %s is not installed; chose %s\n",
+                id, chosen->id);
 }
 
 static void print_text(const toolchain *chain, capability_lang lang) {
@@ -280,6 +343,7 @@ int resolve_command_run(const resolve_request *request, bool as_toml) {
         return exit_no_match;
     }
 
+    warn_if_default_unused(&list, best);
     if (as_toml)
         print_toml(best, lang, request->standard, &recipe);
     else

@@ -8,10 +8,10 @@
 /*
  * The inventory, with the probing made visible.
  *
- * Three commands need it — list, scan and resolve — and all three need it the
- * same way: probing is the slow part, and a command that says nothing for that
- * long looks like one that has died. What differs between them is what they
- * print afterwards, which is their own business and stays there.
+ * Every command that has to know what this machine carries needs it the same
+ * way: probing is the slow part, and a command that says nothing for that long
+ * looks like one that has died. What differs between them is what they print
+ * afterwards, which is their own business and stays there.
  */
 
 /* Load the inventory, drawing a bar for the probing. `refresh` forces a full

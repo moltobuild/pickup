@@ -3,9 +3,11 @@
 #include <pickup/commands/probe_progress.h>
 #include <pickup/exit_code.h>
 #include <pickup/services/inventory_service.h>
+#include <pickup/services/preference_service.h>
 #include <pickup/util/table.h>
 
 #include <stdio.h>
+#include <string.h>
 
 /* The columns of the human-readable table.
 
@@ -24,14 +26,28 @@ static const char *const list_headers[] = {
 /* Stands in for a field the probe could not fill. */
 #define FIELD_MISSING "-"
 
-/* Lay one toolchain out as cells. `version` backs the version cell, which is
-   the only column with no string of its own in the model. */
-static void row_of(const toolchain *chain, char *version, size_t version_size,
-                   const char **cells) {
+/* How the user's default is marked: on its own row, the way `git branch`
+   marks the current branch, rather than as a column that would be blank for
+   every toolchain but one. */
+#define DEFAULT_MARK " (default)"
+
+/* Room for an identity carrying that mark. */
+#define NAME_CELL_SIZE (PICKUP_ID_MAX + sizeof DEFAULT_MARK)
+
+/* Lay one toolchain out as cells. `name` and `version` back the two cells with
+   no string of their own in the model. `preferred` is the stored default, or
+   NULL when there is none. */
+static void row_of(const toolchain *chain, const char *preferred,
+                   char *name, size_t name_size,
+                   char *version, size_t version_size, const char **cells) {
     toolchain_version_format(chain->version, version, version_size);
     /* The identity, not the basename of whichever link was found first: one
        compiler answering to four names was four rows saying one thing. */
-    cells[0] = chain->id;
+    snprintf(name, name_size, "%s%s", chain->id,
+             preferred != NULL && strcmp(chain->id, preferred) == 0
+                 ? DEFAULT_MARK : "");
+
+    cells[0] = name;
     cells[1] = toolchain_vendor_name(chain->vendor);
     cells[2] = version;
     cells[3] = chain->target[0] != '\0' ? chain->target : FIELD_MISSING;
@@ -44,21 +60,29 @@ static void print_text(const inventory *list) {
         return;
     }
 
+    char preferred[PREFERENCE_VALUE_MAX];
+    const char *marked = preference_default_get(preferred, sizeof preferred)
+        ? preferred : NULL;
+
     table columns;
     table_init(&columns, list_headers, LIST_COLUMNS);
 
     for (size_t i = 0; i < list->count; i++) {
+        char name[NAME_CELL_SIZE];
         char version[VERSION_SIZE];
         const char *cells[LIST_COLUMNS];
-        row_of(&list->items[i], version, sizeof version, cells);
+        row_of(&list->items[i], marked, name, sizeof name,
+               version, sizeof version, cells);
         table_fit_row(&columns, cells);
     }
 
     table_print_header(&columns, stdout);
     for (size_t i = 0; i < list->count; i++) {
+        char name[NAME_CELL_SIZE];
         char version[VERSION_SIZE];
         const char *cells[LIST_COLUMNS];
-        row_of(&list->items[i], version, sizeof version, cells);
+        row_of(&list->items[i], marked, name, sizeof name,
+               version, sizeof version, cells);
         table_print_row(&columns, cells, stdout);
     }
 }
@@ -68,6 +92,10 @@ static void print_text(const inventory *list) {
    the other side need not support. `[toolchain.0]` is plain enough for any of
    them. */
 static void print_toml(const inventory *list) {
+    char preferred[PREFERENCE_VALUE_MAX];
+    const char *marked = preference_default_get(preferred, sizeof preferred)
+        ? preferred : NULL;
+
     for (size_t i = 0; i < list->count; i++) {
         const toolchain *chain = &list->items[i];
         char version[32];
@@ -84,6 +112,10 @@ static void print_toml(const inventory *list) {
         printf("target = \"%s\"\n", chain->target);
         printf("source = \"%s\"\n", toolchain_source_name(chain->source));
         printf("cxx_path = \"%s\"\n", chain->cxx_path);
+        /* On every entry rather than only the preferred one, so a consumer
+           reads the same keys for each and needs no special case. */
+        printf("default = %s\n",
+               marked != NULL && strcmp(chain->id, marked) == 0 ? "true" : "false");
         if (i + 1 < list->count)
             printf("\n");
     }

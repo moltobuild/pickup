@@ -88,6 +88,45 @@ MOLTEST(paths_name_a_toolchain_by_what_it_is) {
     fixture_teardown(&fixture);
 }
 
+MOLTEST(paths_find_the_toolchain_a_binary_belongs_to) {
+    home_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture, "/tmp/pickup-home-under-test"));
+
+    /* What `uninstall` removes is the whole toolchain, not the directory the
+       binary happens to sit in. */
+    char owner[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(paths_owning_toolchain(
+        "/tmp/pickup-home-under-test/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu/bin/clang",
+        owner, sizeof owner));
+    EXPECT_STREQ("/tmp/pickup-home-under-test/toolchains/"
+                 "clang-22.1.8-x86_64-unknown-linux-gnu", owner);
+
+    fixture_teardown(&fixture);
+}
+
+MOLTEST(paths_claim_nothing_outside_the_toolchains_directory) {
+    home_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture, "/tmp/pickup-home-under-test"));
+
+    char owner[PICKUP_PATHS_MAX];
+
+    /* A compiler the package manager owns. Answering with anything here would
+       be answering with a path to delete. */
+    EXPECT_FALSE(paths_owning_toolchain("/usr/bin/gcc-12", owner, sizeof owner));
+
+    /* A prefix match alone would claim this one, which is a different
+       directory that merely starts with the same characters. */
+    EXPECT_FALSE(paths_owning_toolchain(
+        "/tmp/pickup-home-under-test/toolchains-old/clang-1/bin/clang",
+        owner, sizeof owner));
+
+    /* The toolchains directory itself belongs to no single toolchain. */
+    EXPECT_FALSE(paths_owning_toolchain("/tmp/pickup-home-under-test/toolchains/",
+                                        owner, sizeof owner));
+
+    fixture_teardown(&fixture);
+}
+
 MOLTEST(paths_fall_back_to_the_users_home) {
     home_fixture fixture;
     /* Unset rather than pointed somewhere: this is the default users get. */

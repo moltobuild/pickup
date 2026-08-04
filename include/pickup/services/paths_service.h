@@ -56,4 +56,20 @@
 [[nodiscard]] bool paths_toolchain_dir(const char *vendor, const char *version,
                                        const char *target, char *out, size_t out_size);
 
+/*
+ * The installed directory that `path` belongs to: the first level under
+ * <home>/toolchains containing it.
+ *
+ * Read from the path rather than rebuilt with paths_toolchain_dir, because the
+ * two can disagree. The name is composed at install time from what the
+ * unpacked compiler said it was, and a compiler that reports a different
+ * target after an upgrade would be looked for under a directory it was never
+ * in — and the answer would be a path to delete.
+ *
+ * False when `path` is not under there at all, which is exactly what a
+ * compiler Pickup did not install looks like. Removing one of those is the
+ * package manager's business.
+ */
+[[nodiscard]] bool paths_owning_toolchain(const char *path, char *out, size_t out_size);
+
 #endif /* PICKUP_PATHS_SERVICE_H */

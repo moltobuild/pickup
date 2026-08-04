@@ -1,5 +1,6 @@
 #include <pickup/cli.h>
 
+#include <pickup/commands/default_command.h>
 #include <pickup/commands/doctor_command.h>
 #include <pickup/commands/install_command.h>
 #include <pickup/commands/list_command.h>
@@ -8,6 +9,7 @@
 #include <pickup/commands/search_command.h>
 #include <pickup/commands/show_command.h>
 #include <pickup/commands/tools_command.h>
+#include <pickup/commands/uninstall_command.h>
 #include <pickup/exit_code.h>
 #include <pickup/util/cli.h>
 #include <pickup/util/color.h>
@@ -80,6 +82,20 @@ static const cli_option install_options[] = {
       "Unpack the entire release instead of only what is needed to build", NULL },
 };
 
+/* What `pickup uninstall` accepts. */
+static const cli_option uninstall_options[] = {
+    { "--yes", 'y', cli_opt_flag, NULL,
+      "Remove without asking for confirmation", NULL },
+};
+
+/* What `pickup default` accepts. Without a name it reports the current one,
+   which is why there is no separate command to ask. */
+static const cli_option default_options[] = {
+    { "--clear", 0, cli_opt_flag, NULL,
+      "Forget the preference and let resolve rank candidates", NULL },
+    { "--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT },
+};
+
 /* --- command handlers --- */
 
 static int handle_list(const cli_args *args) {
@@ -136,10 +152,18 @@ static int handle_doctor(const cli_args *args) {
     return doctor_command_run(wants_toml(args), cli_args_flag(args, "--all"));
 }
 
-static int handle_unimplemented(const cli_args *args) {
-    fprintf(stderr, "pickup: '%s' is not implemented yet (see spec.md)\n",
-            cli_args_command_name(args));
-    return exit_not_implemented;
+static int handle_uninstall(const cli_args *args) {
+    return uninstall_command_run(cli_args_positional(args, 0),
+                                 cli_args_flag(args, "--yes"));
+}
+
+static int handle_default(const cli_args *args) {
+    const default_command_request request = {
+        .name = cli_args_positional(args, 0),
+        .clear = cli_args_flag(args, "--clear"),
+        .as_toml = wants_toml(args),
+    };
+    return default_command_run(&request);
 }
 
 /* --- command table --- */
@@ -163,10 +187,12 @@ static const cli_command commands[] = {
     { "install", "Download and install a toolchain", "<clang|gcc>",
       install_options, sizeof install_options / sizeof install_options[0],
       handle_install },
-    { "uninstall", "Remove an installed toolchain", "<toolchain>",
-      NULL, 0, handle_unimplemented },
-    { "default", "Set the default toolchain", "<toolchain>",
-      NULL, 0, handle_unimplemented },
+    { "uninstall", "Remove a toolchain pickup installed", "<toolchain>",
+      uninstall_options, sizeof uninstall_options / sizeof uninstall_options[0],
+      handle_uninstall },
+    { "default", "Show or set the toolchain resolve should prefer", "[toolchain]",
+      default_options, sizeof default_options / sizeof default_options[0],
+      handle_default },
 };
 
 int cli_run(int argc, char **argv) {

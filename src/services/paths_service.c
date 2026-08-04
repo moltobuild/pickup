@@ -2,7 +2,9 @@
 
 #include <pickup/services/fs_service.h>
 
+#include <limits.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* Subdirectories of the pickup home. */
 #define TOOLCHAINS_DIRNAME "toolchains"
@@ -52,4 +54,33 @@ bool paths_toolchain_dir(const char *vendor, const char *version,
         return false;
     return fs_format_path(out, out_size, "%s/%s-%s-%s",
                           toolchains, vendor, version, target);
+}
+
+bool paths_owning_toolchain(const char *path, char *out, size_t out_size) {
+    if (path == NULL || path[0] == '\0')
+        return false;
+
+    char toolchains[PICKUP_PATHS_MAX];
+    if (!paths_toolchains(toolchains, sizeof toolchains))
+        return false;
+
+    /* Canonicalised when it exists, because the home may be reached through a
+       symlink while the compiler path was resolved: /home -> /var/home would
+       otherwise make everything installed look like a system compiler. */
+    char resolved[PATH_MAX];
+    const char *root = realpath(toolchains, resolved) != NULL ? resolved : toolchains;
+
+    size_t length = strlen(root);
+    if (strncmp(path, root, length) != 0 || path[length] != '/')
+        return false;
+
+    /* The first component below the root, and nothing deeper: the binary is
+       several levels down, and what gets removed is the whole toolchain. */
+    const char *name = path + length + 1;
+    const char *end = strchr(name, '/');
+    size_t name_length = end != NULL ? (size_t)(end - name) : strlen(name);
+    if (name_length == 0)
+        return false;
+
+    return fs_format_path(out, out_size, "%s/%.*s", root, (int)name_length, name);
 }

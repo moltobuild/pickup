@@ -309,10 +309,14 @@ it writes:
 <pickup home>/cache/       regenerable: the probed inventory, the release index
 <pickup home>/downloads/   archives in flight, removed once installed
 <pickup home>/toolchains/  what was installed, one directory each
+<pickup home>/config.toml  the choices the user made, in TOML
 ```
 
 The first two can be deleted at any time and cost time, never correctness. The
-third is what the downloads were for. One root rather than two means one
+third is what the downloads were for, and the fourth is neither: a preference
+is a decision, and nothing can rebuild it. That is why it sits beside the cache
+rather than inside it, where clearing disk space would take it along. One root
+rather than two means one
 variable, `PICKUP_HOME`, relocates the lot — which is also how the tests run
 without touching a real home directory.
 
@@ -487,12 +491,24 @@ Commands:
 - `scan` — rebuild the inventory
 - `search <toolchain>` — the versions available to install
 - `install <toolchain>` — add a toolchain
-- `uninstall` — remove a toolchain
-- `default` — set the default toolchain
+- `uninstall <toolchain>` — remove a toolchain Pickup installed
+- `default [toolchain]` — show or set the toolchain `resolve` should prefer
 
 `search` and `install` take `--version`, which may name fewer components than
 the version has: `14` means any 14, `14.2` any 14.2. Without it, `install`
 takes the newest stable release.
+
+`uninstall` removes only what Pickup installed. A compiler that was already on
+the machine belongs to its package manager, and a query naming more than one
+toolchain is refused rather than resolved to the newest: the failure worth
+preventing is deleting something other than what was meant.
+
+`default` is a preference and not a constraint. `resolve` tries it first, and
+falls back to ranking candidates when it cannot serve the request — saying on
+stderr that it did, since an answer that silently ignored the preference could
+not be told from one that honoured it. What is stored is the resolved identity,
+never the query: `gcc@latest` recorded as typed would change meaning the next
+time anything was installed.
 
 Exit codes:
 
@@ -602,11 +618,10 @@ Version 0.2
 - The build recipe, discovered and published for the caller
 - Diagnostics
 - Formatter and linter
+- Default toolchain, and uninstall
 
 Version 0.3
 
-- Default toolchain
-- Uninstall
 - Windows and macOS
 - Cross-compilation targets
 

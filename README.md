@@ -51,9 +51,9 @@ pickup scan                # re-probe everything and rewrite the cache
 pickup resolve [options]   # the best toolchain for a set of requirements
 pickup search <toolchain>  # the versions available to install
 pickup install <toolchain> # download and install one
+pickup uninstall <name>    # remove one pickup installed
+pickup default [name]      # show or set the one resolve should prefer
 ```
-
-`uninstall` and `default` are specified but not implemented yet.
 
 ### Looking at what the machine has
 
@@ -595,6 +595,59 @@ Clang reads by itself, so a toolchain works when invoked directly too. That is
 a convenience; the contract is the TOML, which also covers system compilers
 that cannot be written to.
 
+### Picking which one wins
+
+`resolve` answers with the newest toolchain that can actually build. That is a
+reasonable default and it is pickup's, not yours — on a machine with a very new
+Clang it will be chosen every time, whether or not that is the one you build
+with.
+
+`default` is how you say otherwise:
+
+```
+$ pickup default gcc@12.3.0-conda
+✓ Default toolchain is now gcc@12.3.0-conda
+
+$ pickup resolve
+cc gcc 12.3.0 (/home/you/.pickup/toolchains/gcc-12.3.0-x86_64-conda-linux-gnu/bin/cc)
+```
+
+It is a preference, not a constraint. Ask for something it cannot do and you
+get an answer anyway, plus a line on stderr saying why it was passed over:
+
+```
+$ pickup resolve --vendor clang
+pickup: the default gcc@12.3.0-conda cannot serve this request; chose clang@22.1.8
+clang clang 22.1.8 (/home/you/.pickup/toolchains/clang-22.1.8-.../bin/clang)
+```
+
+What gets stored is the resolved identity, never what you typed: `gcc@latest`
+recorded as written would quietly mean a different compiler the next time
+anything was installed. `pickup default` on its own reports the current one,
+`--clear` forgets it, and `list` marks it.
+
+The preference lives in `~/.pickup/config.toml`, beside the cache rather than
+inside it. Clearing the cache costs a rescan; it must not cost a decision.
+
+### Removing one
+
+```
+$ pickup uninstall gcc@12.3.0-conda
+Remove gcc@12.3.0-conda
+  /home/you/.pickup/toolchains/gcc-12.3.0-x86_64-conda-linux-gnu  (845M)
+This cannot be undone. Continue? [y/N]
+```
+
+Only toolchains pickup installed. One that was already on the machine belongs
+to the package manager, and pickup says so rather than touching it. A name that
+matches more than one is refused outright — deleting something other than what
+was meant is the failure worth preventing, so `pickup uninstall gcc` on a
+machine with four of them lists them and stops.
+
+The prompt appears where there is someone to answer it. In a pipe there is not,
+and a script that named a toolchain outright meant it; `--yes` skips the
+question anywhere.
+
 ### Exit codes
 
 | Code | Meaning                            |
@@ -604,6 +657,9 @@ that cannot be written to.
 | 2    | Invalid usage                      |
 | 3    | No toolchain satisfies the request |
 | 4    | Command not implemented yet        |
+
+Code 4 is reserved and nothing returns it today: every command in the table
+above is implemented.
 
 Code 3 is distinct on purpose. "Nothing matches" is an answer, not a
 malfunction, and a caller must be able to tell them apart.

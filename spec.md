@@ -138,7 +138,10 @@ Pickup scans:
 
 - every directory in `PATH`
 - toolchains it installed itself
-- extra directories the user configures
+
+Extra search directories are not configurable. `config.toml` holds one key, the
+default toolchain; a compiler outside `PATH` and outside the pickup home is
+invisible until one of those changes.
 
 Candidates are recognized by name:
 
@@ -190,9 +193,10 @@ A standard is reported as supported when every feature attributed to it passes.
 # 7a. Health and the Build Recipe
 
 Feature probes deliberately avoid headers: they test the language, not the
-completeness of the library shipped beside it. That is the right boundary, and
-it leaves a second question unanswered — **can this compiler produce a program
-that runs?**
+completeness of the library shipped beside it. The one exception is `spaceship`,
+which cannot be written without `<compare>` — the feature is defined in terms of
+that header. That is the right boundary, and it leaves a second question
+unanswered — **can this compiler produce a program that runs?**
 
 A compiler can implement every feature of C++20 and fail on `#include
 <iostream>`, because on Linux it borrows its C++ standard library, its startup
@@ -309,11 +313,15 @@ it writes:
 <pickup home>/cache/       regenerable: the probed inventory, the release index
 <pickup home>/downloads/   archives in flight, removed once installed
 <pickup home>/toolchains/  what was installed, one directory each
+<pickup home>/tools/       the formatter and the linter, kept apart
 <pickup home>/config.toml  the choices the user made, in TOML
 ```
 
+`tools/` is separate from `toolchains/` because nothing resolves against a
+formatter: `list` does not report one and `resolve` cannot return one.
+
 The first two can be deleted at any time and cost time, never correctness. The
-third is what the downloads were for, and the fourth is neither: a preference
+third is what the downloads were for, and the last is neither: a preference
 is a decision, and nothing can rebuild it. That is why it sits beside the cache
 rather than inside it, where clearing disk space would take it along. One root
 rather than two means one
@@ -350,21 +358,27 @@ A request states requirements:
 
 Pickup answers with one toolchain, or with an explanation.
 
-Selection is deterministic: among the candidates that satisfy every
-requirement, the highest version wins; ties are broken by vendor preference and
-then by path, so the same machine always yields the same answer.
+Selection is deterministic: the default toolchain is tried first, and among the
+remaining candidates that satisfy every requirement the highest version wins.
+Equal versions keep the order the inventory produced, so the same machine always
+yields the same answer.
 
 When nothing satisfies the request, Pickup reports what is missing from each
 candidate. Explaining the absence is part of the answer:
 
 ```
-pickup: no C compiler provides [attr_nodiscard]
-  gcc-9  (9.5.0)   missing: attr_nodiscard
-  clang  (14.0.0)  missing: constexpr
+pickup: no c compiler satisfies the request
+  gcc-9            (9.5.0) missing: attr_nodiscard
+  clang            (14.0.0) missing: constexpr
 ```
 
 A tool that cannot say why it failed leaves the user reading compiler syntax
 errors instead.
+
+That report is still incomplete: it names missing features and rejected
+standards, but a candidate excluded for its vendor is listed with nothing after
+`missing:`, which explains nothing. Restricting by `--vendor` therefore produces
+the least useful form of the message.
 
 ---
 
@@ -518,10 +532,13 @@ Exit codes:
 | 1    | Operation failed                               |
 | 2    | Invalid usage                                  |
 | 3    | No toolchain satisfies the request             |
-| 4    | Command not implemented yet                    |
+| 4    | Command not implemented yet — reserved, unused |
 
 Exit code 3 is distinct on purpose. "Nothing matches" is an answer, not a
 malfunction, and a caller must be able to tell them apart.
+
+Code 4 is reserved and nothing returns it today: every command in the CLI is
+implemented.
 
 ---
 
@@ -554,23 +571,20 @@ the other.
 
 # 15. Cross Platform
 
-Supported platforms:
+Working today:
 
-Linux
+Linux, with GCC and Clang
 
-Windows
+Planned:
 
-macOS
+Windows and macOS (roadmap 0.3)
 
-Supported compilers:
+MSVC — the vendor is modelled and nothing else
 
-GCC
-
-Clang
-
-MSVC
-
-Linux and GCC come first, matching Molto's roadmap.
+Asset and package selection already branch on `_WIN32` and `__APPLE__`, but
+everything around them assumes POSIX: `/etc/os-release`, `--gcc-install-dir`,
+path handling, `isatty`. Naming a platform as supported before it is proven
+would be the one thing this project exists not to do.
 
 ---
 
@@ -593,11 +607,13 @@ And one of Pickup's own:
 
 # 17. RFC Process
 
-All major features are specified through RFCs.
+Pickup has no RFCs of its own. The process lives in Molto, whose RFCs are
+immutable once accepted, and the ecosystem-wide decisions it records — the
+manifest, the CLI contract, the workspace — bind Pickup as well.
 
-RFCs are immutable once accepted.
-
-New behavior must be introduced through new RFCs.
+What is specific to Pickup is specified here, in this document, and changes to
+it are argued in the commit that makes them. If that stops being enough, the
+answer is Molto's `rfcs/`, not a second process.
 
 ---
 

@@ -1,7 +1,9 @@
 # Bootstrap build for pickup.
-# Pickup is built by a Makefile until molto can build itself; the irony is
-# deliberate, since pickup is what will let molto's manifest stop naming a
-# local compiler. Targets the C23 subset supported by gcc-12 (-std=c2x).
+# molto builds pickup now, from Project.toml, and pickup is what lets molto's
+# manifest name capabilities instead of a local compiler. This Makefile stays
+# for the bootstrap: the first pickup has to be compiled by something that does
+# not need pickup to find a compiler, which is why it hardcodes gcc-12 and the
+# C23 subset (-std=c2x) rather than asking.
 
 # Force gcc-12 over Make's built-in default (cc), but honor an explicit
 # override from the environment or command line (make CC=clang-19 ...).

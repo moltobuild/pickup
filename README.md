@@ -1,7 +1,7 @@
 # Pickup
 
 The toolchain manager of the [Molto](../molto) ecosystem. See [`spec.md`](spec.md)
-and the [RFCs](rfcs/) for the design.
+for the design; the RFC process it inherits lives in [Molto](../molto/rfcs/).
 
 Pickup answers one question truthfully: **which compilers exist on this machine,
 and what can each of them actually do?**
@@ -26,18 +26,26 @@ proves every capability by compiling a program that uses it.
 ## Requirements
 
 - `gcc-12` or newer (the build targets the C23 subset via `-std=c2x`)
-- GNU Make
+- GNU Make, for the bootstrap
+- `curl` and `tar` at runtime, for `install`
 
 ## Build
 
 ```sh
 make build        # produces build/pickup
+molto build       # produces build/debug/pickup
 ```
+
+Both work. `Project.toml` describes the build completely, so [molto](../molto)
+builds pickup exactly as it builds anything else. The Makefile remains because
+the first pickup has to be compiled by something that does not need pickup to
+find a compiler.
 
 ## Test
 
 ```sh
 make test
+molto test
 ```
 
 ## Usage
@@ -49,11 +57,14 @@ pickup tools               # the formatter and linter this machine has, and wher
 pickup doctor              # what stops this machine from building, and what fixes it
 pickup scan                # re-probe everything and rewrite the cache
 pickup resolve [options]   # the best toolchain for a set of requirements
-pickup search <toolchain>  # the versions available to install
-pickup install <toolchain> # download and install one
+pickup search <name>       # the versions available to install
+pickup install <name>      # download and install one
 pickup uninstall <name>    # remove one pickup installed
 pickup default [name]      # show or set the one resolve should prefer
 ```
+
+`search` and `install` take a toolchain — `clang` or `gcc` — or a tool:
+`clang-format`, `clang-tidy`, `cppcheck`.
 
 ### Looking at what the machine has
 
@@ -191,6 +202,10 @@ tools
 C++ half is broken and will stay broken, but on a machine with four toolchains
 that build C and C++ it prevents nothing — and a command that failed over it
 would be one no script could act on. The exit code follows the same rule.
+
+Which is worth spelling out for the run above: a missing formatter is a `✗`, so
+that machine makes `pickup doctor` exit 1. In CI, that is the difference between
+a gate and a report.
 
 A report that only lists problems answers *what is broken* and leaves *what
 does this machine have* unanswered, which is the question asked far more often.
@@ -557,6 +572,17 @@ link_flags = ["--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/11"]
 runtime_dirs = []
 ```
 
+`id` names the toolchain, as `list` and `default` do. Asking with `--std` adds
+one more key, `std_flag = "-std=c2x"`, so the caller passes the flag Pickup
+verified rather than the one it assumed:
+
+```
+$ pickup resolve --std c2x --format toml
+[compiler]
+…
+std_flag = "-std=c2x"
+```
+
 ### The flags are part of the answer
 
 A compiler is not a command; it is a command plus whatever it has to be told
@@ -644,9 +670,10 @@ matches more than one is refused outright — deleting something other than what
 was meant is the failure worth preventing, so `pickup uninstall gcc` on a
 machine with four of them lists them and stops.
 
-The prompt appears where there is someone to answer it. In a pipe there is not,
-and a script that named a toolchain outright meant it; `--yes` skips the
-question anywhere.
+The prompt appears where there is someone to answer it — that is, when stdin is
+a terminal. In a pipe there is nobody, so the removal proceeds unasked, with or
+without `--yes`: a script that named a toolchain outright meant it. `--yes`
+skips the question anywhere.
 
 ### Exit codes
 

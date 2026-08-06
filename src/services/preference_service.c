@@ -10,8 +10,9 @@
 /* The file, in the pickup home rather than in the cache: see the header. */
 #define CONFIG_FILENAME "config.toml"
 
-/* The key this version writes and reads. */
-#define KEY_DEFAULT "default"
+/* The keys this version understands. Only the first is ever written. */
+#define KEY_DEFAULT  "default"
+#define KEY_REGISTRY "registry"
 
 /* Room for the whole file. It holds a handful of short keys; anything larger
    than this is not a configuration file Pickup wrote. */
@@ -181,4 +182,8 @@ bool preference_default_set(const char *id) {
 
 bool preference_default_clear(void) {
     return write_key(KEY_DEFAULT, NULL);
+}
+
+bool preference_registry_get(char *out, size_t out_size) {
+    return read_key(KEY_REGISTRY, out, out_size);
 }

@@ -162,3 +162,41 @@ MOLTEST(preference_ignores_a_value_it_did_not_write) {
 
     fixture_teardown(&fixture);
 }
+
+MOLTEST(preference_reads_the_registry_it_was_pointed_at) {
+    preference_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    char config[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(config_path(&fixture, config, sizeof config));
+    ASSERT_TRUE(fs_write_file(config, "registry = \"https://mine.invalid\"\n"));
+
+    char url[PREFERENCE_URL_MAX];
+    ASSERT_TRUE(preference_registry_get(url, sizeof url));
+    EXPECT_STREQ("https://mine.invalid", url);
+
+    fixture_teardown(&fixture);
+}
+
+MOLTEST(preference_keeps_the_registry_when_the_default_changes) {
+    preference_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    char config[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(config_path(&fixture, config, sizeof config));
+    ASSERT_TRUE(fs_write_file(config, "registry = \"https://mine.invalid\"\n"));
+
+    /* Two keys, one file. Recording a default must not quietly redirect every
+       future install by dropping the other. */
+    ASSERT_TRUE(preference_default_set("gcc@12.3.0"));
+
+    char url[PREFERENCE_URL_MAX];
+    ASSERT_TRUE(preference_registry_get(url, sizeof url));
+    EXPECT_STREQ("https://mine.invalid", url);
+
+    char id[PREFERENCE_VALUE_MAX];
+    ASSERT_TRUE(preference_default_get(id, sizeof id));
+    EXPECT_STREQ("gcc@12.3.0", id);
+
+    fixture_teardown(&fixture);
+}

@@ -29,6 +29,10 @@
 /* Room for a stored preference. The longest is a toolchain identity. */
 #define PREFERENCE_VALUE_MAX PICKUP_ID_MAX
 
+/* Room for a stored URL, which is longer than an identity and the reason
+   PREFERENCE_VALUE_MAX is not enough for every key. */
+#define PREFERENCE_URL_MAX 1024
+
 /*
  * The default toolchain's identity, as `pickup default` stored it.
  *
@@ -51,5 +55,17 @@
 /* Forget the default. Succeeds when there was none to forget, so clearing
    twice is not an error. */
 [[nodiscard]] bool preference_default_clear(void);
+
+/*
+ * Where toolchains are installed from, as `registry = "…"` in the file.
+ *
+ * Read only. Pickup never writes this key: pointing it somewhere else decides
+ * which registry to trust, and a command able to change it would be a command
+ * able to redirect every future install.
+ *
+ * False when the file says nothing about it, which is the ordinary state — the
+ * built-in default is what almost every machine runs against.
+ */
+[[nodiscard]] bool preference_registry_get(char *out, size_t out_size);
 
 #endif /* PICKUP_PREFERENCE_SERVICE_H */

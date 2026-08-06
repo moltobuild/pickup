@@ -99,6 +99,10 @@ static bool entry_push(registry_entry_list *list, const registry_entry *item) {
     return true;
 }
 
+bool registry_entry_list_push(registry_entry_list *list, const registry_entry *item) {
+    return entry_push(list, item);
+}
+
 /* --- kinds --- */
 
 const char *registry_kind_path(registry_kind kind) {

@@ -2,8 +2,7 @@
 
 #include <pickup/exit_code.h>
 #include <pickup/services/http_service.h>
-#include <pickup/sources/conda_source.h>
-#include <pickup/sources/llvm_source.h>
+#include <pickup/sources/registry_source.h>
 #include <pickup/util/format.h>
 #include <pickup/util/progress.h>
 #include <pickup/util/table.h>
@@ -11,177 +10,26 @@
 #include <stdio.h>
 #include <string.h>
 
-/* What can be searched for. The GNU project publishes no binaries of its own,
-   so a GCC comes from conda-forge, where it is packaged as `gxx` — the C++
-   half, which depends on the C one. */
-#define TOOLCHAIN_CLANG "clang"
-#define TOOLCHAIN_LLVM  "llvm"
-#define TOOLCHAIN_GCC   "gcc"
-#define CONDA_GCC_ROOT  "gxx"
+/* A catalogue listing: what exists, and the newest of each. */
+static const char *const catalogue_headers[] = { "NAME", "KIND", "VERSION", "TARGETS" };
+#define CATALOGUE_COLUMNS (sizeof catalogue_headers / sizeof catalogue_headers[0])
 
-static const char *const search_headers[] = { "VERSION", "SIZE", "ASSET" };
-#define SEARCH_COLUMNS (sizeof search_headers / sizeof search_headers[0])
+/* One name's releases: what can be installed, and whether it should be. */
+static const char *const release_headers[] = { "VERSION", "SIZE", "TARGET", "STATUS" };
+#define RELEASE_COLUMNS (sizeof release_headers / sizeof release_headers[0])
 
-/* What one build of a conda package is shown as. */
-static const char *const conda_headers[] = { "VERSION", "BUILD", "PACKAGE" };
-#define CONDA_COLUMNS (sizeof conda_headers / sizeof conda_headers[0])
+/* What a withdrawn release is marked with. Still listed: it remains
+   resolvable, and hiding it would leave an existing install unexplained. */
+#define STATUS_YANKED "yanked"
+#define STATUS_NONE   ""
 
-static bool is_clang(const char *name) {
-    return name != NULL
-        && (strcmp(name, TOOLCHAIN_CLANG) == 0 || strcmp(name, TOOLCHAIN_LLVM) == 0);
-}
+/* Room for the joined target names of one catalogue row. */
+#define TARGETS_CELL_MAX (REGISTRY_TARGETS_MAX * (REGISTRY_TARGET_MAX + 2))
 
-static bool is_gcc(const char *name) {
-    return name != NULL && strcmp(name, TOOLCHAIN_GCC) == 0;
-}
-
-/* Only the newest build of each version is listed.
-
-   The channel keeps every rebuild, and a dozen lines saying 16.1.0 differing
-   in a hash answer a question nobody asked: what is on offer is the version,
-   and which build of it to take is the resolver's business. */
-static bool version_already_listed(const conda_list *list, size_t upto,
-                                   const char *version) {
-    for (size_t i = 0; i < upto; i++) {
-        if (strcmp(list->items[i].version, version) == 0)
-            return true;
-    }
-    return false;
-}
-
-static void print_conda_text(const conda_list *list) {
-    table columns;
-    table_init(&columns, conda_headers, CONDA_COLUMNS);
-
-    for (size_t i = 0; i < list->count; i++) {
-        if (version_already_listed(list, i, list->items[i].version))
-            continue;
-        const char *cells[CONDA_COLUMNS] = {
-            list->items[i].version, list->items[i].build, list->items[i].name
-        };
-        table_fit_row(&columns, cells);
-    }
-
-    table_print_header(&columns, stdout);
-    for (size_t i = 0; i < list->count; i++) {
-        if (version_already_listed(list, i, list->items[i].version))
-            continue;
-        const char *cells[CONDA_COLUMNS] = {
-            list->items[i].version, list->items[i].build, list->items[i].name
-        };
-        table_print_row(&columns, cells, stdout);
-    }
-}
-
-static void print_conda_toml(const conda_list *list) {
-    size_t shown = 0;
-    for (size_t i = 0; i < list->count; i++) {
-        if (version_already_listed(list, i, list->items[i].version))
-            continue;
-        const conda_package *package = &list->items[i];
-        if (shown++ > 0)
-            printf("\n");
-        printf("[release.%zu]\n", shown - 1);
-        printf("version = \"%s\"\n", package->version);
-        printf("build = \"%s\"\n", package->build);
-        printf("package = \"%s\"\n", package->name);
-        printf("url = \"%s\"\n", package->url);
-        printf("size = %lld\n", package->size);
-    }
-}
-
-/* What the spinner says while conda-forge answers. Named for what is actually
-   being fetched: a listing of one package's builds, not an index of releases. */
-#define CONDA_FETCH_LABEL "fetching the conda-forge listing"
-
-static void watch_conda_fetch(size_t frame, void *context) {
-    progress_line *line = context;
-    if (!progress_is_interactive(stderr))
-        return;
-    spinner_wait(stderr, CONDA_FETCH_LABEL, frame);
-    line->drawn = true;
-}
-
-/* Search conda-forge for the GCCs it publishes for this host. */
-static int search_gcc(const search_command_request *request) {
-    conda_list list;
-    progress_line line = { .drawn = false };
-    /* Watched for the same reason the LLVM one is: this is the part that
-       touches the network, and a command that says nothing while it waits
-       looks like one that has died. */
-    bool fetched = conda_fetch_packages_watched(CONDA_GCC_ROOT, request->version,
-                                                request->refresh, watch_conda_fetch,
-                                                &line, &list);
-    progress_line_clear(stderr, &line);
-
-    if (!fetched) {
-        fprintf(stderr, "pickup: could not read the conda-forge channel\n");
-        conda_list_free(&list);
-        return exit_failure;
-    }
-
-    if (list.count == 0) {
-        if (request->version != NULL && request->version[0] != '\0')
-            fprintf(stderr, "pickup: no gcc matches version %s\n", request->version);
-        else
-            fprintf(stderr, "pickup: no gcc is published for this machine\n");
-        conda_list_free(&list);
-        return exit_no_match;
-    }
-
-    if (request->as_toml)
-        print_conda_toml(&list);
-    else
-        print_conda_text(&list);
-
-    conda_list_free(&list);
-    return exit_ok;
-}
-
-static void print_text(const release_list *list) {
-    table columns;
-    table_init(&columns, search_headers, SEARCH_COLUMNS);
-
-    /* Measured before anything is printed, so the columns fit the longest
-       asset name rather than a guess. */
-    for (size_t i = 0; i < list->count; i++) {
-        char size[FORMAT_SIZE_MAX];
-        format_size(list->items[i].size, size, sizeof size);
-        const char *cells[SEARCH_COLUMNS] = {
-            list->items[i].version, size, list->items[i].asset
-        };
-        table_fit_row(&columns, cells);
-    }
-
-    table_print_header(&columns, stdout);
-    for (size_t i = 0; i < list->count; i++) {
-        char size[FORMAT_SIZE_MAX];
-        format_size(list->items[i].size, size, sizeof size);
-        const char *cells[SEARCH_COLUMNS] = {
-            list->items[i].version, size, list->items[i].asset
-        };
-        table_print_row(&columns, cells, stdout);
-    }
-}
-
-static void print_toml(const release_list *list) {
-    for (size_t i = 0; i < list->count; i++) {
-        const release_asset *asset = &list->items[i];
-        printf("[release.%zu]\n", i);
-        printf("version = \"%s\"\n", asset->version);
-        printf("asset = \"%s\"\n", asset->asset);
-        printf("url = \"%s\"\n", asset->url);
-        printf("sha256 = \"%s\"\n", asset->sha256);
-        printf("size = %lld\n", asset->size);
-        if (i + 1 < list->count)
-            printf("\n");
-    }
-}
-
-/* What the spinner says while the index is on its way. A spinner rather than a
-   bar: the API never announces how long its answer is, so there is no fraction
-   to draw. */
-#define FETCH_LABEL "fetching the release index"
+/* What the spinner says while the registry answers. A spinner rather than a
+   bar: the answer's length is never announced, so there is no fraction to
+   draw. */
+#define FETCH_LABEL "asking the registry"
 
 /* On stderr, for the same reason the table is on stdout: one of them is the
    answer and the other is not. */
@@ -193,52 +41,236 @@ static void watch_fetch(size_t frame, void *context) {
     line->drawn = true;
 }
 
-int search_command_run(const search_command_request *request) {
-    const char *name = request->name;
-    if (!is_clang(name) && !is_gcc(name)) {
-        fprintf(stderr, "pickup: nothing to search for named '%s'\n",
-                name != NULL ? name : "");
-        fprintf(stderr, "  try: pickup search %s, or pickup search %s\n",
-                TOOLCHAIN_CLANG, TOOLCHAIN_GCC);
-        return exit_usage_error;
+static void report_registry(void) {
+    char base[REGISTRY_URL_MAX];
+    if (registry_base_url(base, sizeof base))
+        fprintf(stderr, "  registry: %s\n", base);
+}
+
+/* The targets of one row, joined for a cell. */
+static void join_targets(const registry_entry *entry, char *out, size_t out_size) {
+    out[0] = '\0';
+    size_t used = 0;
+    for (size_t i = 0; i < entry->target_count; i++) {
+        int written = snprintf(out + used, out_size - used, "%s%s",
+                               used > 0 ? ", " : "", entry->targets[i]);
+        if (written < 0 || (size_t)written >= out_size - used)
+            return;
+        used += (size_t)written;
     }
-    if (!http_available()) {
-        fprintf(stderr, "pickup: %s is required to reach the release index\n",
-                http_requirement());
+}
+
+/* --- what exists --- */
+
+static void print_catalogue_text(const registry_entry_list *list) {
+    table columns;
+    table_init(&columns, catalogue_headers, CATALOGUE_COLUMNS);
+
+    /* Measured before anything is printed, so the columns fit the longest name
+       rather than a guess. */
+    for (size_t pass = 0; pass < 2; pass++) {
+        if (pass == 1)
+            table_print_header(&columns, stdout);
+        for (size_t i = 0; i < list->count; i++) {
+            char targets[TARGETS_CELL_MAX];
+            join_targets(&list->items[i], targets, sizeof targets);
+            const char *cells[CATALOGUE_COLUMNS] = {
+                list->items[i].name, registry_kind_name(list->items[i].kind),
+                list->items[i].latest_version, targets,
+            };
+            if (pass == 0)
+                table_fit_row(&columns, cells);
+            else
+                table_print_row(&columns, cells, stdout);
+        }
+    }
+}
+
+static void print_catalogue_toml(const registry_entry_list *list) {
+    for (size_t i = 0; i < list->count; i++) {
+        const registry_entry *entry = &list->items[i];
+        if (i > 0)
+            printf("\n");
+        printf("[entry.%zu]\n", i);
+        printf("name = \"%s\"\n", entry->name);
+        printf("kind = \"%s\"\n", registry_kind_name(entry->kind));
+        printf("latest_version = \"%s\"\n", entry->latest_version);
+        printf("versions = %zu\n", entry->versions);
+        printf("targets = [");
+        for (size_t j = 0; j < entry->target_count; j++)
+            printf("%s\"%s\"", j > 0 ? ", " : "", entry->targets[j]);
+        printf("]\n");
+    }
+}
+
+/*
+ * Everything published, across the catalogues.
+ *
+ * Gathered into one list rather than printed one catalogue at a time, so the
+ * columns are measured against every row and a toolchain and a tool line up
+ * under the same headings. What the registry separates by kind is, to someone
+ * asking what they can install, one list.
+ */
+static int search_everything(const search_command_request *request) {
+    static const registry_kind kinds[] = { registry_kind_toolchain, registry_kind_tool };
+
+    registry_entry_list all;
+    registry_entry_list_init(&all);
+    progress_line line = { .drawn = false };
+
+    bool any = false;
+    for (size_t i = 0; i < sizeof kinds / sizeof kinds[0]; i++) {
+        registry_entry_list list;
+        if (!registry_fetch_catalogue_watched(kinds[i], request->refresh,
+                                              watch_fetch, &line, &list)) {
+            registry_entry_list_free(&list);
+            continue;
+        }
+        any = true;
+        for (size_t j = 0; j < list.count; j++) {
+            if (!registry_entry_list_push(&all, &list.items[j]))
+                break;
+        }
+        registry_entry_list_free(&list);
+    }
+    progress_line_clear(stderr, &line);
+
+    if (!any) {
+        registry_entry_list_free(&all);
+        fprintf(stderr, "pickup: could not read what the registry publishes\n");
+        report_registry();
         return exit_failure;
     }
 
-    if (is_gcc(name))
-        return search_gcc(request);
+    if (request->as_toml)
+        print_catalogue_toml(&all);
+    else
+        print_catalogue_text(&all);
 
-    release_list list;
+    registry_entry_list_free(&all);
+    return exit_ok;
+}
+
+/* --- one name's releases --- */
+
+static void print_releases_text(const registry_artifact_list *list) {
+    table columns;
+    table_init(&columns, release_headers, RELEASE_COLUMNS);
+
+    for (size_t pass = 0; pass < 2; pass++) {
+        if (pass == 1)
+            table_print_header(&columns, stdout);
+        for (size_t i = 0; i < list->count; i++) {
+            char size[FORMAT_SIZE_MAX];
+            format_size(list->items[i].size_bytes, size, sizeof size);
+            const char *cells[RELEASE_COLUMNS] = {
+                list->items[i].version, size, list->items[i].target,
+                list->items[i].yanked ? STATUS_YANKED : STATUS_NONE,
+            };
+            if (pass == 0)
+                table_fit_row(&columns, cells);
+            else
+                table_print_row(&columns, cells, stdout);
+        }
+    }
+}
+
+static void print_releases_toml(const registry_artifact_list *list) {
+    for (size_t i = 0; i < list->count; i++) {
+        const registry_artifact *artifact = &list->items[i];
+        if (i > 0)
+            printf("\n");
+        printf("[release.%zu]\n", i);
+        printf("name = \"%s\"\n", artifact->name);
+        printf("kind = \"%s\"\n", registry_kind_name(artifact->kind));
+        printf("version = \"%s\"\n", artifact->version);
+        printf("target = \"%s\"\n", artifact->target);
+        printf("format = \"%s\"\n", artifact->format);
+        printf("sha256 = \"%s\"\n", artifact->checksum);
+        printf("size = %lld\n", artifact->size_bytes);
+        printf("yanked = %s\n", artifact->yanked ? "true" : "false");
+        printf("url = \"%s\"\n", artifact->download_url);
+    }
+}
+
+/* What the registry matches for a name it does not publish. Never a failure:
+   the answer is a list of what does exist. */
+static int suggest(const char *name) {
+    registry_entry_list matches;
+    if (!registry_search_watched(name, NULL, NULL, &matches) || matches.count == 0) {
+        registry_entry_list_free(&matches);
+        fprintf(stderr, "pickup: nothing is published as '%s'\n", name);
+        report_registry();
+        return exit_no_match;
+    }
+
+    fprintf(stderr, "pickup: nothing is published as '%s'; these match:\n", name);
+    print_catalogue_text(&matches);
+    registry_entry_list_free(&matches);
+    return exit_no_match;
+}
+
+static int search_one(const search_command_request *request) {
+    registry_entry entry;
+    if (!registry_find(request->name, request->refresh, &entry))
+        return suggest(request->name);
+
+    const char *target = registry_host_target();
+    if (target[0] == '\0') {
+        fprintf(stderr, "pickup: the registry publishes nothing for this machine\n");
+        return exit_no_match;
+    }
+
+    registry_artifact_list list;
     progress_line line = { .drawn = false };
-    bool fetched = llvm_fetch_releases_watched(request->version, request->refresh,
-                                               watch_fetch, &line, &list);
+    bool fetched = registry_fetch_releases_watched(entry.kind, request->name,
+                                                   request->version, target,
+                                                   request->refresh, watch_fetch,
+                                                   &line, &list);
     progress_line_clear(stderr, &line);
 
     if (!fetched) {
-        fprintf(stderr, "pickup: could not read the list of releases\n");
+        fprintf(stderr, "pickup: could not read what the registry publishes for %s\n",
+                request->name);
+        report_registry();
+        registry_artifact_list_free(&list);
         return exit_failure;
     }
 
     if (list.count == 0) {
-        /* Nothing matched is an answer, and gets the exit code that says so
-           rather than the one that means something broke. */
         if (request->version != NULL && request->version[0] != '\0')
-            fprintf(stderr, "pickup: no %s release matches version %s\n",
-                    name, request->version);
+            fprintf(stderr, "pickup: no %s matches version %s\n",
+                    request->name, request->version);
         else
-            fprintf(stderr, "pickup: no %s release ships a build for this machine\n", name);
-        release_list_free(&list);
+            fprintf(stderr, "pickup: no %s is published for %s\n",
+                    request->name, target);
+        registry_artifact_list_free(&list);
         return exit_no_match;
     }
 
     if (request->as_toml)
-        print_toml(&list);
+        print_releases_toml(&list);
     else
-        print_text(&list);
+        print_releases_text(&list);
 
-    release_list_free(&list);
+    registry_artifact_list_free(&list);
     return exit_ok;
+}
+
+int search_command_run(const search_command_request *request) {
+    if (!http_available()) {
+        fprintf(stderr, "pickup: %s is required to reach the registry\n",
+                http_requirement());
+        return exit_failure;
+    }
+
+    if (request->name == NULL || request->name[0] == '\0')
+        return search_everything(request);
+
+    if (!registry_name_is_simple(request->name)) {
+        fprintf(stderr, "pickup: '%s' is not a name the registry could publish\n",
+                request->name);
+        return exit_usage_error;
+    }
+    return search_one(request);
 }

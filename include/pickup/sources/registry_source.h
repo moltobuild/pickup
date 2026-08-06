@@ -114,6 +114,11 @@ void registry_artifact_list_free(registry_artifact_list *list);
 void registry_entry_list_init(registry_entry_list *list);
 void registry_entry_list_free(registry_entry_list *list);
 
+/* Append to a list. Public because more than one catalogue is shown as one
+   table, and joining them is the caller's business rather than the parser's. */
+[[nodiscard]] bool registry_entry_list_push(registry_entry_list *list,
+                                            const registry_entry *item);
+
 /* --- reading what the registry says --- */
 
 /* A catalogue index: every name published under one kind. */

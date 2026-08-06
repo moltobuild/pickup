@@ -64,22 +64,18 @@ static const cli_option search_options[] = {
     { "--version", 'v', cli_opt_value, "<version>",
       "Only versions matching this, whole or partial", NULL },
     { "--refresh", 0, cli_opt_flag, NULL,
-      "Ask the source again instead of using the cached index", NULL },
+      "Ask the registry again instead of using the cached catalogue", NULL },
     { "--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT },
 };
 
 /* What `pickup install` accepts. */
 static const cli_option install_options[] = {
     { "--version", 'v', cli_opt_value, "<version>",
-      "Version to install, whole or partial (default: the latest stable)", NULL },
-    { "--allow-unverified", 0, cli_opt_flag, NULL,
-      "Install even if the release publishes no sha256", NULL },
+      "Version to install, whole or partial (default: the newest offered)", NULL },
     { "--dry-run", 0, cli_opt_flag, NULL,
       "Report what would be installed and download nothing", NULL },
     { "--refresh", 0, cli_opt_flag, NULL,
-      "Ask the source again instead of using the cached index", NULL },
-    { "--full", 0, cli_opt_flag, NULL,
-      "Unpack the entire release instead of only what is needed to build", NULL },
+      "Ask the registry again instead of using the cached catalogue", NULL },
 };
 
 /* What `pickup uninstall` accepts. */
@@ -136,10 +132,8 @@ static int handle_install(const cli_args *args) {
     const install_command_request request = {
         .name = cli_args_positional(args, 0),
         .version = cli_args_option(args, "--version"),
-        .allow_unverified = cli_args_flag(args, "--allow-unverified"),
         .dry_run = cli_args_flag(args, "--dry-run"),
         .refresh = cli_args_flag(args, "--refresh"),
-        .full = cli_args_flag(args, "--full"),
     };
     return install_command_run(&request);
 }
@@ -182,9 +176,9 @@ static const cli_command commands[] = {
       handle_doctor },
     { "resolve", "Find the best toolchain for a set of requirements", NULL,
       resolve_options, sizeof resolve_options / sizeof resolve_options[0], handle_resolve },
-    { "search", "List the versions of a toolchain available to install", "<clang|gcc>",
+    { "search", "List what the registry publishes, or the versions of one of it", "[name]",
       search_options, sizeof search_options / sizeof search_options[0], handle_search },
-    { "install", "Download and install a toolchain", "<clang|gcc>",
+    { "install", "Download and install a toolchain or a tool from the registry", "<name>",
       install_options, sizeof install_options / sizeof install_options[0],
       handle_install },
     { "uninstall", "Remove a toolchain pickup installed", "<toolchain>",

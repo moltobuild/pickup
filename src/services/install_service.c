@@ -5,7 +5,6 @@
 #include <pickup/detect/recipe.h>
 #include <pickup/detect/scanner.h>
 #include <pickup/services/archive_service.h>
-#include <pickup/services/conda_service.h>
 #include <pickup/services/fs_service.h>
 #include <pickup/services/http_service.h>
 #include <pickup/services/process_service.h>
@@ -16,23 +15,29 @@
 #include <stdio.h>
 #include <string.h>
 
-/* The archives carry one top-level directory named after the release; dropping
-   it puts bin and lib straight into the toolchain directory, which is where
-   the scanner expects to find them. */
-#define STRIP_TOP_LEVEL 1
+/*
+ * The registry publishes archives whose bin and lib are already at the top, so
+ * there is no leading component to drop. That is a property of what it packs
+ * rather than a guess about someone else's layout, and it is why nothing here
+ * has to know how the archive was assembled.
+ */
+#define STRIP_NOTHING 0
 
 /* Where a toolchain is assembled before it takes its real name. */
 #define PARTIAL_SUFFIX ".partial"
 
-/* The compiler a freshly unpacked LLVM is identified by. */
-#define INSTALLED_DRIVER "bin/clang"
+/* Where a prefix keeps its programs. */
+#define PREFIX_BIN "bin"
 
-/* What the progress bar says while downloading. */
-#define DOWNLOAD_LABEL_FORMAT "downloading clang %s"
-#define EXTRACT_LABEL_FORMAT  "extracting clang %s"
-#define VERIFY_LABEL_FORMAT   "verifying clang %s"
+/* What the progress bar says. */
+#define DOWNLOAD_LABEL_FORMAT "downloading %s %s"
+#define EXTRACT_LABEL_FORMAT  "extracting %s %s"
+#define VERIFY_LABEL_FORMAT   "verifying %s %s"
 #define PREPARING_LABEL       "preparing the extraction"
-#define LABEL_SIZE 64
+#define LABEL_SIZE (REGISTRY_NAME_MAX + REGISTRY_VERSION_MAX + 32)
+
+/* The name a downloaded archive is kept under while it is on its way in. */
+#define ARCHIVE_NAME_FORMAT "%s-%s-%s.%s"
 
 static install_report report_of(install_status status) {
     install_report report = { 0 };
@@ -41,38 +46,47 @@ static install_report report_of(install_status status) {
 }
 
 bool install_succeeded(install_status status) {
-    return status == install_ok || status == install_ok_unverified
-        || status == install_ok_unpruned;
+    return status == install_ok;
 }
 
 const char *install_status_message(install_status status) {
     switch (status) {
-    case install_ok:              return "installed";
-    case install_ok_unverified:   return "installed, integrity not verified";
-    case install_ok_unpruned:     return "installed in full: the minimal profile did not compile";
-    case install_no_downloader:   return "curl is required to download toolchains";
-    case install_no_extractor:    return "tar is required to unpack toolchains";
-    case install_unverifiable:    return "this release publishes no sha256 digest";
-    case install_download_failed: return "the download failed";
-    case install_hash_mismatch:   return "sha256 mismatch, archive discarded";
-    case install_extract_failed:  return "the archive could not be unpacked";
-    case install_not_a_toolchain: return "the archive holds no usable compiler";
-    case install_path_error:      return "the pickup home could not be prepared";
+    case install_ok:                 return "installed";
+    case install_no_downloader:      return "curl is required to download from the registry";
+    case install_no_extractor:       return "tar is required to unpack what the registry packs";
+    case install_no_zstd:            return "this tar cannot open a zstd archive";
+    case install_unsupported_format: return "the registry packed this in a way this build cannot open";
+    case install_yanked:             return "withdrawn by the registry, and not to be used for new builds";
+    case install_download_failed:    return "the download failed";
+    case install_hash_mismatch:      return "sha256 mismatch, archive discarded";
+    case install_extract_failed:     return "the archive could not be unpacked";
+    case install_not_a_toolchain:    return "the archive holds no usable compiler";
+    case install_not_a_tool:         return "the archive holds no binary that answers";
+    case install_path_error:         return "the pickup home could not be prepared";
     }
     return "unknown failure";
 }
 
-/* Download the asset into the downloads directory. */
-static bool fetch_archive(const release_asset *asset, char *out, size_t out_size) {
+/* --- getting the blob --- */
+
+/* Download the artifact into the downloads directory. */
+static bool fetch_archive(const registry_artifact *artifact, char *out, size_t out_size) {
     char downloads[PICKUP_PATHS_MAX];
     if (!paths_downloads(downloads, sizeof downloads) || !fs_make_dirs(downloads))
         return false;
-    if (!fs_format_path(out, out_size, "%s/%s", downloads, asset->asset))
+
+    /* Named from the coordinate rather than from the URL: what the blob is
+       called is the registry's business, and a name taken from a URL is a name
+       taken from something that may contain a path. */
+    if (!fs_format_path(out, out_size, "%s/" ARCHIVE_NAME_FORMAT, downloads,
+                        artifact->name, artifact->version, artifact->target,
+                        artifact->format))
         return false;
 
     char label[LABEL_SIZE];
-    snprintf(label, sizeof label, DOWNLOAD_LABEL_FORMAT, asset->version);
-    return http_download_with_progress(asset->url, out, asset->size, label);
+    snprintf(label, sizeof label, DOWNLOAD_LABEL_FORMAT, artifact->name, artifact->version);
+    return http_download_with_progress(artifact->download_url, out,
+                                       artifact->size_bytes, label);
 }
 
 /* Redraw the verification bar, but only when the figure it shows would change:
@@ -92,11 +106,11 @@ static void watch_verify(long long done, long long total, void *context) {
     progress_draw(stdout, label, done, total);
 }
 
-/* Compare the archive against the digest the source published. */
-static bool digest_matches(const char *archive, const release_asset *asset,
+/* Compare the archive against the digest the registry published. */
+static bool digest_matches(const char *archive, const registry_artifact *artifact,
                            install_report *report) {
     char label[LABEL_SIZE];
-    snprintf(label, sizeof label, VERIFY_LABEL_FORMAT, asset->version);
+    snprintf(label, sizeof label, VERIFY_LABEL_FORMAT, artifact->name, artifact->version);
 
     bool interactive = progress_is_interactive(stdout);
     bool hashed = sha256_file_watched(archive, report->actual, watch_verify, label);
@@ -105,46 +119,44 @@ static bool digest_matches(const char *archive, const release_asset *asset,
     if (!hashed)
         return false;
 
-    (void)fs_format_path(report->expected, sizeof report->expected, "%s", asset->sha256);
-    return sha256_hex_equal(report->actual, asset->sha256);
+    (void)fs_format_path(report->expected, sizeof report->expected, "%s",
+                         artifact->checksum);
+    return sha256_hex_equal(report->actual, artifact->checksum);
 }
 
-/* Where a toolchain is assembled, emptied of anything an interrupted install
-   may have left. */
-static bool prepare_partial(char *partial, size_t partial_size) {
-    char toolchains[PICKUP_PATHS_MAX];
-    if (!paths_toolchains(toolchains, sizeof toolchains) || !fs_make_dirs(toolchains))
+/* --- assembling it --- */
+
+/* Where a thing is assembled, emptied of anything an interrupted install may
+   have left.
+
+   Staged inside the directory it will be renamed into, so the rename that
+   finishes the install stays within one filesystem and therefore stays
+   atomic. */
+static bool prepare_partial(const char *root, char *partial, size_t partial_size) {
+    if (!fs_make_dirs(root))
         return false;
-    if (!fs_format_path(partial, partial_size, "%s/%s", toolchains, PARTIAL_SUFFIX))
+    if (!fs_format_path(partial, partial_size, "%s/%s", root, PARTIAL_SUFFIX))
         return false;
     return fs_remove_tree(partial) && fs_make_dirs(partial);
 }
 
-/* Unpack, either the profile or the whole release. */
-static bool extract_to_partial(const char *archive, const release_asset *asset,
-                               bool full, const char *partial) {
+static bool extract_to_partial(const char *archive, const registry_artifact *artifact,
+                               const char *partial) {
     char label[LABEL_SIZE];
-    snprintf(label, sizeof label, EXTRACT_LABEL_FORMAT, asset->version);
+    snprintf(label, sizeof label, EXTRACT_LABEL_FORMAT, artifact->name, artifact->version);
 
-    archive_request request = {
-        .strip_components = STRIP_TOP_LEVEL,
+    /* Nothing is selected out of it. The registry publishes what a build uses
+       and nothing else, so the choice of what to keep was made when it was
+       packed, by something that knew. */
+    const archive_request request = {
+        .strip_components = STRIP_NOTHING,
         .label = label,
         .waiting_label = PREPARING_LABEL,
     };
-    if (!full) {
-        request.patterns = llvm_minimal_patterns(&request.pattern_count);
-        request.excludes = llvm_minimal_excludes(&request.exclude_count);
-    }
     return archive_extract_selected(archive, partial, &request);
 }
 
-/* Count what the installed compiler actually compiles.
-
-   This is the check that makes pruning safe to attempt: the profile is a guess
-   about somebody else's layout, and a guess that dropped something essential
-   shows up here as a compiler that proves nothing. Leaving one feature behind
-   would be missed, but leaving out the builtin headers, the runtime or the
-   binary itself cannot be. */
+/* Count what the installed compiler actually compiles. */
 static size_t count_proven_features(const toolchain *chain) {
     capability_set proven = capability_probe(chain->path, lang_c);
 
@@ -157,47 +169,6 @@ static size_t count_proven_features(const toolchain *chain) {
     }
     return count;
 }
-
-/* Ask what was unpacked to identify itself, which also proves it runs. */
-static bool identify_installed(const char *partial, toolchain *out) {
-    char driver[PICKUP_PATHS_MAX];
-    if (!fs_format_path(driver, sizeof driver, "%s/%s", partial, INSTALLED_DRIVER))
-        return false;
-    if (!fs_path_exists(driver))
-        return false;
-    return probe_identify(driver, out);
-}
-
-/* Move the finished tree to the name it is found under from now on. */
-static bool adopt(const char *partial, const toolchain *chain,
-                  char *final_path, size_t final_size) {
-    char version[32];
-    toolchain_version_format(chain->version, version, sizeof version);
-
-    const char *target = chain->target[0] != '\0' ? chain->target : "unknown";
-    if (!paths_toolchain_dir(toolchain_vendor_name(chain->vendor), version, target,
-                             final_path, final_size))
-        return false;
-
-    /* Reinstalling replaces what was there rather than merging into it. */
-    if (!fs_remove_tree(final_path))
-        return false;
-    return fs_rename(partial, final_path);
-}
-
-/* --- a toolchain that arrives as a set of packages --- */
-
-/* Defined below, and used by both kinds of install: whatever was unpacked is
-   left configured to build before it is reported as installed. */
-static void configure_installed(install_report *report);
-
-/* Where the compiler of a conda prefix lives. */
-#define CONDA_BIN "bin"
-
-/* What the progress bar says while a package comes down. Sized for the longest
-   package name the channel publishes rather than for the ones seen so far. */
-#define PACKAGE_LABEL_FORMAT "downloading %s %s"
-#define PACKAGE_LABEL_SIZE (CONDA_NAME_MAX + CONDA_VERSION_MAX + 32)
 
 /*
  * The C drivers a toolchain is identified through, in order of preference.
@@ -242,14 +213,13 @@ static bool identify_by_scanning(const char *bin, toolchain *out) {
  * Find the compiler in a prefix by looking for one, rather than by knowing its
  * name.
  *
- * A conda toolchain installs its driver under the target triple —
- * `x86_64-conda-linux-gnu-gcc` — and a plain `gcc` beside it only when a
- * particular package happened to be part of the closure. Both are things the
- * channel decides, so neither is assumed.
+ * What a toolchain calls its driver is the publisher's decision: one arrives as
+ * `clang`, another only under its target triple as `x86_64-conda-linux-gnu-gcc`.
+ * Neither is assumed.
  */
 static bool identify_in_prefix(const char *prefix, toolchain *out) {
     char bin[PICKUP_PATHS_MAX];
-    if (!fs_format_path(bin, sizeof bin, "%s/%s", prefix, CONDA_BIN))
+    if (!fs_format_path(bin, sizeof bin, "%s/%s", prefix, PREFIX_BIN))
         return false;
 
     for (size_t i = 0; i < PREFERRED_DRIVER_COUNT; i++) {
@@ -266,12 +236,17 @@ static bool identify_in_prefix(const char *prefix, toolchain *out) {
  * answers": the binary is run and asked to identify itself. Same principle as
  * the toolchain check — nothing is adopted for having unpacked — applied to
  * what this kind of thing actually does.
+ *
+ * `binary` is the path the registry published, relative to the prefix. When it
+ * published none, the name it is known by is the reasonable guess.
  */
-static bool tool_answers(const char *prefix, const char *tool) {
+static bool tool_answers(const char *prefix, const registry_artifact *artifact) {
     char path[PICKUP_PATHS_MAX];
-    if (!fs_format_path(path, sizeof path, "%s/%s/%s", prefix, CONDA_BIN, tool))
-        return false;
-    if (!fs_path_exists(path))
+    bool composed = artifact->binary[0] != '\0'
+        ? fs_format_path(path, sizeof path, "%s/%s", prefix, artifact->binary)
+        : fs_format_path(path, sizeof path, "%s/%s/%s", prefix, PREFIX_BIN,
+                         artifact->name);
+    if (!composed || !fs_path_exists(path))
         return false;
 
     const char *argv[] = { path, "--version", NULL };
@@ -279,22 +254,30 @@ static bool tool_answers(const char *prefix, const char *tool) {
     return result.completed && result.exit_code == 0;
 }
 
-/* Move a finished tool to the name it is found under from now on.
+/* Move the finished tree to the name it is found under from now on. */
+static bool adopt(const char *partial, const toolchain *chain,
+                  char *final_path, size_t final_size) {
+    char version[32];
+    toolchain_version_format(chain->version, version, sizeof version);
 
-   Named after the package and the version that was resolved, so two versions
-   of one tool do not collide and neither shadows the other. */
-static bool adopt_tool(const char *partial, const char *tool,
-                       const conda_closure *closure, char *final_path,
-                       size_t final_size) {
-    char tools[PICKUP_PATHS_MAX];
-    if (!paths_tools(tools, sizeof tools) || !fs_make_dirs(tools))
+    const char *target = chain->target[0] != '\0' ? chain->target : "unknown";
+    if (!paths_toolchain_dir(toolchain_vendor_name(chain->vendor), version, target,
+                             final_path, final_size))
         return false;
 
-    /* The root of the closure is what was asked for, and its version is the
-       one worth naming; the rest are things it happened to need. */
-    const char *version = closure->packages.count > 0
-        ? closure->packages.items[0].version : "unknown";
-    if (!fs_format_path(final_path, final_size, "%s/%s-%s", tools, tool, version))
+    /* Reinstalling replaces what was there rather than merging into it. */
+    if (!fs_remove_tree(final_path))
+        return false;
+    return fs_rename(partial, final_path);
+}
+
+/* The same for a tool, named after what was asked for and the version that
+   arrived, so two versions of one tool do not collide. */
+static bool adopt_tool(const char *partial, const char *tools,
+                       const registry_artifact *artifact,
+                       char *final_path, size_t final_size) {
+    if (!fs_format_path(final_path, final_size, "%s/%s-%s", tools,
+                        artifact->name, artifact->version))
         return false;
 
     if (!fs_remove_tree(final_path))
@@ -302,174 +285,23 @@ static bool adopt_tool(const char *partial, const char *tool,
     return fs_rename(partial, final_path);
 }
 
-/* Bring one package down and check it against the digest the channel
-   published for it. */
-static bool fetch_and_verify(conda_package *package, bool allow_unverified,
-                             char *out, size_t out_size, install_report *report) {
-    char downloads[PICKUP_PATHS_MAX];
-    if (!paths_downloads(downloads, sizeof downloads) || !fs_make_dirs(downloads))
-        return false;
-    if (!fs_format_path(out, out_size, "%s/%s", downloads, package->file))
-        return false;
-
-    /* Asked for before the transfer, so a package that cannot be verified is
-       refused without spending the bandwidth first. */
-    bool verifiable = conda_fetch_sha256(package);
-    if (!verifiable && !allow_unverified)
-        return false;
-
-    char label[PACKAGE_LABEL_SIZE];
-    snprintf(label, sizeof label, PACKAGE_LABEL_FORMAT, package->name, package->version);
-    if (!http_download_with_progress(package->url, out, package->size, label))
-        return false;
-
-    if (!verifiable)
-        return true;
-
-    char actual[SHA256_HEX_SIZE];
-    if (!sha256_file(out, actual) || !sha256_hex_equal(actual, package->sha256)) {
-        (void)fs_format_path(report->expected, sizeof report->expected, "%s",
-                             package->sha256);
-        (void)fs_format_path(report->actual, sizeof report->actual, "%s", actual);
-        remove(out);
-        return false;
-    }
-    return true;
-}
-
-install_report install_run_closure(const conda_closure *closure,
-                                   const install_closure_request *request) {
-    if (!http_available())
-        return report_of(install_no_downloader);
-    if (!archive_available())
-        return report_of(install_no_extractor);
-    if (closure->packages.count == 0)
-        return report_of(install_not_a_toolchain);
-
-    char partial[PICKUP_PATHS_MAX];
-    if (!prepare_partial(partial, sizeof partial))
-        return report_of(install_path_error);
-
-    install_report report = report_of(install_ok);
-    bool verified_all = true;
-
-    for (size_t i = 0; i < closure->packages.count; i++) {
-        conda_package package = closure->packages.items[i];
-
-        char archive[PICKUP_PATHS_MAX];
-        if (!fetch_and_verify(&package, request->allow_unverified, archive,
-                              sizeof archive, &report)) {
-            (void)fs_remove_tree(partial);
-            /* A digest that was published and did not match is a different
-               failure from one that was never published at all. */
-            return report_of(report.actual[0] != '\0' ? install_hash_mismatch
-                             : (package.sha256[0] == '\0' ? install_unverifiable
-                                                          : install_download_failed));
-        }
-        verified_all = verified_all && package.sha256[0] != '\0';
-
-        /* Every package over the same prefix, which is what lets the parts of
-           a compiler find each other, and the build prefix rewritten out of
-           each as it lands. */
-        bool unpacked = conda_install_package(archive, partial);
-        remove(archive);
-        if (!unpacked) {
-            (void)fs_remove_tree(partial);
-            return report_of(install_extract_failed);
-        }
-    }
-
-    /* A tool is not a compiler, and asking it to compile would fail it for not
-       being one. What it has to prove is that it runs. */
-    if (request->tool != NULL) {
-        if (!tool_answers(partial, request->tool)) {
-            (void)fs_remove_tree(partial);
-            return report_of(install_not_a_toolchain);
-        }
-        (void)fs_tree_size(partial, &report.installed_size);
-        if (!adopt_tool(partial, request->tool, closure,
-                        report.directory, sizeof report.directory)) {
-            (void)fs_remove_tree(partial);
-            return report_of(install_path_error);
-        }
-        report.status = verified_all ? install_ok : install_ok_unverified;
-        return report;
-    }
-
-    if (!identify_in_prefix(partial, &report.installed)) {
-        (void)fs_remove_tree(partial);
-        return report_of(install_not_a_toolchain);
-    }
-    report.features_proven = count_proven_features(&report.installed);
-    probe_find_cxx_driver(&report.installed);
-
-    /*
-     * The test that decides whether this is a toolchain at all.
-     *
-     * Counting features is not enough here, and finding that out is what this
-     * check is for: those probes avoid headers on purpose, so a compiler whose
-     * sysroot never arrived, or whose embedded paths were rewritten wrongly,
-     * passes every one of them and then fails on `#include <stdio.h>`. A set
-     * of packages is only a toolchain once it has compiled, linked and run
-     * something.
-     *
-     * Asked through the recipe rather than bare, because needing flags is not
-     * the same as being broken: a compiler carrying its own newer standard
-     * library links against it and then cannot start until the loader is told
-     * where it is. What matters is that some configuration works, not that the
-     * default one does.
-     */
-    link_recipe c = recipe_discover(&report.installed, lang_c);
-    if (report.features_proven == 0 || !c.usable) {
-        (void)fs_remove_tree(partial);
-        return report_of(install_not_a_toolchain);
-    }
-
-    /* And C++ too, whenever there is a driver for it. A closure asked for
-       because it carries a C++ compiler, delivered with a C++ compiler that
-       builds nothing, is half a toolchain — and half is the state this whole
-       check exists to stop being reported as success. */
-    if (report.installed.cxx_path[0] != '\0') {
-        link_recipe cxx = recipe_discover(&report.installed, lang_cxx);
-        if (!cxx.usable) {
-            (void)fs_remove_tree(partial);
-            return report_of(install_not_a_toolchain);
-        }
-    }
-
-    (void)fs_tree_size(partial, &report.installed_size);
-    if (!adopt(partial, &report.installed, report.directory, sizeof report.directory)) {
-        (void)fs_remove_tree(partial);
-        return report_of(install_path_error);
-    }
-
-    configure_installed(&report);
-    report.status = verified_all ? install_ok : install_ok_unverified;
-    return report;
-}
-
 /*
  * Leave the installed toolchain configured to build.
  *
- * What was unpacked knows how to compile C++ and, on Linux, does not know
- * where to find a C++ standard library until it is told: the one it borrows
- * from the system may be incomplete, and the one it carries needs a run-time
- * search path before the programs it links will start. Installing a compiler
- * and leaving it in that state is delivering half of it.
+ * What was unpacked knows how to compile C++ and, on Linux, does not know where
+ * to find a C++ standard library until it is told: the one it borrows from the
+ * system may be incomplete, and the one it carries needs a run-time search path
+ * before the programs it links will start. Installing a compiler and leaving it
+ * in that state is delivering half of it.
  *
- * The recipe is discovered against the toolchain in its final location, since
- * a run-time search path written before the move would name a directory that
- * no longer exists. Failure here is not failure of the install: what was
- * installed still works for anything that reads the recipe from `resolve`.
+ * The recipe is discovered against the toolchain in its final location, since a
+ * run-time search path written before the move would name a directory that no
+ * longer exists. Failure here is not failure of the install: what was installed
+ * still works for anything that reads the recipe from `resolve`.
  */
 static void configure_installed(install_report *report) {
-    char driver[PICKUP_PATHS_MAX];
-    if (!fs_format_path(driver, sizeof driver, "%s/%s",
-                        report->directory, INSTALLED_DRIVER))
-        return;
-
     toolchain chain;
-    if (!probe_identify(driver, &chain))
+    if (!identify_in_prefix(report->directory, &chain))
         return;
     probe_find_cxx_driver(&chain);
     /* Recorded where it now lives, so the report names paths that exist. */
@@ -499,92 +331,139 @@ static void configure_installed(install_report *report) {
     (void)recipe_write_config(chain.path, &c);
 }
 
-install_report install_run(const install_request *request) {
-    const release_asset *asset = request->asset;
+/* --- proving it --- */
 
+/*
+ * The test that decides whether what was unpacked is a toolchain at all.
+ *
+ * Counting features is not enough, and finding that out is what this is for:
+ * those probes avoid headers on purpose, so a compiler whose sysroot never
+ * arrived passes every one of them and then fails on `#include <stdio.h>`. What
+ * was unpacked is only a toolchain once it has compiled, linked and run
+ * something.
+ *
+ * Asked through the recipe rather than bare, because needing flags is not the
+ * same as being broken: a compiler carrying its own newer standard library
+ * links against it and then cannot start until the loader is told where it is.
+ * What matters is that some configuration works, not that the default one does.
+ */
+static bool proves_it_compiles(const char *prefix, install_report *report) {
+    if (!identify_in_prefix(prefix, &report->installed))
+        return false;
+
+    report->features_proven = count_proven_features(&report->installed);
+    probe_find_cxx_driver(&report->installed);
+
+    link_recipe c = recipe_discover(&report->installed, lang_c);
+    if (report->features_proven == 0 || !c.usable)
+        return false;
+
+    /* And C++ too, whenever there is a driver for it. A toolchain published as
+       a C and C++ compiler, delivered with a C++ compiler that builds nothing,
+       is half a toolchain — and half is the state this check exists to stop
+       being reported as success. */
+    if (report->installed.cxx_path[0] != '\0') {
+        link_recipe cxx = recipe_discover(&report->installed, lang_cxx);
+        if (!cxx.usable)
+            return false;
+    }
+    return true;
+}
+
+/* --- the install --- */
+
+/* What has to be there before anything is downloaded. */
+static install_status check_environment(const registry_artifact *artifact) {
     if (!http_available())
-        return report_of(install_no_downloader);
+        return install_no_downloader;
     if (!archive_available())
-        return report_of(install_no_extractor);
+        return install_no_extractor;
+    /* Compared rather than inferred from the URL: how a blob is packed is
+       something the registry states, and a name is not a statement. */
+    if (strcmp(artifact->format, REGISTRY_FORMAT_TAR_ZST) != 0)
+        return install_unsupported_format;
+    if (!archive_supports_zstd())
+        return install_no_zstd;
+    return install_ok;
+}
 
-    /* Decided before anything is downloaded: refusing after a gigabyte would
-       waste the transfer to reach the same answer. */
-    bool verifiable = asset->sha256[0] != '\0';
-    if (!verifiable && !request->allow_unverified)
-        return report_of(install_unverifiable);
+install_report install_run(const install_request *request) {
+    const registry_artifact *artifact = request->artifact;
+
+    install_status ready = check_environment(artifact);
+    if (ready != install_ok)
+        return report_of(ready);
+
+    /* Refused before the transfer rather than after it: the answer is the same
+       either way, and one of them costs a download. */
+    if (artifact->yanked && !request->allow_yanked)
+        return report_of(install_yanked);
 
     char archive[PICKUP_PATHS_MAX];
-    if (!fetch_archive(asset, archive, sizeof archive))
+    if (!fetch_archive(artifact, archive, sizeof archive))
         return report_of(install_download_failed);
 
     install_report report = report_of(install_ok);
-    if (verifiable && !digest_matches(archive, asset, &report)) {
+    if (!digest_matches(archive, artifact, &report)) {
         remove(archive);
         report.status = install_hash_mismatch;
         return report;
     }
 
+    /* A tool is not a compiler and lives apart from them, because nothing
+       resolves against it. */
+    bool is_tool = artifact->kind == registry_kind_tool;
+    char root[PICKUP_PATHS_MAX];
+    bool located = is_tool ? paths_tools(root, sizeof root)
+                           : paths_toolchains(root, sizeof root);
+
     char partial[PICKUP_PATHS_MAX];
-    if (!prepare_partial(partial, sizeof partial)) {
+    if (!located || !prepare_partial(root, partial, sizeof partial)) {
         remove(archive);
         return report_of(install_path_error);
     }
-    /* Unpack the profile, then ask the result to compile. Both a profile that
-       fits nothing in this archive and one that dropped something essential
-       come out the same way here — as a toolchain that proves nothing — and get
-       the same answer: unpack the release whole rather than leave something
-       installed that cannot build. */
-    bool pruned = !request->full;
-    if (pruned) {
-        if (extract_to_partial(archive, asset, false, partial)
-            && identify_installed(partial, &report.installed))
-            report.features_proven = count_proven_features(&report.installed);
-        if (report.features_proven == 0)
-            pruned = false;
-    }
 
-    if (!pruned) {
-        if (!prepare_partial(partial, sizeof partial)
-            || !extract_to_partial(archive, asset, true, partial)) {
-            remove(archive);
-            (void)fs_remove_tree(partial);
-            return report_of(install_extract_failed);
-        }
-        report.features_proven = identify_installed(partial, &report.installed)
-            ? count_proven_features(&report.installed) : 0;
-    }
-
-    if (report.features_proven == 0) {
+    if (!extract_to_partial(archive, artifact, partial)) {
         remove(archive);
+        (void)fs_remove_tree(partial);
+        return report_of(install_extract_failed);
+    }
+
+    /* The archive has served its purpose; keeping it around to never be read
+       again is not a cache, it is litter. */
+    remove(archive);
+
+    if (is_tool) {
+        if (!tool_answers(partial, artifact)) {
+            (void)fs_remove_tree(partial);
+            return report_of(install_not_a_tool);
+        }
+        (void)fs_tree_size(partial, &report.installed_size);
+        if (!adopt_tool(partial, root, artifact,
+                        report.directory, sizeof report.directory)) {
+            (void)fs_remove_tree(partial);
+            return report_of(install_path_error);
+        }
+        return report;
+    }
+
+    /* Proved before it is adopted, so a reinstall that turns out to be broken
+       leaves the working one that was already there untouched. */
+    if (!proves_it_compiles(partial, &report)) {
         (void)fs_remove_tree(partial);
         return report_of(install_not_a_toolchain);
     }
 
     (void)fs_tree_size(partial, &report.installed_size);
-
     if (!adopt(partial, &report.installed, report.directory, sizeof report.directory)) {
-        remove(archive);
         (void)fs_remove_tree(partial);
         return report_of(install_path_error);
     }
 
-    /* The archive has served its purpose; keeping a gigabyte around to never
-       be read again is not a cache, it is litter. */
-    remove(archive);
-
-    /* Done last, and against the final location: a toolchain that cannot
-       build C++ until someone works out the flags is not installed, only
-       unpacked. */
+    /* Done last, and against the final location: a run-time search path
+       discovered under `.partial` would name a directory that stops existing
+       the moment the rename finishes. The cost is discovering the recipe twice,
+       and it is not a saving worth making. */
     configure_installed(&report);
-
-    /* Three outcomes worth telling apart: it was verified and pruned, it could
-       not be verified, or pruning did not hold and the whole release is on
-       disk. Each is something the user may want to act on. */
-    if (!verifiable)
-        report.status = install_ok_unverified;
-    else if (!request->full && !pruned)
-        report.status = install_ok_unpruned;
-    else
-        report.status = install_ok;
     return report;
 }

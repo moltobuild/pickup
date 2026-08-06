@@ -4,7 +4,6 @@
 #include <pickup/services/paths_service.h>
 #include <pickup/services/process_service.h>
 #include <pickup/util/progress.h>
-#include <pickup/util/zip.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -236,51 +235,6 @@ static bool succeeded(const process_result *result, const archive_request *reque
 
     long long produced = 0;
     return fs_tree_size(destination, &produced) && produced > 0;
-}
-
-/* The two members of a conda package, named by what they start with: the rest
-   is the package name and version, which change with every build. */
-#define CONDA_PAYLOAD_PREFIX  "pkg-"
-#define CONDA_METADATA_PREFIX "info-"
-
-/* Where the member is put while tar reads it. */
-#define CONDA_TEMPLATE "/tmp/pickup_conda_XXXXXX"
-
-/* A conda package unpacks straight over the prefix: it carries no directory of
-   its own to step over. */
-#define CONDA_STRIP_NONE 0
-
-/* Lift one member out of `package` and let tar unpack it into `destination`. */
-static bool extract_conda_member(const char *package, const char *prefix,
-                                 const char *destination) {
-    if (!archive_available())
-        return false;
-
-    zip_member member;
-    if (!zip_find_member(package, prefix, &member))
-        return false;
-
-    char tarball[] = CONDA_TEMPLATE;
-    int fd = mkstemp(tarball);
-    if (fd < 0)
-        return false;
-    close(fd);
-
-    bool ok = zip_extract_member(package, &member, tarball)
-        && archive_extract(tarball, destination, CONDA_STRIP_NONE);
-
-    /* Gone however it went: this is a staging copy of something that is still
-       in the package it came from. */
-    (void)remove(tarball);
-    return ok;
-}
-
-bool archive_extract_conda(const char *package, const char *destination) {
-    return extract_conda_member(package, CONDA_PAYLOAD_PREFIX, destination);
-}
-
-bool archive_extract_conda_info(const char *package, const char *destination) {
-    return extract_conda_member(package, CONDA_METADATA_PREFIX, destination);
 }
 
 bool archive_extract_selected(const char *archive, const char *destination,

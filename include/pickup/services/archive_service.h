@@ -10,8 +10,8 @@
  * Delegated to the system's tar for the same reason downloads are delegated to
  * curl: it keeps Pickup building against libc alone, and tar is present on
  * every target platform, Windows 10 and later included. Modern tar detects the
- * compression itself, which matters because LLVM publishes .tar.xz for most
- * platforms and .tar.gz for others.
+ * compression itself, so the registry's zstd needs no telling — though whether
+ * this tar can actually open one is a separate question, and asked below.
  */
 
 /* True if a usable tar was found. Worked out once. */
@@ -49,9 +49,9 @@
 
 /* Extract `archive` into `destination`, which must already exist.
 
-   `strip_components` drops that many leading path components, which is how the
-   single top-level directory these archives carry is removed so that `bin` and
-   `lib` land directly in the destination. */
+   `strip_components` drops that many leading path components, for an archive
+   built around a directory named after its release. What the registry publishes
+   needs none dropped: its `bin` and `lib` are already at the top. */
 [[nodiscard]] bool archive_extract(const char *archive, const char *destination,
                                    int strip_components);
 
@@ -85,27 +85,5 @@ typedef struct {
    silence is what makes people think it has hung. */
 [[nodiscard]] bool archive_extract_selected(const char *archive, const char *destination,
                                             const archive_request *request);
-
-/*
- * Unpacking a conda package.
- *
- * A `.conda` is a zip carrying two zstd tarballs: `pkg-…` with the files and
- * `info-…` with the metadata describing them. Both are *stored* inside the zip
- * rather than compressed again, so reaching one means walking a few headers and
- * copying a range of bytes — no zip library, and no `unzip` on the machine.
- *
- * The tarball is then handed to the same tar everything else here uses, which
- * decompresses zstd like it does xz and gz.
- *
- * Nothing is stripped: a conda package has no top-level directory of its own
- * and unpacks straight over the prefix it belongs to.
- */
-
-/* The payload: the files the package installs. */
-[[nodiscard]] bool archive_extract_conda(const char *package, const char *destination);
-
-/* The metadata: `info/`, which records among other things which files carry the
-   build prefix and therefore have to be rewritten. */
-[[nodiscard]] bool archive_extract_conda_info(const char *package, const char *destination);
 
 #endif /* PICKUP_ARCHIVE_SERVICE_H */

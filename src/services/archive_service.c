@@ -31,6 +31,10 @@ const char *archive_requirement(void) {
     return TAR_COMMAND;
 }
 
+const char *archive_zstd_requirement(void) {
+    return "zstd";
+}
+
 bool archive_available(void) {
     static bool checked = false;
     static bool available = false;
@@ -58,6 +62,61 @@ bool archive_supports_wildcards(void) {
     process_result result = process_try(argv, NULL);
     supported = result.completed && result.exit_code == 0;
     checked = true;
+    return supported;
+}
+
+/* -t list, -f from a file: the cheapest thing that still opens an archive. */
+#define ARG_LIST "-tf"
+
+/* Where the probe archive is written. */
+#define ZSTD_PROBE_TEMPLATE "/tmp/pickup_zstd_XXXXXX"
+
+/*
+ * An empty tar, compressed with zstd. Generated with:
+ *
+ *   tar -cf - --files-from /dev/null | zstd -19
+ *
+ * Twenty-one bytes, and listing it is the whole probe.
+ */
+static const unsigned char empty_tar_zst[] = {
+    0x28, 0xb5, 0x2f, 0xfd, 0x04, 0x68, 0x45, 0x00, 0x00, 0x08, 0x00, 0x01,
+    0x00, 0xfc, 0x87, 0x07, 0x42, 0xbc, 0xbd, 0x7e, 0xd6,
+};
+
+/*
+ * Whether this tar can open what the registry packs.
+ *
+ * The probe does rather than asks, because neither question answers it:
+ * `zstd --version` misses a bsdtar with the library linked in, and
+ * `tar --zstd --version` misses a GNU tar that accepts the option and only
+ * fails later, when it tries to hand the archive to a program that is not
+ * there. Opening one settles both.
+ */
+bool archive_supports_zstd(void) {
+    static bool checked = false;
+    static bool supported = false;
+    if (checked)
+        return supported;
+    checked = true;
+
+    if (!archive_available())
+        return supported;
+
+    char path[] = ZSTD_PROBE_TEMPLATE;
+    int descriptor = mkstemp(path);
+    if (descriptor < 0)
+        return supported;
+    (void)close(descriptor);
+
+    /* Written through the same call the rest of the code uses: the probe must
+       fail for the same reasons a real extraction would. */
+    if (fs_write_bytes(path, empty_tar_zst, sizeof empty_tar_zst)) {
+        const char *argv[] = { TAR_COMMAND, ARG_LIST, path, NULL };
+        process_result result = process_try(argv, NULL);
+        supported = result.completed && result.exit_code == 0;
+    }
+
+    (void)remove(path);
     return supported;
 }
 

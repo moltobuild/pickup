@@ -2,6 +2,7 @@
 
 #include <pickup/services/archive_service.h>
 #include <pickup/services/fs_service.h>
+#include <pickup/services/paths_service.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -273,4 +274,56 @@ MOLTEST(archive_fails_on_something_that_is_not_an_archive) {
     EXPECT_FALSE(archive_extract("/nonexistent/archive.tar.xz", destination, 1));
 
     fixture_teardown(&fixture);
+}
+
+MOLTEST(archive_opens_what_the_registry_packs) {
+    if (!archive_available())
+        SKIP("tar is not installed");
+
+    /* The registry packs everything as tar.zst, so this is the difference
+       between being able to install and not. The probe opens an archive rather
+       than reading a version string, which is why it is worth asserting at all:
+       a tar that merely accepts --zstd would still pass a weaker check. */
+    if (!archive_supports_zstd())
+        SKIP("this tar cannot open zstd archives");
+
+    EXPECT_TRUE(archive_supports_zstd());
+    EXPECT_STREQ("zstd", archive_zstd_requirement());
+}
+
+MOLTEST(archive_extracts_a_zstd_archive_without_a_top_level_directory) {
+    if (!archive_available() || !archive_supports_zstd())
+        SKIP("tar with zstd is needed to unpack what the registry publishes");
+
+    char root[] = "/tmp/pickup_zstd_extract_XXXXXX";
+    ASSERT_TRUE(mkdtemp(root) != NULL);
+
+    char stage[PICKUP_PATHS_MAX];
+    char archive[PICKUP_PATHS_MAX];
+    char destination[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(stage, sizeof stage, "%s/stage/bin", root));
+    ASSERT_TRUE(fs_make_dirs(stage));
+
+    char file[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(file, sizeof file, "%s/thing", stage));
+    ASSERT_TRUE(fs_write_file(file, "#!/bin/sh\n"));
+
+    ASSERT_TRUE(fs_format_path(archive, sizeof archive, "%s/thing.tar.zst", root));
+
+    char command[PICKUP_PATHS_MAX * 2];
+    ASSERT_TRUE(fs_format_path(command, sizeof command,
+                               "tar -C %s/stage -caf %s .", root, archive));
+    ASSERT_EQ(0, system(command));
+
+    /* No leading component to strip: the registry publishes archives whose bin
+       and lib are already at the top. */
+    ASSERT_TRUE(fs_format_path(destination, sizeof destination, "%s/out", root));
+    ASSERT_TRUE(fs_make_dirs(destination));
+    ASSERT_TRUE(archive_extract(archive, destination, 0));
+
+    char landed[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(landed, sizeof landed, "%s/bin/thing", destination));
+    EXPECT_TRUE(fs_path_exists(landed));
+
+    (void)fs_remove_tree(root);
 }

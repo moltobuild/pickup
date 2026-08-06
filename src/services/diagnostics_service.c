@@ -144,6 +144,18 @@ static void check_environment(diagnostics_report *report) {
             return;
         set_detail(entry, "not found; nothing can be unpacked");
         add_remedy(entry, "install %s", archive_requirement());
+        return;
+    }
+    /* Everything the registry publishes is packed with zstd, so a tar that
+       cannot open one leaves nothing installable even though tar is there.
+       Only asked once tar is known to exist, or the answer would be about the
+       wrong missing program. */
+    if (!archive_supports_zstd()) {
+        finding *entry = open_finding(report, finding_error, section_environment, true, "zstd");
+        if (entry == NULL)
+            return;
+        set_detail(entry, "tar cannot open a zstd archive; nothing can be installed");
+        add_remedy(entry, "install %s", archive_zstd_requirement());
     }
 }
 

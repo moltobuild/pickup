@@ -29,9 +29,23 @@
    instead of being looked up in a table. Worked out once. */
 [[nodiscard]] bool archive_supports_wildcards(void);
 
+/* True if this tar can open a zstd-compressed archive, which is how the
+   registry packs everything it publishes.
+
+   Settled by opening one -- twenty-one bytes of empty archive -- rather than by
+   asking. Neither question available answers it: `zstd --version` misses a tar
+   with the library linked in and needing no such program, and
+   `tar --zstd --version` misses a GNU tar that accepts the option and only
+   fails when it tries to delegate. Worked out once. */
+[[nodiscard]] bool archive_supports_zstd(void);
+
 /* The command a caller should be told to install when archive_available is
    false. */
 [[nodiscard]] const char *archive_requirement(void);
+
+/* The command to install when archive_supports_zstd is false and tar itself is
+   present: GNU tar hands zstd archives to this program. */
+[[nodiscard]] const char *archive_zstd_requirement(void);
 
 /* Extract `archive` into `destination`, which must already exist.
 

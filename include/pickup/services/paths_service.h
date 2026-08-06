@@ -12,7 +12,7 @@
  * `PICKUP_HOME` relocates the lot, which is also what lets the tests run
  * without touching a real home directory.
  *
- *   <home>/cache/       regenerable: the probed inventory, the release index
+ *   <home>/cache/       regenerable: the probed inventory, the registry indexes
  *   <home>/downloads/   archives in flight, removed once installed
  *   <home>/toolchains/  what was installed, one directory each
  *

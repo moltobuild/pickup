@@ -75,8 +75,8 @@ void json_free(json_document *doc);
 [[nodiscard]] const char *json_string(json_value value);
 
 /* Read a number as an integer. False if `value` is not a number, or holds one
-   that is not a whole number or does not fit in long long. GitHub reports
-   asset sizes near two billion, so this is deliberately not an int. */
+   that is not a whole number or does not fit in long long. An artifact runs
+   to hundreds of megabytes, so this is deliberately not an int. */
 [[nodiscard]] bool json_number(json_value value, long long *out);
 
 /* Read a boolean. False if `value` is not a boolean. */

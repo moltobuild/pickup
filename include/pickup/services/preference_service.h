@@ -10,8 +10,8 @@
  * The choices a user made, kept across runs.
  *
  * Everything else Pickup writes is either regenerable — the probed inventory,
- * the release index — or is the thing that was installed. This is neither: it
- * is a decision, and rebuilding it is not something Pickup can do on its own.
+ * the cached catalogue — or is the thing that was installed. This is neither:
+ * it is a decision, and rebuilding it is not something Pickup can do on its own.
  * So it lives beside those directories rather than inside the cache, where a
  * `pickup scan` or a cleared cache would silently discard it.
  *

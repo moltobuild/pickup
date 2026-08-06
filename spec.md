@@ -139,8 +139,9 @@ Pickup scans:
 - every directory in `PATH`
 - toolchains it installed itself
 
-Extra search directories are not configurable. `config.toml` holds one key, the
-default toolchain; a compiler outside `PATH` and outside the pickup home is
+Extra search directories are not configurable. `config.toml` holds two keys —
+the default toolchain, and which registry to install from — and neither adds a
+place to look; a compiler outside `PATH` and outside the pickup home is
 invisible until one of those changes.
 
 Candidates are recognized by name:
@@ -212,6 +213,10 @@ So health is measured in the order that tells the causes apart:
 The last is not optional. A link that exits zero and an executable that dies on
 `cannot open shared object file` is a toolchain that passed every measurement
 and builds nothing — the one claim Pickup must never make.
+
+This is also why what a registry publishes about an artifact's flags is
+descriptive rather than binding. The recipe is rediscovered locally after every
+install, and what is written beside the driver is what was proven here.
 
 A toolchain is therefore a binary *plus the flags that make it work*, and those
 flags are the answer as much as the path is. They are discovered, not assumed:
@@ -338,8 +343,8 @@ never proven, which is the one thing Pickup must not do. Adding, removing or
 reordering an entry, or changing the program that proves a feature, all count
 as a change. Rescanning costs about a second.
 
-`scan` discards the inventory and probes everything again. The index of
-published releases is a separate cache with its own short lifetime, discarded by
+`scan` discards the inventory and probes everything again. The registry's
+catalogues are a separate cache with their own short lifetime, discarded by
 `--refresh` on `search` and `install`: the two answer different questions and
 go stale for different reasons.
 
@@ -412,76 +417,81 @@ Operations:
 - list installed
 - set the default toolchain
 
-## Sources
+## The source
 
-A source knows what a vendor publishes and which of it runs here. The first is
-LLVM, read from GitHub's REST API: releases marked as prereleases or drafts are
-never offered, and one release ships source archives, documentation, installers
-and several platforms at once, so the asset for the host is selected rather than
-assumed. Asset naming has changed across LLVM versions, so it is matched, never
-constructed.
+There is one, and it is Pickup's own: an HTTP registry that publishes toolchains
+and tools under coordinates it defines — kind, name, version, target. Pickup only
+reads from it. Publishing is somebody else's job, and nothing in Pickup can do
+it.
 
-The GNU project publishes no binaries of its own, so a GCC comes from
-conda-forge, read straight from the channel over HTTPS. No client is installed
-and no environment is activated: the channel answers JSON, which Pickup already
-parses, and ships packages as zip files holding tarballs, which it can already
-open.
+That an artifact belongs on this machine is decided by the target it was
+published for, not by matching fragments of a file name. How its blob is packed
+is stated in the answer and never inferred from the URL. Its digest and its size
+are stated too, and are required: an artifact missing any of them is a broken
+answer and is dropped while reading.
 
-A compiler there is a closure of packages rather than one archive. Gathering it
-is a walk, not a search: take the newest build satisfying each requirement,
-follow what it names, stop when nothing new appears. There is no backtracking,
-because the constraints of one toolchain are already consistent — the channel
-built those packages against each other — and a toolchain whose constraints
-needed searching is one Pickup should refuse rather than guess at. A
-requirement that cannot be met stops the walk and is named, and nothing is
-downloaded.
+Which registry to ask is configurable — an environment variable, then a key in
+`config.toml`, then a built-in default — because a machine that must build from
+an internal mirror is a machine Pickup should serve. Pickup never writes that
+key: it decides which registry to trust, and no command should be able to
+redirect every future install.
 
-This does not make Pickup a package manager. It resolves the closure of a
-toolchain and nothing else.
+The registry also publishes what it knows *about* an artifact: the features it
+proved, the flags it was built with, the standard library it carries. Pickup
+shows all of it and obeys none of it. Those metadata describe the machine that
+built the artifact, and the flags that make a compiler work name directories on
+the machine that installs it. The difference is not theoretical: a Clang
+published with no compile flags at all needs to be pointed at a particular GCC
+installation on one host and not on another.
 
-Packages record the path they were built under, so that path is rewritten to
-the real one on the way in. Binaries keep their length, since an ELF is full of
-offsets into itself, and the difference is made up with NUL bytes at the end of
-the string rather than immediately after the prefix — a linker embeds its own
-script as text, and padding in the middle of it truncates a path and leaves a
-script that will not parse.
+Earlier versions read LLVM's GitHub releases and the conda-forge channel
+directly. Both are gone. They cost gigabytes of transfer for the fraction a
+build uses, and each needed Pickup to know something about somebody else's
+packaging — asset names that changed between versions, a closure of packages to
+walk, a build prefix embedded in binaries and rewritten on the way in. A
+registry that publishes what a build needs removes the question rather than
+answering it better.
 
 ## What gets installed
 
-A release carries far more than a compiler. LLVM 22.1.8 unpacks to 11.29 GB, of
-which the compiler is 259 MB; the rest is MLIR, Flang, lldb, the refactoring
-tools, and gigabytes of static libraries for linking against LLVM itself.
+What the registry publishes is already what the ecosystem uses: a compiler, its
+headers, its runtime. Nothing is selected out of an archive on the way in and
+nothing is discarded afterwards, because the choice of what to keep was made
+when the artifact was packed, by something that knew.
 
-Pickup installs what the ecosystem uses — the compiler, a linker, the builtin
-headers, the runtime and libc++ — which comes to about 550 MB. Nothing else is
-ever written: the archive streams past and only matching entries are unpacked,
-so the full contents never need to fit on the disk at all.
+Whatever is unpacked is asked to compile, link and **run** a program before it is
+adopted. Counting proven features is not enough on its own: those probes avoid
+headers on purpose, so a compiler whose sysroot never arrived passes every one
+of them and then fails on the first real translation unit.
 
-Whatever is unpacked is asked to compile, link and **run** a program before it
-is adopted. Counting proven features is not enough on its own: those probes
-avoid headers on purpose, so a compiler whose sysroot never arrived, or whose
-embedded paths were rewritten wrongly, passes every one of them and then fails
-on the first real translation unit.
+It is asked through its recipe rather than bare, because needing flags is not
+the same as being broken. A compiler carrying its own newer standard library
+links against it and then cannot start until the loader is told where it is.
+What matters is that some configuration works, not that the default one does.
 
-The selection is a claim about someone else's layout, and layouts change. So it
-is not trusted: once unpacked, the compiler is asked to compile, and a toolchain
-that proves nothing means the selection was wrong. Then the release is unpacked
-whole rather than leaving something installed that cannot build. `--full` skips
-the selection from the start.
+A tool is not a compiler and asking it to compile would fail it for not being
+one. What stands in for the test is that the binary the registry named answers
+when it is run. Nothing is adopted for having unpacked.
 
 Probing the result is the same test Pickup applies to every compiler it reports
 on, turned on its own installer.
+
 
 ## Verification
 
 Installed archives are verified before use. An artifact that fails verification
 is discarded, never installed, and never unpacked.
 
-The digest comes from the source alongside the download. Where a release
-publishes none — LLVM only began doing so recently — Pickup refuses to install
-it rather than pretend it checked, and says what flag will override that. The
-decision is made before downloading: spending a gigabyte to arrive at the same
-refusal helps nobody.
+The digest comes from the registry alongside the coordinate, and is required of
+every artifact. There is no unverified path and no flag that opens one: an
+answer without a digest is not a release Pickup cannot check, it is an answer
+that does not conform, and it is dropped while being read.
+
+An artifact the registry has **withdrawn** stays resolvable and stops being
+offered. Withdrawn says "not for new builds", not "gone": something installed
+from it must remain explicable, and asking for that exact version must remain
+possible. Naming the whole version is what asks for it; nothing else selects
+it.
 
 An install is assembled under a temporary name and moved into place only once it
 is complete, which is atomic within a filesystem. An interrupted install
@@ -503,14 +513,14 @@ Commands:
 - `doctor` — what stops this machine from building, and what would fix it
 - `resolve` — the best toolchain for a set of requirements
 - `scan` — rebuild the inventory
-- `search <toolchain>` — the versions available to install
-- `install <toolchain>` — add a toolchain
+- `search [name]` — what the registry publishes, or one name's versions
+- `install <name>` — add a toolchain or a tool
 - `uninstall <toolchain>` — remove a toolchain Pickup installed
 - `default [toolchain]` — show or set the toolchain `resolve` should prefer
 
 `search` and `install` take `--version`, which may name fewer components than
-the version has: `14` means any 14, `14.2` any 14.2. Without it, `install`
-takes the newest stable release.
+the version has: `14` means any 14, `14.2` any 14.2. Without it, `install` takes
+the newest offered — which is never one the registry has withdrawn.
 
 `uninstall` removes only what Pickup installed. A compiler that was already on
 the machine belongs to its package manager, and a query naming more than one
@@ -629,7 +639,7 @@ Version 0.1
 
 Version 0.2
 
-- Installation, from LLVM's own releases and from conda-forge
+- Installation, from Pickup's own registry
 - Health: whether a compiler produces a program that runs
 - The build recipe, discovered and published for the caller
 - Diagnostics

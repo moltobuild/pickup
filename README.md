@@ -27,7 +27,7 @@ proves every capability by compiling a program that uses it.
 
 - `gcc-12` or newer (the build targets the C23 subset via `-std=c2x`)
 - GNU Make, for the bootstrap
-- `curl` and `tar` at runtime, for `install`
+- `curl`, `tar` and `zstd` at runtime, for `install`
 
 ## Build
 
@@ -57,14 +57,15 @@ pickup tools               # the formatter and linter this machine has, and wher
 pickup doctor              # what stops this machine from building, and what fixes it
 pickup scan                # re-probe everything and rewrite the cache
 pickup resolve [options]   # the best toolchain for a set of requirements
-pickup search <name>       # the versions available to install
+pickup search [name]       # what the registry publishes, or one name's versions
 pickup install <name>      # download and install one
 pickup uninstall <name>    # remove one pickup installed
 pickup default [name]      # show or set the one resolve should prefer
 ```
 
-`search` and `install` take a toolchain — `clang` or `gcc` — or a tool:
-`clang-format`, `clang-tidy`, `cppcheck`.
+`search` and `install` take any name the registry publishes: a toolchain such as
+`clang` or `gcc`, or a tool such as `clang-format` or `clang-tidy`. `search` with
+no name lists all of them.
 
 ### Looking at what the machine has
 
@@ -139,7 +140,7 @@ than a bar, because the API never says how long its answer will be:
 
 ```
 $ pickup search clang
-fetching the release index  \
+asking the registry  \
 ```
 
 All of it goes to stderr, never to stdout:
@@ -268,14 +269,18 @@ for a formatter and a linter — `clang-format`, `clang-tidy`, `cppcheck` — on
 PATH and in what Pickup installed, and asks each one to identify itself: a file
 with the right name that does not answer is a file, not a tool.
 
+`cppcheck` is found when the system provides it and cannot be installed: the
+registry does not publish it, and `clang-tidy` covers the linter `doctor` asks
+for.
+
 ```sh
 pickup install clang-format
 pickup install clang-tidy
 ```
 
-Both come from conda-forge, through the same closure resolution as a compiler.
-What differs is the test they have to pass before being adopted: there is
-nothing here to compile, so it is that the installed binary runs and answers.
+Both come from the registry, down the same path as a compiler. What differs is
+the test they have to pass before being adopted: there is nothing here to
+compile, so it is that the binary the registry named runs and answers.
 They land under `~/.pickup/tools/`, apart from the toolchains, because nothing
 resolves against them.
 
@@ -354,201 +359,160 @@ pickup: no c compiler satisfies the request
 
 ### Installing a toolchain
 
-When the machine has nothing suitable, Pickup can fetch one. `search` shows
-what is on offer for this host, newest first; release candidates are never
-listed:
+When the machine has nothing suitable, Pickup fetches one. Everything comes from
+one registry, which publishes toolchains and tools under coordinates of its own:
+a name, a version, and the target it was built for.
+
+`search` with no name lists what there is:
+
+```
+$ pickup search
+NAME          KIND       VERSION  TARGETS
+clang         toolchain  19.1.6   linux-x86_64
+gcc           toolchain  16.1.0   linux-x86_64
+clang-format  tool       19.1.6   linux-x86_64
+clang-tidy    tool       19.1.6   linux-x86_64
+```
+
+With a name, the versions of it that can be installed here:
 
 ```
 $ pickup search clang
-VERSION  SIZE  ASSET
-22.1.8   1.8G  LLVM-22.1.8-Linux-X64.tar.xz
-22.1.7   1.8G  LLVM-22.1.7-Linux-X64.tar.xz
-21.1.8   1.9G  LLVM-21.1.8-Linux-X64.tar.xz
+VERSION  SIZE  TARGET        STATUS
+19.1.6   44M   linux-x86_64
 ```
 
 `--version` narrows it, and may name fewer components than the version has:
-`21` means any 21, `20.1.5` means exactly that one.
+`19` means any 19, `19.1.6` means exactly that one.
 
 ```sh
-pickup search clang --version 21
-pickup install clang                      # the newest stable
-pickup install clang --version 20.1.5
+pickup search clang --version 19
+pickup install clang                      # the newest offered
+pickup install clang --version 19.1.6
 pickup install clang --dry-run            # resolve it, download nothing
-pickup search clang --refresh             # ask the source again
+pickup search clang --refresh             # ask the registry again
 ```
 
-The list of published releases is cached for an hour, because the
-unauthenticated GitHub API allows 60 requests in one. `--refresh` throws that
-away and asks again, for when a release lands and you would rather not wait.
+The catalogues are cached for an hour, because `search` is the kind of command
+people run twice in a row. `--refresh` throws that away and asks again.
+
+A name nobody publishes comes back as a list rather than as an error:
+
+```
+$ pickup install clan
+pickup: nothing is published as 'clan'
+  did you mean:
+    clang (toolchain 19.1.6)
+    clang-format (tool 19.1.6)
+    clang-tidy (tool 19.1.6)
+```
+
+That is not politeness. Downloads go through `curl -f`, which reports a 404 and
+a dead network the same way, so a name is resolved against the catalogues
+already fetched instead of against a failure that cannot be told apart from an
+outage.
 
 Everything Pickup writes lives under `~/.pickup` (or `$PICKUP_HOME`), so
 installing never asks for administrator rights:
 
 ```
 ~/.pickup/
-  cache/                   the probed inventory and the release index
+  cache/                   the probed inventory and the registry's catalogues
   downloads/               archives in flight, removed once installed
   toolchains/
-    clang-22.1.8-x86_64-unknown-linux-gnu/
+    clang-19.1.6-x86_64-unknown-linux-gnu/
+  tools/
+    clang-format-19.1.6/
 ```
 
 `cache/` and `downloads/` can be deleted at any time; the cost is a rescan, not
-a wrong answer. `toolchains/` is what the downloads were for, so deleting the
-whole of `~/.pickup` takes gigabytes of installed compilers with it.
+a wrong answer. Tools live apart from toolchains because nothing resolves
+against them.
 
 Installed toolchains join the same inventory as the system ones, and `list`,
 `show` and `resolve` treat them no differently.
 
-The archive is checked against the sha256 the source published before anything
-is unpacked, and the install is assembled under a temporary name and moved into
-place only once it is complete, so an interrupted one leaves nothing that looks
-finished.
-
-### Only what gets used
-
-An LLVM release unpacks to **11.29 GB**, of which the compiler is 259 MB. The
-rest is MLIR, Flang, lldb, the refactoring tools, and gigabytes of static
-libraries for people linking against LLVM itself. Pickup installs the compiler,
-a linker, the builtin headers, the runtime and libc++ — **about 550 MB**:
+### What arrives, and what it has to prove
 
 ```
 $ pickup install clang
-downloading clang 22.1.8  [█████████████████████████]  100%  1.8G/1.8G
-verifying clang 22.1.8    [█████████████████████████]  100%  1.8G/1.8G
-preparing the extraction  /
-extracting clang 22.1.8   \  550M extracted
+downloading clang 19.1.6  [█████████████████████████]  100%  44M/44M
+verifying clang 19.1.6    [█████████████████████████]  100%  44M/44M
+extracting clang 19.1.6   \  209M extracted
 probing installed toolchain                        12 features
-✓ clang 22.1.8 installed in ~/.pickup/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu (550M)
+✓ clang 19.1.6 installed in ~/.pickup/toolchains/clang-19.1.6-x86_64-unknown-linux-gnu (209M)
 ```
 
-Every stage says what it is doing, because each of them takes long enough on a
-gigabyte to look like a hang otherwise: hashing the archive is forty seconds,
-and tar spends another stretch decompressing its way to the parts that were
-asked for before it writes anything at all.
+Every stage says what it is doing, because each takes long enough to look like a
+hang otherwise.
 
-The rest is never written to disk, not written and then deleted: the archive
-streams past and only matching entries are unpacked. Installing does not need
-11 GB free.
+**Nothing is installed without being checked.** The registry states a sha256 for
+every artifact, so one that arrives without a digest is a broken answer and is
+dropped while reading, not carried to a point where something decides whether to
+verify it. There is no flag to switch this off, because there is no longer a
+case it would serve.
 
-That selection is a guess about someone else's layout, so it is not trusted.
-Once unpacked, the compiler is asked to compile — the count of features above is
-that answer — and if it proves nothing, the release is unpacked in full instead
-of leaving a toolchain that cannot build. `--full` skips the selection entirely.
+**Nothing is trusted for having unpacked.** A compiler has to compile, link and
+*run* a program before it is adopted; the feature count above is part of that
+answer. A tool has nothing to compile, so what stands in for it is that the
+binary the registry named actually answers. Whatever fails leaves nothing
+installed.
+
+**Nothing published about it is obeyed.** The registry says which flags an
+artifact was built with, and Pickup shows them and then works out its own. Those
+metadata describe the machine that built the artifact; the flag that makes a
+compiler work here names a directory on *this* machine. A Clang that has to be
+pointed at a particular GCC installation, or a GCC that carries a newer
+libstdc++ than the system and cannot run what it links until the loader is told
+where it is, are both discovered by trying — never by reading.
 
 ```
 $ pickup install clang --dry-run
-version  22.1.8
-asset    LLVM-22.1.8-Linux-X64.tar.xz
-url      https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.8/LLVM-22.1.8-Linux-X64.tar.xz
-size     1.8G (1938859476 bytes)
-sha256   df0e1ecf16caf3489a272a5eea4eec9b0d82878f6477fa309504f918a0006384
+name     clang
+kind     toolchain
+version  19.1.6
+target   linux-x86_64
+format   tar.zst
+size     44M (46459314 bytes)
+sha256   f221669aeffba6a6a77c43387ecd098aa160105591a4249671be159bdf9fd8b9
+url      https://molto-registry.joseb-twelve.workers.dev/v1/toolchains/clang/19.1.6/linux-x86_64/download
+about    LLVM C and C++ compiler, shipping libc++ so C++ needs nothing from the host
 ```
 
-LLVM only began publishing digests recently. For a release that has none there
-is nothing to check against, so Pickup refuses it rather than claim it
-verified, and says what would override that:
+How a blob is packed is read from `format`, never guessed from the URL. Today
+that is `tar.zst` throughout, which makes `zstd` a requirement alongside `curl`
+and `tar` — `pickup doctor` says so when it is missing, because without it
+nothing can be installed at all.
+
+A version the registry has **withdrawn** stays listed and stops being offered:
 
 ```
-$ pickup install clang --version 18.1.8
-✗ clang 18.1.8: this release publishes no sha256 digest
+$ pickup install clang
+✗ clang 19.1.5: withdrawn by the registry, and not to be used for new builds
   nothing was downloaded
-  re-run with --allow-unverified to install it anyway
+  name the whole version to install it anyway: pickup install clang --version 19.1.5
 ```
 
-Downloads need `curl` and unpacking needs `tar`, both of which ship with
-Windows 10 and later, macOS, and mainstream Linux. Neither is linked into
-Pickup; it still builds against libc alone.
+Withdrawn means "not for new builds", not "gone". Naming the whole version
+installs it, because something already installed from it has to stay
+explicable.
 
-### A GCC, from conda-forge, without conda
+The install is assembled under a temporary name inside the directory it will end
+up in, and renamed into place only once it is complete — one filesystem, so the
+rename is atomic and an interrupted install leaves nothing that looks finished.
 
-The GNU project publishes no binaries, so a GCC comes from conda-forge — read
-straight from the channel. There is no client to install, no environment to
-activate, and no Python.
-
-```sh
-pickup search gcc
-pickup install gcc --version 12
-pickup install gcc --version 16 --dry-run   # the closure, nothing downloaded
-```
-
-Both report while they wait, for the same reason `search clang` does:
+### Where it installs from
 
 ```
-$ pickup search gcc
-fetching the conda-forge listing  \
-
-$ pickup install gcc --version 16
-resolving libstdcxx-devel_linux-64  /
+1. $PICKUP_REGISTRY_URL
+2. registry = "…" in ~/.pickup/config.toml
+3. the built-in default
 ```
 
-Working out a closure is one request per package — a dozen or more — and there
-is no transfer to measure against, so it says which package it is asking about
-rather than spinning mutely. All of it goes to stderr, so
-`pickup search gcc --format toml > gcc.toml` still gets a file with nothing in
-it but TOML.
+Pickup reads that key and never writes it. Pointing it somewhere else decides
+which registry to trust, and a command able to change it would be a command able
+to redirect every future install.
 
-A compiler there is not one package but a closure of them: `gxx` at 16.1.0
-pulls in nineteen, from `gcc_impl_linux-64` at 81 MB down to the sysroot and
-the development halves of libstdc++. Install the first alone and nothing
-compiles, so Pickup gathers all of it or none:
-
-```
-$ pickup install gcc --version 16 --dry-run
-packages 19
-size     184M
-  gxx                       16.1.0   hd47ba16_1     28K
-  gcc_impl_linux-64         16.1.0   h5fcb69b_1     81M
-  libstdcxx-devel_linux-64  16.1.0   h41cdd0d_101   21M
-  …
-```
-
-**This is not a dependency solver, and Pickup does not become a package manager
-by having it.** There is no backtracking and no search: the graph of one
-toolchain is small and its constraints are already consistent, because the
-channel built those packages against each other. It is a walk — take the newest
-build satisfying each requirement, follow what it names, stop when nothing new
-appears. When a requirement cannot be met the walk stops and says which one,
-and nothing is downloaded.
-
-Three things about the channel are worth knowing, because each of them is a way
-to get this wrong:
-
-- `repodata.json` for one subdirectory is **432 MB**. It is never fetched. The
-  per-package endpoint answers in about a megabyte, with the dependencies of
-  every build.
-- That endpoint publishes md5 and not sha256. The per-build one publishes
-  sha256, so it is asked for each package actually being installed — which is
-  what keeps the rule that nothing is installed without a digest.
-- The development halves of the compilers are published as **noarch**, despite
-  names like `libstdcxx-devel_linux-64`. Read only the host's own subdirectory
-  and you find the compiler and none of what it compiles against.
-
-A `.conda` package is a zip holding two zstd tarballs, and the entries are
-*stored* rather than compressed again — so reaching one means walking a few
-headers and copying a range of bytes. No zip library is linked and no `unzip`
-is needed; the tarball goes to the same `tar` as everything else.
-
-Unpacking is only half of it. A package is built under a long placeholder path,
-and files that had to record where they were built still carry it, so the build
-prefix is rewritten to the real one. Binaries keep their length — an ELF is full
-of offsets into itself — and the difference is made up with NUL bytes **at the
-end of the string**, not straight after the prefix. That distinction is not
-academic: a linker carries its own script embedded as text, and padding in the
-middle of `SEARCH_DIR("=<prefix>/lib")` loses the closing quote and leaves a
-linker that will not parse its own script.
-
-Which is exactly why what comes out is not trusted. A closure that unpacked is
-not a toolchain until it has compiled, linked and **run** a program:
-
-```
-$ pickup install gcc --version 16
-probing installed toolchain                        12 features
-✓ gcc 16.1.0 installed in ~/.pickup/toolchains/gcc-16.1.0-x86_64-conda-linux-gnu (990M)
-```
-
-Feature counts alone would not have caught that linker: those probes avoid
-headers on purpose, so all twelve passed against a toolchain that could not
-link `#include <stdio.h>`. Compiling something real is the check that matters.
 
 ### Output for machines
 

@@ -24,18 +24,46 @@
 
 typedef struct {
     char root[64];
+    /* What the toolchain owns. The same as the root for a fake standing in for
+       a compiler the host installed, and a directory under a pickup home for
+       one standing in for a toolchain pickup installed. */
+    char prefix[PICKUP_PATHS_MAX];
     char driver[PICKUP_PATHS_MAX];
-    char gcc_dir[PICKUP_PATHS_MAX];   /* the GCC installation it reports */
-    char libcxx_dir[PICKUP_PATHS_MAX];/* where its own libc++ sits */
+    char gcc_dir[PICKUP_PATHS_MAX];     /* the GCC installation it reports */
+    char libcxx_dir[PICKUP_PATHS_MAX];  /* where its own libc++ sits */
+    char libstdcxx_dir[PICKUP_PATHS_MAX];
 } fake_toolchain;
 
 /* What a fake is willing to accept. */
 typedef struct {
-    bool bare;           /* works with no flags at all */
-    bool gcc_install;    /* works when given --gcc-install-dir= */
-    bool libcxx;         /* works when given -stdlib=libc++ */
-    bool ships_libcxx;   /* carries a libc++ to be pointed at */
+    bool bare;             /* works with no flags at all */
+    bool gcc_install;      /* works when given --gcc-install-dir= */
+    bool libcxx;           /* works when given -stdlib=libc++ */
+    bool ships_libcxx;     /* carries a libc++ to be pointed at */
+    bool ships_libstdcxx;  /* carries a libstdc++ of its own */
 } fake_accepts;
+
+/* The pickup home a fake is judged against. Restored afterwards, because
+   ownership is read from it and a leaked value would decide another test. */
+typedef struct {
+    char previous[PICKUP_PATHS_MAX];
+    bool had_previous;
+} home_fixture;
+
+static bool home_setup(home_fixture *fixture, const char *home) {
+    const char *existing = getenv(PICKUP_HOME_ENV);
+    fixture->had_previous = existing != NULL;
+    if (existing != NULL)
+        snprintf(fixture->previous, sizeof fixture->previous, "%s", existing);
+    return setenv(PICKUP_HOME_ENV, home, 1) == 0;
+}
+
+static void home_teardown(home_fixture *fixture) {
+    if (fixture->had_previous)
+        (void)setenv(PICKUP_HOME_ENV, fixture->previous, 1);
+    else
+        (void)unsetenv(PICKUP_HOME_ENV);
+}
 
 /* Lay out a prefix that looks enough like a GCC installation for the on-disk
    libstdc++ check to find headers in it. */
@@ -58,17 +86,28 @@ static bool make_gcc_tree(fake_toolchain *fake) {
     return fs_write_file(iostream, "/* a stand-in */\n");
 }
 
-static bool make_libcxx(fake_toolchain *fake) {
-    if (!fs_format_path(fake->libcxx_dir, sizeof fake->libcxx_dir,
-                        "%s/lib", fake->root))
-        return false;
-    if (!fs_make_dirs(fake->libcxx_dir))
+/* Both of the toolchain's own libraries live inside its prefix, which is what
+   makes them its own rather than the host's. */
+static bool make_library(const char *directory, const char *name) {
+    if (!fs_make_dirs(directory))
         return false;
 
     char library[PICKUP_PATHS_MAX];
-    if (!fs_format_path(library, sizeof library, "%s/libc++.so", fake->libcxx_dir))
+    if (!fs_format_path(library, sizeof library, "%s/%s", directory, name))
         return false;
     return fs_write_file(library, "/* a stand-in */\n");
+}
+
+static bool make_libcxx(fake_toolchain *fake) {
+    return fs_format_path(fake->libcxx_dir, sizeof fake->libcxx_dir,
+                          "%s/lib", fake->prefix)
+        && make_library(fake->libcxx_dir, "libc++.so");
+}
+
+static bool make_libstdcxx(fake_toolchain *fake) {
+    return fs_format_path(fake->libstdcxx_dir, sizeof fake->libstdcxx_dir,
+                          "%s/lib64", fake->prefix)
+        && make_library(fake->libstdcxx_dir, "libstdc++.so");
 }
 
 /* Write a driver that behaves as `accepts` says. */
@@ -105,9 +144,13 @@ static bool write_driver(const fake_toolchain *fake, const fake_accepts *accepts
         "  [ \"$1\" = '-o' ] && { shift; out=\"$1\"; }\n"
         "  shift\n"
         "done\n"
+        /* A driver answers with a full path for a library it has, and echoes
+           the name back for one it does not. */
         "if [ -n \"$printname\" ]; then\n"
         "  if [ \"$printname\" = 'libc++.so' ] && [ '%s' = 'yes' ]; then\n"
         "    echo '%s/libc++.so'\n"
+        "  elif [ \"$printname\" = 'libstdc++.so' ] && [ '%s' = 'yes' ]; then\n"
+        "    echo '%s/libstdc++.so'\n"
         "  else\n"
         "    echo \"$printname\"\n"
         "  fi\n"
@@ -142,6 +185,7 @@ static bool write_driver(const fake_toolchain *fake, const fake_accepts *accepts
         "chmod 700 \"$out\"\n"
         "exit 0\n",
         accepts->ships_libcxx ? "yes" : "no", fake->libcxx_dir,
+        accepts->ships_libstdcxx ? "yes" : "no", fake->libstdcxx_dir,
         fake->gcc_dir, fake->gcc_dir,
         accepts->gcc_install ? "yes" : "no",
         accepts->libcxx ? "yes" : "no",
@@ -154,15 +198,45 @@ static bool write_driver(const fake_toolchain *fake, const fake_accepts *accepts
     return chmod(fake->driver, 0700) == 0;
 }
 
+/* Everything both kinds of fake need, once the prefix and the driver are
+   decided. The GCC tree stays under the root rather than the prefix: it stands
+   in for the host's GCC, which is never the toolchain's own. */
+static bool fake_build(fake_toolchain *fake, const fake_accepts *accepts) {
+    return make_gcc_tree(fake) && make_libcxx(fake) && make_libstdcxx(fake)
+        && write_driver(fake, accepts);
+}
+
+/* A compiler the host owns: nothing about it is under a pickup home. */
 static bool fake_setup(fake_toolchain *fake, const fake_accepts *accepts) {
     snprintf(fake->root, sizeof fake->root, "%s", "/tmp/pickup_recipe_XXXXXX");
     if (mkdtemp(fake->root) == NULL)
         return false;
+    if (!fs_format_path(fake->prefix, sizeof fake->prefix, "%s", fake->root))
+        return false;
     if (!fs_format_path(fake->driver, sizeof fake->driver, "%s/fakecc", fake->root))
         return false;
-    if (!make_gcc_tree(fake) || !make_libcxx(fake))
+    return fake_build(fake, accepts);
+}
+
+/* A toolchain pickup installed: a prefix under <PICKUP_HOME>/toolchains, with
+   the driver in its bin the way a real one has. */
+static bool fake_setup_installed(fake_toolchain *fake, const fake_accepts *accepts,
+                                 home_fixture *home) {
+    snprintf(fake->root, sizeof fake->root, "%s", "/tmp/pickup_recipe_XXXXXX");
+    if (mkdtemp(fake->root) == NULL)
         return false;
-    return write_driver(fake, accepts);
+
+    char home_dir[PICKUP_PATHS_MAX];
+    char bin[PICKUP_PATHS_MAX];
+    if (!fs_format_path(home_dir, sizeof home_dir, "%s/home", fake->root)
+        || !home_setup(home, home_dir)
+        || !fs_format_path(fake->prefix, sizeof fake->prefix,
+                           "%s/toolchains/fake-1.0.0-x86_64-linux-gnu", home_dir)
+        || !fs_format_path(bin, sizeof bin, "%s/bin", fake->prefix)
+        || !fs_make_dirs(bin)
+        || !fs_format_path(fake->driver, sizeof fake->driver, "%s/fakecc", bin))
+        return false;
+    return fake_build(fake, accepts);
 }
 
 static void fake_teardown(fake_toolchain *fake) {
@@ -258,7 +332,7 @@ MOLTEST(recipe_falls_back_to_the_compilers_own_library) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_prefers_the_system_library_when_both_would_work) {
+MOLTEST(recipe_prefers_the_host_library_for_a_compiler_the_host_owns) {
     fake_toolchain fake;
     /* The choice this module exists to make. Both configurations produce a
        running program; only one of them keeps the toolchain ABI-compatible
@@ -277,6 +351,130 @@ MOLTEST(recipe_prefers_the_system_library_when_both_would_work) {
        looks. */
     EXPECT_EQ(0, (int)recipe.runtime_count);
 
+    fake_teardown(&fake);
+}
+
+MOLTEST(recipe_prefers_what_an_installed_toolchain_brought_with_it) {
+    fake_toolchain fake;
+    home_fixture home;
+    /* The same compiler, the same two working configurations, and the opposite
+       answer — because this one was unpacked into a prefix of its own. The
+       libstdc++ it would otherwise borrow is whichever one this host happens to
+       ship, and that would make one install a different compiler on every
+       machine. */
+    fake_accepts accepts = { .gcc_install = true, .libcxx = true, .ships_libcxx = true };
+    ASSERT_TRUE(fake_setup_installed(&fake, &accepts, &home));
+
+    toolchain chain = chain_of(&fake);
+    link_recipe recipe = recipe_discover(&chain, lang_cxx);
+
+    ASSERT_TRUE(recipe.usable);
+    EXPECT_EQ(stdlib_libcxx, recipe.stdlib);
+    EXPECT_TRUE(has_compile_flag(&recipe, "-stdlib=libc++"));
+    ASSERT_EQ(1, (int)recipe.runtime_count);
+    EXPECT_STREQ(fake.libcxx_dir, recipe.runtime_dirs[0]);
+
+    /* The pinned GCC comes with it. libc++ still takes the startup objects and
+       libgcc from one, and this is where a reordering that moved code instead
+       of composing it first would quietly drop the flag. */
+    EXPECT_TRUE(recipe_gcc_flag(&recipe) != NULL);
+
+    fake_teardown(&fake);
+    home_teardown(&home);
+}
+
+MOLTEST(recipe_prefers_its_own_library_to_needing_no_flags) {
+    fake_toolchain fake;
+    home_fixture home;
+    /* Working untouched is not the same as working the same way everywhere. A
+       host whose libstdc++ is new enough would have this compiler publish an
+       empty recipe, and the next host would get something else. */
+    fake_accepts accepts = { .bare = true, .libcxx = true, .ships_libcxx = true };
+    ASSERT_TRUE(fake_setup_installed(&fake, &accepts, &home));
+
+    toolchain chain = chain_of(&fake);
+    link_recipe recipe = recipe_discover(&chain, lang_cxx);
+
+    ASSERT_TRUE(recipe.usable);
+    EXPECT_EQ(stdlib_libcxx, recipe.stdlib);
+    EXPECT_EQ(1, (int)recipe.runtime_count);
+
+    fake_teardown(&fake);
+    home_teardown(&home);
+}
+
+MOLTEST(recipe_prefers_the_libstdcxx_an_installed_toolchain_brought) {
+    fake_toolchain fake;
+    home_fixture home;
+    /* The other half of the same rule, and the shape a GCC arrives in: no
+       libc++ anywhere, but a libstdc++ of its own that the loader will not find
+       until it is told where it is. */
+    fake_accepts accepts = { .bare = true, .ships_libstdcxx = true };
+    ASSERT_TRUE(fake_setup_installed(&fake, &accepts, &home));
+
+    toolchain chain = chain_of(&fake);
+    link_recipe recipe = recipe_discover(&chain, lang_cxx);
+
+    ASSERT_TRUE(recipe.usable);
+    EXPECT_EQ(stdlib_libstdcxx, recipe.stdlib);
+    EXPECT_TRUE(has_link_flag(&recipe, "-Wl,-rpath,"));
+    /* On the link line only: an rpath on a compile-only command line is an
+       unused argument. */
+    EXPECT_FALSE(has_compile_flag(&recipe, "-Wl,-rpath,"));
+    ASSERT_EQ(1, (int)recipe.runtime_count);
+    EXPECT_STREQ(fake.libstdcxx_dir, recipe.runtime_dirs[0]);
+
+    fake_teardown(&fake);
+    home_teardown(&home);
+}
+
+MOLTEST(recipe_claims_no_library_that_lives_outside_the_prefix) {
+    fake_toolchain fake;
+    home_fixture home;
+    fake_accepts accepts = { .gcc_install = true, .libcxx = true, .ships_libcxx = true };
+    ASSERT_TRUE(fake_setup_installed(&fake, &accepts, &home));
+
+    /* The toolchain is pickup's, and the library it points at is not inside it.
+       Ownership is a question about the library, so this one is the host's
+       however the compiler reached it — which is exactly the case of an
+       installed Clang answering for libstdc++ with a path into /usr. */
+    ASSERT_TRUE(fs_format_path(fake.libcxx_dir, sizeof fake.libcxx_dir,
+                               "%s/elsewhere", fake.root));
+    ASSERT_TRUE(make_library(fake.libcxx_dir, "libc++.so"));
+    ASSERT_TRUE(write_driver(&fake, &accepts));
+
+    toolchain chain = chain_of(&fake);
+    link_recipe recipe = recipe_discover(&chain, lang_cxx);
+
+    ASSERT_TRUE(recipe.usable);
+    EXPECT_EQ(stdlib_libstdcxx, recipe.stdlib);
+    EXPECT_TRUE(has_compile_flag(&recipe, "--gcc-install-dir="));
+    EXPECT_EQ(0, (int)recipe.runtime_count);
+
+    fake_teardown(&fake);
+    home_teardown(&home);
+}
+
+MOLTEST(recipe_orders_a_compiler_the_same_way_without_a_pickup_home) {
+    fake_toolchain fake;
+    home_fixture home;
+    fake_accepts accepts = { .gcc_install = true, .libcxx = true, .ships_libcxx = true };
+    ASSERT_TRUE(fake_setup(&fake, &accepts));
+
+    /* Nowhere to own anything from. The rule has nothing to say, and saying
+       nothing has to leave the ordering exactly as it was before it existed. */
+    char missing[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(missing, sizeof missing, "%s/no-such-home", fake.root));
+    ASSERT_TRUE(home_setup(&home, missing));
+
+    toolchain chain = chain_of(&fake);
+    link_recipe recipe = recipe_discover(&chain, lang_cxx);
+
+    ASSERT_TRUE(recipe.usable);
+    EXPECT_EQ(stdlib_libstdcxx, recipe.stdlib);
+    EXPECT_TRUE(has_compile_flag(&recipe, "--gcc-install-dir="));
+
+    home_teardown(&home);
     fake_teardown(&fake);
 }
 

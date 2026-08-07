@@ -271,6 +271,44 @@ static bool climb(const char *path, int levels, char *out, size_t out_size) {
     return out[0] != '\0';
 }
 
+/*
+ * True when `library_dir` is part of the toolchain `driver` belongs to.
+ *
+ * Ownership is read from the path and from nothing else. `chain->source` would
+ * be the obvious thing to ask and it is the wrong thing: probe_identify clears
+ * the struct it fills, so on the install path — where the recipe is discovered
+ * seconds after the archive was unpacked — every toolchain looks like a system
+ * one, and the toolchain that most needs this rule would be the one denied it.
+ *
+ * The driver is canonicalised before it is asked about. It may be reached
+ * through a symlink while the library directory already came back resolved, and
+ * comparing one against the other would let /home -> /var/home disown a
+ * toolchain.
+ *
+ * False when nothing under <PICKUP_HOME>/toolchains owns it, and false when
+ * there is no pickup home at all — the same answer, and the one that leaves the
+ * ordering exactly as it was before this rule existed. This has nothing to say
+ * about a compiler Pickup did not install.
+ */
+static bool library_is_inside_the_toolchain(const char *driver,
+                                            const char *library_dir) {
+    if (driver == NULL || library_dir == NULL || library_dir[0] == '\0')
+        return false;
+
+    char resolved[PATH_MAX];
+    const char *real = realpath(driver, resolved) != NULL ? resolved : driver;
+
+    char owner[PICKUP_PATHS_MAX];
+    if (!paths_owning_toolchain(real, owner, sizeof owner))
+        return false;
+
+    /* A prefix match alone would claim a sibling directory whose name merely
+       starts with the same characters. */
+    size_t length = strlen(owner);
+    return strncmp(library_dir, owner, length) == 0
+        && (library_dir[length] == '/' || library_dir[length] == '\0');
+}
+
 /* --- composing what a candidate could carry --- */
 
 /*
@@ -390,8 +428,24 @@ static void add_own_libcxx(const candidate_storage *storage, candidate *out,
 /*
  * The candidates for `driver`, in the order they should be tried.
  *
- * `storage` holds the composed flags, which have to outlive this call because
- * the candidates borrow them.
+ * Two orders, and which one applies is a question about where the compiler came
+ * from rather than about what it can do.
+ *
+ * A compiler the host owns is tried untouched first, then pointed at the host's
+ * GCC, and only reaches for its own library when nothing else worked. It shares
+ * a machine with everything already built on it, and libstdc++ is what that
+ * everything was built against.
+ *
+ * A toolchain Pickup installed is tried on what it brought inside its own
+ * prefix first. It was built somewhere else and belongs to no distribution
+ * here: the libstdc++ it would otherwise borrow is whichever one this host
+ * happens to ship, which makes one `pickup install` a different compiler on
+ * every machine. What it carries is the part that is the same everywhere, and
+ * it is also the part Pickup can vouch for.
+ *
+ * Ownership is read from the path of the library, not of the toolchain: an
+ * installed Clang answers for libstdc++ with a path into /usr, and a library
+ * there is the host's however it was reached.
  */
 static size_t build_candidates(capability_lang lang, const char *driver,
                                candidate_storage *storage,
@@ -399,11 +453,23 @@ static size_t build_candidates(capability_lang lang, const char *driver,
     size_t count = 0;
     compose_flags(lang, driver, storage);
 
+    bool stdlib_is_its_own = storage->has_own_stdlib
+        && library_is_inside_the_toolchain(driver, storage->own_stdlib_dir);
+    bool libcxx_is_its_own = storage->has_libcxx
+        && library_is_inside_the_toolchain(driver, storage->libcxx_dir);
+
+    if (stdlib_is_its_own)
+        add_own_libstdcxx(storage, out, &count, max);
+    if (libcxx_is_its_own)
+        add_own_libcxx(storage, out, &count, max);
+
     add_bare(out, &count, max);
-    add_own_libstdcxx(storage, out, &count, max);
+    if (!stdlib_is_its_own)
+        add_own_libstdcxx(storage, out, &count, max);
     add_gcc_install(storage, out, &count, max);
     add_gcc_toolchain(storage, out, &count, max);
-    add_own_libcxx(storage, out, &count, max);
+    if (!libcxx_is_its_own)
+        add_own_libcxx(storage, out, &count, max);
 
     return count;
 }

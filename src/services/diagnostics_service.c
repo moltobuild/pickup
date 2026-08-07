@@ -279,6 +279,18 @@ static void refresh_configuration(const toolchain *chain,
     if (!changed)
         return;
 
+    /* Which standard library it now stands on comes first, because that is the
+       change a reader has to understand. A GCC named beside it is only where
+       the startup objects come from, and saying that instead would report the
+       part that did not move. */
+    if (survey->cxx.stdlib == stdlib_libcxx && survey->cxx.runtime_count > 0) {
+        add_summary(report, section_compilers,
+                    "%s reconfigured - now uses its own %s, from %s",
+                    chain->id, recipe_stdlib_name(survey->cxx.stdlib),
+                    survey->cxx.runtime_dirs[0]);
+        return;
+    }
+
     const char *pinned = recipe_gcc_flag(&survey->cxx);
     if (pinned == NULL)
         pinned = recipe_gcc_flag(&survey->c);

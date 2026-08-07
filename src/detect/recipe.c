@@ -26,6 +26,8 @@
    longer. Neither is assumed to work — both are candidates, and the driver
    decides by accepting one or refusing it. */
 #define FLAG_STDLIB_LIBCXX  "-stdlib=libc++"
+#define FLAG_STDLIB_FORMAT  "-stdlib=%s"
+#define FLAG_STDLIB_PREFIX  "-stdlib="
 #define FLAG_GCC_INSTALL    "--gcc-install-dir=%s"
 #define FLAG_GCC_TOOLCHAIN  "--gcc-toolchain=%s"
 #define FLAG_RPATH          "-Wl,-rpath,%s"
@@ -636,6 +638,66 @@ link_recipe recipe_discover(const toolchain *chain, capability_lang lang) {
     return recipe_discover_for(chain, lang, stdlib_unknown);
 }
 
+/* True if the recipe already says which standard library to use. */
+static bool names_a_stdlib(const link_recipe *recipe) {
+    for (size_t i = 0; i < recipe->compile_count; i++) {
+        if (strncmp(recipe->compile_flags[i], FLAG_STDLIB_PREFIX,
+                    sizeof FLAG_STDLIB_PREFIX - 1) == 0)
+            return true;
+    }
+    return false;
+}
+
+/*
+ * Make a recipe say which library it settled on, when the caller asked for one.
+ *
+ * The recipe is discovered with the driver's own configuration file ignored, so
+ * that what comes out describes the toolchain rather than the state someone
+ * left it in. But it is consumed against a driver that *does* read that file,
+ * and `install` puts one there: a clang++.cfg saying `-stdlib=libc++` silently
+ * overrides a recipe whose flags only named a GCC, and the caller who asked for
+ * libstdc++ gets libc++ and a link error full of symbols it never mentioned.
+ *
+ * So when a library was asked for, the recipe names it. Only then: the default
+ * path stays as short as it was, and no flags remains the most portable answer
+ * there is.
+ *
+ * Added only after it has been probed, like everything else here. It should be
+ * a restatement of what the winning candidate already did, and "should be" is
+ * not how this module decides things.
+ */
+static void name_the_stdlib(const char *driver, capability_lang lang,
+                            cxx_stdlib wanted, bool ignore_config,
+                            link_recipe *recipe) {
+    if (wanted == stdlib_unknown || lang != lang_cxx || names_a_stdlib(recipe))
+        return;
+    if (recipe->compile_count >= RECIPE_MAX_FLAGS
+        || recipe->link_count >= RECIPE_MAX_FLAGS)
+        return;
+
+    char flag[RECIPE_FLAG_MAX];
+    if (!fs_format_path(flag, sizeof flag, FLAG_STDLIB_FORMAT,
+                        recipe_stdlib_name(wanted)))
+        return;
+
+    const char *wanted_flags[RECIPE_MAX_FLAGS + 1];
+    size_t count = 0;
+    for (size_t i = 0; i < recipe->compile_count && count < RECIPE_MAX_FLAGS; i++)
+        wanted_flags[count++] = recipe->compile_flags[i];
+    wanted_flags[count++] = flag;
+
+    const char *probe[RECIPE_MAX_FLAGS + 2];
+    size_t probe_count = probe_flags(ignore_config, wanted_flags, count, probe,
+                                     sizeof probe / sizeof probe[0]);
+    if (health_probe(driver, lang, probe, probe_count) != health_ok)
+        return;
+
+    (void)fs_format_path(recipe->compile_flags[recipe->compile_count++],
+                         RECIPE_FLAG_MAX, "%s", flag);
+    (void)fs_format_path(recipe->link_flags[recipe->link_count++],
+                         RECIPE_FLAG_MAX, "%s", flag);
+}
+
 link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang,
                                 cxx_stdlib wanted) {
     link_recipe recipe = { 0 };
@@ -678,6 +740,7 @@ link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang,
             continue;
 
         publish(&candidates[i], &storage, stdlib, &recipe);
+        name_the_stdlib(driver, lang, wanted, ignore_config, &recipe);
         return recipe;
     }
     return recipe;

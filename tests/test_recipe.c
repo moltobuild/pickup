@@ -760,3 +760,50 @@ MOLTEST(recipe_writes_a_configuration_that_was_never_there) {
 
     fake_teardown(&fake);
 }
+
+MOLTEST(recipe_names_the_library_a_caller_asked_for) {
+    fake_toolchain fake;
+    home_fixture home;
+    /* Left to itself this toolchain would stand on the libc++ it carries, and
+       `install` would write that into a .cfg beside the driver. */
+    fake_accepts accepts = { .gcc_install = true, .libcxx = true, .ships_libcxx = true };
+    ASSERT_TRUE(fake_setup_installed(&fake, &accepts, &home));
+
+    toolchain chain = chain_of(&fake);
+    link_recipe recipe = recipe_discover_for(&chain, lang_cxx, stdlib_libstdcxx);
+
+    ASSERT_TRUE(recipe.usable);
+    EXPECT_EQ(stdlib_libstdcxx, recipe.stdlib);
+
+    /*
+     * And it says so out loud.
+     *
+     * The recipe is discovered with the driver's configuration file ignored,
+     * but it is handed to someone who will invoke that driver with the file in
+     * place. A recipe that only named a GCC would be overridden by a .cfg
+     * saying -stdlib=libc++, and the caller who asked for libstdc++ would get
+     * the other one and a link error full of symbols it never mentioned.
+     */
+    EXPECT_TRUE(has_compile_flag(&recipe, "-stdlib=libstdc++"));
+    EXPECT_TRUE(has_link_flag(&recipe, "-stdlib=libstdc++"));
+
+    fake_teardown(&fake);
+    home_teardown(&home);
+}
+
+MOLTEST(recipe_says_nothing_extra_when_no_library_was_asked_for) {
+    fake_toolchain fake;
+    fake_accepts accepts = { .bare = true };
+    ASSERT_TRUE(fake_setup(&fake, &accepts));
+
+    toolchain chain = chain_of(&fake);
+    link_recipe recipe = recipe_discover(&chain, lang_cxx);
+
+    /* No flags remains the most portable answer there is, and naming a library
+       nobody asked about would spend that for nothing. */
+    ASSERT_TRUE(recipe.usable);
+    EXPECT_EQ(0, (int)recipe.compile_count);
+    EXPECT_FALSE(has_compile_flag(&recipe, "-stdlib="));
+
+    fake_teardown(&fake);
+}

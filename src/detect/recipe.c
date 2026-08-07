@@ -3,6 +3,7 @@
 #include <pickup/detect/gcc_install.h>
 #include <pickup/detect/health.h>
 #include <pickup/services/fs_service.h>
+#include <pickup/services/paths_service.h>
 #include <pickup/services/process_service.h>
 
 #include <limits.h>
@@ -270,91 +271,140 @@ static bool climb(const char *path, int levels, char *out, size_t out_size) {
     return out[0] != '\0';
 }
 
-static size_t build_candidates(const toolchain *chain, capability_lang lang,
-                               const char *driver, candidate_storage *storage,
-                               candidate *out, size_t max) {
-    size_t count = 0;
+/* --- composing what a candidate could carry --- */
 
-    /* 1. Nothing added. A toolchain that works untouched is the one to
-          publish: no flags is the most portable answer there is. */
-    if (count < max)
-        out[count++] = (candidate){ .stdlib = stdlib_unknown, .count = 0 };
+/*
+ * Work out every flag any candidate could need, before any candidate is
+ * ordered.
+ *
+ * The libc++ candidate borrows the pinned GCC — it still takes the startup
+ * objects and libgcc from one — so composing a candidate's flags at the moment
+ * it is emitted would make what it says depend on which candidates happened to
+ * come before it. Composing first is what lets the order be a decision rather
+ * than an accident of layout.
+ */
+static void compose_flags(capability_lang lang, const char *driver,
+                          candidate_storage *storage) {
+    /* Where the toolchain keeps its own C++ library.
 
-    /* 2. Name where the toolchain's own C++ library lives.
-
-          A compiler Pickup installed brings a newer libstdc++ than the system
-          has and links against it, while the loader goes on finding the
-          system's first — so the program builds and then dies on a missing
-          symbol version. Nothing about that shows up until it is run, which is
-          why running it is part of the test. */
+       A compiler carrying a newer libstdc++ than the system has links against
+       it while the loader goes on finding the system's first, so the program
+       builds and then dies on a missing symbol version. Nothing about that
+       shows up until it is run, which is why running it is part of the test. */
     storage->has_own_stdlib = lang == lang_cxx
         && own_libstdcxx_dir(driver, storage->own_stdlib_dir,
-                             sizeof storage->own_stdlib_dir);
-    if (storage->has_own_stdlib
+                             sizeof storage->own_stdlib_dir)
         && fs_format_path(storage->own_rpath, sizeof storage->own_rpath,
-                          FLAG_RPATH, storage->own_stdlib_dir)
-        && count < max) {
-        candidate entry = { .stdlib = stdlib_libstdcxx, .count = 0 };
-        add_flag(&entry, storage->own_rpath);
-        out[count++] = entry;
-    }
+                          FLAG_RPATH, storage->own_stdlib_dir);
 
-    /* 3. Pin the GCC installation, when a complete one exists and is not
-          already what the driver would choose. This is what answers a Clang
-          that picked the highest-numbered GCC and found no C++ in it. */
+    /* The best complete GCC installation on the machine, named two ways.
+
+       Asked with the driver's own config out of the way: a pinned GCC stops it
+       from listing the others, and this is the code that has to choose. */
     gcc_install_list installs;
     gcc_install best;
-    /* Asked with the driver's own config out of the way: a pinned GCC stops it
-       from listing the others, and this is the code that has to choose. */
     bool have_best = gcc_install_query(driver, true, &installs) && installs.count > 0
         && gcc_install_best(&installs, &best);
 
-    if (have_best
-        && fs_format_path(storage->gcc_install, sizeof storage->gcc_install,
-                          FLAG_GCC_INSTALL, best.path)
-        && count < max) {
-        candidate entry = { .stdlib = stdlib_libstdcxx, .count = 0 };
-        add_flag(&entry, storage->gcc_install);
-        out[count++] = entry;
-    }
+    if (have_best)
+        (void)fs_format_path(storage->gcc_install, sizeof storage->gcc_install,
+                             FLAG_GCC_INSTALL, best.path);
 
-    /* 4. The same intent through the older flag, for drivers that do not know
-          the newer one. It names a prefix rather than a version, so it only
-          helps where the wanted GCC is the one that prefix leads to — which is
-          exactly the case for a GCC Pickup installed itself. */
     char prefix[PICKUP_PATHS_MAX];
-    if (have_best && climb(best.path, GCC_PREFIX_DEPTH, prefix, sizeof prefix)
-        && fs_format_path(storage->gcc_toolchain, sizeof storage->gcc_toolchain,
-                          FLAG_GCC_TOOLCHAIN, prefix)
-        && count < max) {
-        candidate entry = { .stdlib = stdlib_libstdcxx, .count = 0 };
-        add_flag(&entry, storage->gcc_toolchain);
-        out[count++] = entry;
-    }
+    if (have_best && climb(best.path, GCC_PREFIX_DEPTH, prefix, sizeof prefix))
+        (void)fs_format_path(storage->gcc_toolchain, sizeof storage->gcc_toolchain,
+                             FLAG_GCC_TOOLCHAIN, prefix);
 
-    /* 5. The compiler's own libc++, with the run-time search path it needs.
-          Only for C++, and only when the toolchain actually carries one.
-
-          The rpath is not optional. Without it the link succeeds and the
-          program dies on its first run, which is precisely the failure this
-          module was built to stop reporting as success. */
+    /* And where it keeps its own libc++, when it carries one at all. */
     storage->has_libcxx = lang == lang_cxx
         && recipe_own_libcxx_dir(driver, storage->libcxx_dir,
                                  sizeof storage->libcxx_dir);
-    if (storage->has_libcxx && count < max) {
-        candidate entry = { .stdlib = stdlib_libcxx, .count = 0 };
-        add_flag(&entry, FLAG_STDLIB_LIBCXX);
-        if (fs_format_path(storage->rpath, sizeof storage->rpath,
-                           FLAG_RPATH, storage->libcxx_dir))
-            add_flag(&entry, storage->rpath);
-        /* Pinning the GCC as well, when there is one to pin: libc++ still
-           borrows the startup objects and libgcc from it. */
-        if (storage->gcc_install[0] != '\0')
-            add_flag(&entry, storage->gcc_install);
-        out[count++] = entry;
-    }
+    if (storage->has_libcxx)
+        (void)fs_format_path(storage->rpath, sizeof storage->rpath,
+                             FLAG_RPATH, storage->libcxx_dir);
+}
 
-    (void)chain;
+/* --- emitting them, in an order decided elsewhere --- */
+
+/* Nothing added. A toolchain that works untouched is the one to publish: no
+   flags is the most portable answer there is. */
+static void add_bare(candidate *out, size_t *count, size_t max) {
+    if (*count < max)
+        out[(*count)++] = (candidate){ .stdlib = stdlib_unknown, .count = 0 };
+}
+
+/* Name where the toolchain's own C++ library lives. */
+static void add_own_libstdcxx(const candidate_storage *storage, candidate *out,
+                              size_t *count, size_t max) {
+    if (!storage->has_own_stdlib || *count >= max)
+        return;
+    candidate entry = { .stdlib = stdlib_libstdcxx, .count = 0 };
+    add_flag(&entry, storage->own_rpath);
+    out[(*count)++] = entry;
+}
+
+/* Pin the GCC installation. This is what answers a Clang that picked the
+   highest-numbered GCC and found no C++ in it. */
+static void add_gcc_install(const candidate_storage *storage, candidate *out,
+                            size_t *count, size_t max) {
+    if (storage->gcc_install[0] == '\0' || *count >= max)
+        return;
+    candidate entry = { .stdlib = stdlib_libstdcxx, .count = 0 };
+    add_flag(&entry, storage->gcc_install);
+    out[(*count)++] = entry;
+}
+
+/* The same intent through the older flag, for drivers that do not know the
+   newer one. It names a prefix rather than a version, so it only helps where
+   the wanted GCC is the one that prefix leads to. */
+static void add_gcc_toolchain(const candidate_storage *storage, candidate *out,
+                              size_t *count, size_t max) {
+    if (storage->gcc_toolchain[0] == '\0' || *count >= max)
+        return;
+    candidate entry = { .stdlib = stdlib_libstdcxx, .count = 0 };
+    add_flag(&entry, storage->gcc_toolchain);
+    out[(*count)++] = entry;
+}
+
+/* The compiler's own libc++, with the run-time search path it needs.
+
+   The rpath is not optional. Without it the link succeeds and the program dies
+   on its first run, which is precisely the failure this module was built to
+   stop reporting as success. */
+static void add_own_libcxx(const candidate_storage *storage, candidate *out,
+                           size_t *count, size_t max) {
+    if (!storage->has_libcxx || *count >= max)
+        return;
+    candidate entry = { .stdlib = stdlib_libcxx, .count = 0 };
+    add_flag(&entry, FLAG_STDLIB_LIBCXX);
+    if (storage->rpath[0] != '\0')
+        add_flag(&entry, storage->rpath);
+    /* Pinning the GCC as well, when there is one to pin: libc++ still borrows
+       the startup objects and libgcc from it. */
+    if (storage->gcc_install[0] != '\0')
+        add_flag(&entry, storage->gcc_install);
+    out[(*count)++] = entry;
+}
+
+
+/*
+ * The candidates for `driver`, in the order they should be tried.
+ *
+ * `storage` holds the composed flags, which have to outlive this call because
+ * the candidates borrow them.
+ */
+static size_t build_candidates(capability_lang lang, const char *driver,
+                               candidate_storage *storage,
+                               candidate *out, size_t max) {
+    size_t count = 0;
+    compose_flags(lang, driver, storage);
+
+    add_bare(out, &count, max);
+    add_own_libstdcxx(storage, out, &count, max);
+    add_gcc_install(storage, out, &count, max);
+    add_gcc_toolchain(storage, out, &count, max);
+    add_own_libcxx(storage, out, &count, max);
+
     return count;
 }
 
@@ -530,7 +580,7 @@ link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang,
 
     candidate_storage storage = { 0 };
     candidate candidates[RECIPE_MAX_FLAGS];
-    size_t count = build_candidates(chain, lang, driver, &storage,
+    size_t count = build_candidates(lang, driver, &storage,
                                     candidates, RECIPE_MAX_FLAGS);
 
     /* Settled once: every probe below has to be run the same way, or the

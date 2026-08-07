@@ -7,14 +7,13 @@
 #include <string.h>
 
 /*
- * The version is written in two places and has to agree with itself.
+ * What `-V` reports has to be what the manifest declares.
  *
- * `Project.toml` is what the ecosystem reads and what a package built from this
- * repository is named after; the `#define` in src/cli.c is what `-V` reports.
- * Nothing keeps them together but the discipline of editing both in the same
- * commit, and the failure is quiet: a binary that answers with the version
- * before last looks exactly like one that was never rebuilt, which is the one
- * question `-V` exists to settle.
+ * The number lives in `Project.toml` alone now: molto passes it to every
+ * translation unit it compiles, and the bootstrap Makefile reads the same line
+ * out of the same file. So this no longer catches two files drifting apart --
+ * it catches the mechanism failing, and it catches a stale binary, which looks
+ * exactly the same from outside and is the one question `-V` exists to settle.
  */
 
 /* The manifest sits at the root, which is where `make test` runs from. */

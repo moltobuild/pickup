@@ -17,7 +17,14 @@
 #include <stdio.h>
 #include <string.h>
 
-#define PICKUP_VERSION "0.3.1"
+/* Handed in by whoever compiled this, from [package] version in Project.toml.
+   Molto defines it for every project it builds, and the bootstrap Makefile
+   reads the same line out of the same file -- so the number lives in one place
+   and a binary cannot disagree with the manifest it was built from. */
+#ifndef MOLTO_PKG_VERSION
+#  define MOLTO_PKG_VERSION "0.0.0-unknown"
+#endif
+#define PICKUP_VERSION MOLTO_PKG_VERSION
 
 /* Machine-readable output is TOML because Molto already parses TOML: consuming
    pickup adds no parser to the consumer (spec.md section 13). */

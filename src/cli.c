@@ -17,7 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define PICKUP_VERSION "0.2.0"
+#define PICKUP_VERSION "0.3.0"
 
 /* Machine-readable output is TOML because Molto already parses TOML: consuming
    pickup adds no parser to the consumer (spec.md section 13). */

@@ -1,6 +1,6 @@
 # Pickup Specification
 
-Version: 0.2.0-draft
+Version: 0.3.0-draft
 
 Status: Draft
 
@@ -654,7 +654,7 @@ Version 0.1
 
 Version 0.2
 
-- Installation, from Pickup's own registry
+- Installation
 - Health: whether a compiler produces a program that runs
 - The build recipe, discovered and published for the caller
 - Diagnostics
@@ -662,6 +662,11 @@ Version 0.2
 - Default toolchain, and uninstall
 
 Version 0.3
+
+- One registry as the only source, replacing the two upstream ones
+- An installed toolchain stands on the library it brought
+
+Version 0.4
 
 - Windows and macOS
 - Cross-compilation targets

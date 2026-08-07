@@ -23,12 +23,29 @@
  * one that compiles, links AND runs is the one published. A recipe that was
  * never watched producing a working program is not a recipe.
  *
- * The order matters. libstdc++ is tried before libc++ because the two are not
- * ABI compatible, and libstdc++ is what everything else already compiled on
+ * The order matters, and it is not the same order for every toolchain: which
+ * configuration is best depends on where the compiler came from.
+ *
+ * For a compiler the host owns, libstdc++ is tried before libc++. The two are
+ * not ABI compatible, and libstdc++ is what everything else already compiled on
  * the machine is using. Falling back to the compiler's own library makes the
- * toolchain self-contained at the price of no longer being able to link
- * against the system's C++ libraries, which is a real cost and therefore a
- * last resort rather than a shortcut.
+ * toolchain self-contained at the price of no longer being able to link against
+ * the system's C++ libraries, which is a real cost and therefore a last resort
+ * rather than a shortcut.
+ *
+ * For a toolchain Pickup installed, the library it brought goes first. It was
+ * built somewhere else and belongs to no distribution here, so the libstdc++ it
+ * would otherwise borrow is whichever one this host happens to ship — which
+ * makes one `pickup install` a C++17 compiler on one machine and a C++23 one on
+ * the next. What it carries is the half that is the same everywhere, and the
+ * half Pickup can vouch for. Nothing else on the machine was built against it
+ * either, so the ABI cost above is one this toolchain can afford.
+ *
+ * The line between the two is ownership, and ownership is read from the path: a
+ * library counts as the toolchain's own only when it lives inside a prefix
+ * under <PICKUP_HOME>/toolchains. It is asked about the library rather than the
+ * compiler, because an installed Clang answers for libstdc++ with a path into
+ * /usr, and a library there is the host's however it was reached.
  */
 
 /* Which C++ standard library the recipe settled on. */

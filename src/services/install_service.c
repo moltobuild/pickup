@@ -322,10 +322,11 @@ static void configure_installed(install_report *report) {
         link_recipe cxx = recipe_discover(&chain, lang_cxx);
         (void)recipe_write_config(chain.cxx_path, &cxx);
 
-        /* One toolchain stands on one GCC. C++ is what forces the choice —
-           it is the half that needs a libstdc++ — and leaving C to go on
-           picking its own would have a project's C and C++ objects built
-           against two different runtimes. */
+        /* One toolchain stands on one GCC. C++ is the half with a standard
+           library to choose, and whichever it chose it still takes the startup
+           objects and libgcc from a GCC — so leaving C to go on picking its own
+           would have a project's C and C++ objects built against two different
+           runtimes. */
         (void)recipe_align_gcc(&cxx, chain.path, &c);
     }
     (void)recipe_write_config(chain.path, &c);

@@ -530,10 +530,10 @@ version = "22.1.8"
 target = "x86_64-unknown-linux-gnu"
 
 [cxx]
-stdlib = "libstdc++"
-compile_flags = ["--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/11"]
-link_flags = ["--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/11"]
-runtime_dirs = []
+stdlib = "libc++"
+compile_flags = ["-stdlib=libc++", "--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/11"]
+link_flags = ["-stdlib=libc++", "-Wl,-rpath,~/.pickup/toolchains/clang-19.1.6-x86_64-unknown-linux-gnu/lib/x86_64-unknown-linux-gnu", …]
+runtime_dirs = ["~/.pickup/toolchains/clang-19.1.6-x86_64-unknown-linux-gnu/lib/x86_64-unknown-linux-gnu"]
 ```
 
 `id` names the toolchain, as `list` and `default` do. Asking with `--std` adds
@@ -560,19 +560,32 @@ So `resolve` publishes the recipe, and like everything else here it is proven
 rather than assumed: candidates are tried in order and the first that compiles,
 links **and runs** is the one published.
 
-libstdc++ is tried before libc++ deliberately. The two are not ABI compatible,
-and libstdc++ is what everything else on the machine was built against; falling
-back to the compiler's own library makes a toolchain self-contained at the cost
-of no longer linking against the system's C++ libraries. `--stdlib` forces one
-when the project has a constraint Pickup cannot see:
+Which library it settles on depends on who owns the compiler.
+
+For one the host owns, libstdc++ is tried before libc++ deliberately. The two
+are not ABI compatible, and libstdc++ is what everything else on the machine was
+built against; falling back to the compiler's own library makes a toolchain
+self-contained at the cost of no longer linking against the system's C++
+libraries.
+
+For a toolchain Pickup installed it is the other way round: what it brought
+inside its own prefix beats what the host lends it. That toolchain was built
+elsewhere and borrows a libstdc++ only by accident of where it was unpacked,
+which would make one `pickup install` a different compiler on every machine.
+Ownership is read from the path, so nothing outside `~/.pickup/toolchains`
+changes behaviour.
+
+`--stdlib` forces one when the project has a constraint Pickup cannot see —
+linking against a system-packaged C++ library, for instance, which is built
+against libstdc++ and will not resolve symbols compiled against libc++:
 
 ```
-$ pickup resolve --lang c++ --stdlib libc++ --format toml
+$ pickup resolve --lang c++ --stdlib libstdc++ --format toml
 [cxx]
-stdlib = "libc++"
-compile_flags = ["-stdlib=libc++", "--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/11"]
-link_flags = ["-stdlib=libc++", "-Wl,-rpath,~/.pickup/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu/lib/x86_64-unknown-linux-gnu", …]
-runtime_dirs = ["~/.pickup/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu/lib/x86_64-unknown-linux-gnu"]
+stdlib = "libstdc++"
+compile_flags = ["--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/11"]
+link_flags = ["--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/11"]
+runtime_dirs = []
 ```
 
 `runtime_dirs` is there because linking is not running. Without that `-rpath`

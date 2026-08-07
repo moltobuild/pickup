@@ -223,11 +223,26 @@ flags are the answer as much as the path is. They are discovered, not assumed:
 candidates are tried in order and the first that compiles, links and runs is
 published.
 
-libstdc++ is preferred over libc++ where both work. The two are not ABI
-compatible, and libstdc++ is what the rest of the machine was built against;
-the compiler's own library makes a toolchain self-contained at the cost of no
-longer linking against the system's. That is a real cost, so it is a last
-resort rather than a default.
+Which standard library wins depends on who owns the compiler.
+
+For a compiler the host owns, libstdc++ is preferred over libc++ where both
+work. The two are not ABI compatible, and libstdc++ is what the rest of the
+machine was built against; the compiler's own library makes a toolchain
+self-contained at the cost of no longer linking against the system's. That is a
+real cost, so it is a last resort rather than a default.
+
+For a toolchain Pickup installed the preference runs the other way: what it
+brought inside its own prefix beats what the host lends it. Such a toolchain was
+built elsewhere and borrows a libstdc++ only by accident of where it was
+unpacked, which makes one install a different compiler on every machine — the
+thing this project exists to stop. What it carries is the half Pickup can vouch
+for, and the ABI it can promise is the same one everywhere.
+
+Ownership is read from the path: a library counts as the toolchain's own only
+when it lives inside a prefix under `<PICKUP_HOME>/toolchains`. Nothing outside
+one changes behaviour, and neither does a library an installed compiler points
+at outside its own prefix. A caller with a constraint Pickup cannot see says so
+with `--stdlib`, which narrows the search rather than filtering its answer.
 
 ---
 

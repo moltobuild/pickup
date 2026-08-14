@@ -514,6 +514,46 @@ which registry to trust, and a command able to change it would be a command able
 to redirect every future install.
 
 
+### Packing what it installs
+
+The registry serves what someone put in it, and `scripts/pack_toolchain.sh` is
+how that is done reproducibly:
+
+```sh
+scripts/pack_toolchain.sh <prefix> <name> <version> <target> [outdir]
+PACK_SYSROOT=<dir> scripts/pack_toolchain.sh …   # ship this sysroot instead
+```
+
+It writes the `tar.zst` and the `recipe.toml` that go up in the two publishing
+requests. What it is really doing is leaving things out, because that is the
+whole reason this registry exists — the numbers from this machine:
+
+| Toolchain    | Upstream | Packed | Downloaded |
+| ------------ | -------- | ------ | ---------- |
+| clang 22.1.8 | 735 MB   | 276 MB | 68 MB      |
+| gcc 12.3.0   | 856 MB   | 238 MB | 64 MB      |
+| gcc 15.3.0   | 717 MB   | 313 MB | 81 MB      |
+
+Every exclusion is argued in the script, next to where it is made. Two of them
+are traps rather than choices, and belong here as well:
+
+- **`bin/` sits at the root of the archive.** Extraction uses
+  `--strip-components=0`, so one extra directory level is a toolchain pickup
+  unpacks and then cannot find.
+- **The sysroot decides who can run the output.** A gcc packed with a glibc
+  newer than the host's compiles, links and runs `puts("ok")` — and then
+  produces a real program that dies at startup with `GLIBC_2.38 not found`.
+  The script compares the shipped C library against the host's and refuses to
+  pack rather than hand anyone a compiler like that. `PACK_SYSROOT` names an
+  older one; glibc 2.28 is the oldest that still has `_DEFAULT_SOURCE`, which
+  molto's own sources need.
+
+Before writing the archive it compiles, links and **runs** a program in both C
+and C++ out of the trimmed tree, for the reason `spec.md` gives: counting
+features proves nothing, because the probes avoid headers on purpose and a
+compiler with a broken sysroot passes every one of them.
+
+
 ### Output for machines
 
 Every command that produces data takes `--format toml`. TOML because Molto

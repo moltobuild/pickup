@@ -13,9 +13,11 @@
 static const char catalogue_json[] =
     "{\"kind\":\"toolchain\",\"entries\":["
     " {\"name\":\"clang\",\"latest_version\":\"19.1.6\",\"versions\":1,"
-    "  \"targets\":[\"linux-x86_64\"],\"published_at\":\"2026-08-05T19:41:45Z\"},"
+    "  \"targets\":[\"linux-x86_64\"],\"published_at\":\"2026-08-05T19:41:45Z\","
+    "  \"published_by\":\"jane@example.invalid\"},"
     " {\"name\":\"gcc\",\"latest_version\":\"16.1.0\",\"versions\":1,"
-    "  \"targets\":[\"linux-x86_64\"],\"published_at\":\"2026-08-06T16:56:52Z\"}]}";
+    "  \"targets\":[\"linux-x86_64\"],\"published_at\":\"2026-08-06T16:56:52Z\","
+    "  \"published_by\":null}]}";
 
 static const char releases_json[] =
     "{\"kind\":\"toolchain\",\"name\":\"gcc\",\"releases\":[{"
@@ -25,6 +27,7 @@ static const char releases_json[] =
     "  \"checksum\":\"062ae43f2c002b8149b62ee52862f15504a4e3318852aa38d0a0700c5025bbfc\","
     "  \"size_bytes\":68711760,\"yanked\":false,"
     "  \"published_at\":\"2026-08-06T16:56:52Z\","
+    "  \"published_by\":\"jane@example.invalid\","
     "  \"metadata\":{\"provides\":[\"concepts\",\"spaceship\"],"
     "   \"toolchain\":{\"vendor\":\"gcc\",\"triple\":\"x86_64-conda-linux-gnu\"},"
     "   \"about\":{\"description\":\"GNU C and C++ compiler\"}},"
@@ -35,14 +38,17 @@ static const char tool_json[] =
     " \"kind\":\"tool\",\"name\":\"clang-format\",\"version\":\"19.1.6\",\"targets\":[{"
     "  \"kind\":\"tool\",\"name\":\"clang-format\",\"version\":\"19.1.6\","
     "  \"target\":\"linux-x86_64\",\"format\":\"tar.zst\",\"checksum\":\"aa\","
-    "  \"size_bytes\":1329462,\"yanked\":false,"
+    "  \"size_bytes\":1329462,\"yanked\":false,\"published_by\":null,"
     "  \"metadata\":{\"tool\":{\"kind\":\"formatter\",\"binary\":\"bin/clang-format\"}},"
     "  \"download_url\":\"https://example.invalid/cf.tar.zst\"}]}]}";
 
+/* The second row has no `published_by` at all: rows the registry wrote before
+   the field existed are still read. */
 static const char search_json[] =
     "{\"query\":\"clang\",\"results\":["
     " {\"kind\":\"toolchain\",\"name\":\"clang\",\"latest_version\":\"19.1.6\","
-    "  \"targets\":1,\"published_at\":\"2026-08-05T19:41:45Z\"},"
+    "  \"targets\":1,\"published_at\":\"2026-08-05T19:41:45Z\","
+    "  \"published_by\":\"jane@example.invalid\"},"
     " {\"kind\":\"tool\",\"name\":\"clang-format\",\"latest_version\":\"19.1.6\","
     "  \"targets\":1,\"published_at\":\"2026-08-05T15:26:03Z\"}]}";
 
@@ -63,6 +69,35 @@ MOLTEST(registry_reads_a_catalogue) {
     EXPECT_STREQ("linux-x86_64", list.items[0].targets[0]);
     EXPECT_EQ(registry_kind_toolchain, list.items[0].kind);
     EXPECT_STREQ("gcc", list.items[1].name);
+    EXPECT_STREQ("jane@example.invalid", list.items[0].published_by);
+
+    registry_entry_list_free(&list);
+}
+
+/* An artifact published before the registry had accounts. The row is read, and
+   the author is simply not known. */
+MOLTEST(registry_reads_a_catalogue_row_with_no_author) {
+    registry_entry_list list;
+    ASSERT_TRUE(registry_parse_catalogue(catalogue_json, &list));
+    ASSERT_EQ(2, (int)list.count);
+
+    EXPECT_STREQ("gcc", list.items[1].name);
+    EXPECT_STREQ("", list.items[1].published_by);
+
+    registry_entry_list_free(&list);
+}
+
+/* The same, for a document written before the field existed at all. */
+MOLTEST(registry_reads_a_catalogue_row_that_never_mentions_an_author) {
+    static const char without_field[] =
+        "{\"kind\":\"toolchain\",\"entries\":[{\"name\":\"clang\","
+        " \"latest_version\":\"19.1.6\",\"versions\":1,"
+        " \"targets\":[\"linux-x86_64\"]}]}";
+
+    registry_entry_list list;
+    ASSERT_TRUE(registry_parse_catalogue(without_field, &list));
+    ASSERT_EQ(1, (int)list.count);
+    EXPECT_STREQ("", list.items[0].published_by);
 
     registry_entry_list_free(&list);
 }
@@ -78,6 +113,9 @@ MOLTEST(registry_reads_a_search_answer) {
     EXPECT_EQ(registry_kind_toolchain, list.items[0].kind);
     EXPECT_EQ(registry_kind_tool, list.items[1].kind);
     EXPECT_STREQ("clang-format", list.items[1].name);
+
+    EXPECT_STREQ("jane@example.invalid", list.items[0].published_by);
+    EXPECT_STREQ("", list.items[1].published_by);
 
     registry_entry_list_free(&list);
 }
@@ -104,6 +142,7 @@ MOLTEST(registry_reads_an_artifact_whole) {
     EXPECT_STREQ("gcc", artifact->vendor);
     EXPECT_STREQ("x86_64-conda-linux-gnu", artifact->triple);
     EXPECT_STREQ("GNU C and C++ compiler", artifact->description);
+    EXPECT_STREQ("jane@example.invalid", artifact->published_by);
     ASSERT_EQ(2, (int)artifact->provides_count);
     EXPECT_STREQ("spaceship", artifact->provides[1]);
 
@@ -116,6 +155,18 @@ MOLTEST(registry_reads_the_binary_a_tool_names) {
     ASSERT_EQ(1, (int)list.count);
     EXPECT_EQ(registry_kind_tool, list.items[0].kind);
     EXPECT_STREQ("bin/clang-format", list.items[0].binary);
+    registry_artifact_list_free(&list);
+}
+
+/* An author the registry states as null. Everything else about the artifact is
+   there, so the blob stays installable and only the name of who published it is
+   missing. */
+MOLTEST(registry_reads_an_artifact_with_no_author) {
+    registry_artifact_list list;
+    ASSERT_TRUE(registry_parse_releases(tool_json, NULL, NULL, &list));
+    ASSERT_EQ(1, (int)list.count);
+    EXPECT_STREQ("", list.items[0].published_by);
+    EXPECT_STREQ("https://example.invalid/cf.tar.zst", list.items[0].download_url);
     registry_artifact_list_free(&list);
 }
 
@@ -150,6 +201,7 @@ MOLTEST(registry_reads_a_single_artifact_document) {
         "{\"kind\":\"tool\",\"name\":\"clang-tidy\",\"version\":\"19.1.6\","
         " \"target\":\"linux-x86_64\",\"format\":\"tar.zst\",\"checksum\":\"bf\","
         " \"size_bytes\":24599140,\"yanked\":false,"
+        " \"published_by\":\"jane@example.invalid\","
         " \"download_url\":\"https://example.invalid/ct.tar.zst\"}";
 
     registry_artifact artifact;
@@ -157,6 +209,22 @@ MOLTEST(registry_reads_a_single_artifact_document) {
     EXPECT_EQ(registry_kind_tool, artifact.kind);
     EXPECT_STREQ("clang-tidy", artifact.name);
     EXPECT_EQ(24599140LL, artifact.size_bytes);
+    EXPECT_STREQ("jane@example.invalid", artifact.published_by);
+}
+
+/* The coordinate endpoint as it answered before it knew about accounts: no
+   `published_by` key anywhere. Reading it is still a success. */
+MOLTEST(registry_reads_a_single_artifact_document_with_no_author) {
+    static const char one[] =
+        "{\"kind\":\"tool\",\"name\":\"clang-tidy\",\"version\":\"19.1.6\","
+        " \"target\":\"linux-x86_64\",\"format\":\"tar.zst\",\"checksum\":\"bf\","
+        " \"size_bytes\":24599140,\"yanked\":false,"
+        " \"download_url\":\"https://example.invalid/ct.tar.zst\"}";
+
+    registry_artifact artifact;
+    ASSERT_TRUE(registry_parse_artifact(one, &artifact));
+    EXPECT_STREQ("clang-tidy", artifact.name);
+    EXPECT_STREQ("", artifact.published_by);
 }
 
 MOLTEST(registry_reads_the_error_code) {

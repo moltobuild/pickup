@@ -209,6 +209,8 @@ static bool read_artifact(json_value value, registry_kind fallback,
     (void)json_bool(json_get(value, "yanked"), &out->yanked);
     copy_optional(json_get(value, "published_at"),
                   out->published_at, sizeof out->published_at);
+    copy_optional(json_get(value, "published_by"),
+                  out->published_by, sizeof out->published_by);
     read_metadata(value, out);
     return true;
 }
@@ -355,6 +357,8 @@ static bool read_entry(json_value value, registry_kind fallback, registry_entry 
 
     copy_optional(json_get(value, "published_at"),
                   out->published_at, sizeof out->published_at);
+    copy_optional(json_get(value, "published_by"),
+                  out->published_by, sizeof out->published_by);
     return true;
 }
 

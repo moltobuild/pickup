@@ -11,17 +11,41 @@
 #include <string.h>
 
 /* A catalogue listing: what exists, and the newest of each. */
-static const char *const catalogue_headers[] = { "NAME", "KIND", "VERSION", "TARGETS" };
+static const char *const catalogue_headers[] = {
+    "NAME", "KIND", "VERSION", "TARGETS", "PUBLISHED BY",
+};
 #define CATALOGUE_COLUMNS (sizeof catalogue_headers / sizeof catalogue_headers[0])
 
-/* One name's releases: what can be installed, and whether it should be. */
-static const char *const release_headers[] = { "VERSION", "SIZE", "TARGET", "STATUS" };
+/* One name's releases: what can be installed, and whether it should be. The
+   author comes before the status because status is empty on most rows, and a
+   blank column in the middle of a table reads as a missing value. */
+static const char *const release_headers[] = {
+    "VERSION", "SIZE", "TARGET", "PUBLISHED BY", "STATUS",
+};
 #define RELEASE_COLUMNS (sizeof release_headers / sizeof release_headers[0])
 
 /* What a withdrawn release is marked with. Still listed: it remains
    resolvable, and hiding it would leave an existing install unexplained. */
 #define STATUS_YANKED "yanked"
 #define STATUS_NONE   ""
+
+/* What stands in for an author the registry does not know, because the artifact
+   was published before it had accounts. */
+#define PUBLISHER_UNKNOWN "-"
+
+/* A cell for an author, so an unknown one reads as unknown rather than as a
+   column that failed to print. */
+static const char *publisher_cell(const char *published_by) {
+    return published_by[0] != '\0' ? published_by : PUBLISHER_UNKNOWN;
+}
+
+/* A TOML key is written only when there is something to write: an empty string
+   would claim the author is the empty string, and the truth is that nobody
+   knows who it was. */
+static void print_optional_key(const char *key, const char *value) {
+    if (value[0] != '\0')
+        printf("%s = \"%s\"\n", key, value);
+}
 
 /* Room for the joined target names of one catalogue row. */
 #define TARGETS_CELL_MAX (REGISTRY_TARGETS_MAX * (REGISTRY_TARGET_MAX + 2))
@@ -77,6 +101,7 @@ static void print_catalogue_text(const registry_entry_list *list) {
             const char *cells[CATALOGUE_COLUMNS] = {
                 list->items[i].name, registry_kind_name(list->items[i].kind),
                 list->items[i].latest_version, targets,
+                publisher_cell(list->items[i].published_by),
             };
             if (pass == 0)
                 table_fit_row(&columns, cells);
@@ -100,6 +125,7 @@ static void print_catalogue_toml(const registry_entry_list *list) {
         for (size_t j = 0; j < entry->target_count; j++)
             printf("%s\"%s\"", j > 0 ? ", " : "", entry->targets[j]);
         printf("]\n");
+        print_optional_key("published_by", entry->published_by);
     }
 }
 
@@ -165,6 +191,7 @@ static void print_releases_text(const registry_artifact_list *list) {
             format_size(list->items[i].size_bytes, size, sizeof size);
             const char *cells[RELEASE_COLUMNS] = {
                 list->items[i].version, size, list->items[i].target,
+                publisher_cell(list->items[i].published_by),
                 list->items[i].yanked ? STATUS_YANKED : STATUS_NONE,
             };
             if (pass == 0)
@@ -189,6 +216,7 @@ static void print_releases_toml(const registry_artifact_list *list) {
         printf("sha256 = \"%s\"\n", artifact->checksum);
         printf("size = %lld\n", artifact->size_bytes);
         printf("yanked = %s\n", artifact->yanked ? "true" : "false");
+        print_optional_key("published_by", artifact->published_by);
         printf("url = \"%s\"\n", artifact->download_url);
     }
 }

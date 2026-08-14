@@ -41,6 +41,7 @@
 #define REGISTRY_TARGETS_MAX  8
 #define REGISTRY_FEATURES_MAX 40
 #define REGISTRY_FEATURE_MAX  32
+#define REGISTRY_EMAIL_MAX    255  /* 254 is the longest address, plus the NUL */
 
 /* The one packing this build knows how to open. Published by the registry as
    `format`, and compared rather than guessed. */
@@ -83,6 +84,11 @@ typedef struct {
     char binary[REGISTRY_BINARY_MAX];
     char provides[REGISTRY_FEATURES_MAX][REGISTRY_FEATURE_MAX];
     size_t provides_count;
+
+    /* Who published it. Empty for everything published before the registry had
+       accounts, which is a fact about the artifact rather than a fault in the
+       answer, so it never stops a document from being read. */
+    char published_by[REGISTRY_EMAIL_MAX];
 } registry_artifact;
 
 typedef struct {
@@ -101,6 +107,10 @@ typedef struct {
     char targets[REGISTRY_TARGETS_MAX][REGISTRY_TARGET_MAX];
     size_t target_count;
     char published_at[REGISTRY_TIME_MAX];
+
+    /* Who published the latest version. Shown, never obeyed, and empty when
+       that version predates accounts. */
+    char published_by[REGISTRY_EMAIL_MAX];
 } registry_entry;
 
 typedef struct {

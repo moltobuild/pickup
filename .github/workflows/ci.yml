@@ -1,0 +1,163 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+# A push that supersedes another cancels it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  # The tree is formatted and analysed by LLVM 19, the version pickup itself
+  # installs here. A different major disagrees about line breaking, and a
+  # formatting gate that disagrees with the working copy is worse than none.
+  LLVM_VERSION: "19"
+
+jobs:
+  # Pickup answers "which compilers does this machine have", so its suite wants
+  # a machine with compilers on it. Two GCCs, because several tests are about
+  # telling versions apart rather than about finding one.
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install two GCCs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y -o Acquire::Retries=3 gcc-12 g++-12 gcc-13 g++-13
+      - run: make build
+      - run: make test
+
+  # Nothing that ships should warn, under either compiler, at either level.
+  # -O3 is not redundant: GCC's truncation and use-after-free analyses need
+  # value-range propagation and say nothing at -O0.
+  warnings:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc-12, clang]
+        opt: ["-O0", "-O3"]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install GCC 12
+        run: sudo apt-get update && sudo apt-get install -y -o Acquire::Retries=3 gcc-12 g++-12
+      - name: Install Clang ${{ env.LLVM_VERSION }}
+        if: matrix.compiler == 'clang'
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+            | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+          sudo add-apt-repository -y \
+            "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main"
+          sudo apt-get install -y -o Acquire::Retries=3 clang-${LLVM_VERSION}
+      - name: Build with -Werror
+        run: |
+          cc=${{ matrix.compiler }}
+          [ "$cc" = clang ] && cc=clang-${LLVM_VERSION}
+          make build CC="$cc" EXTRA_CFLAGS="-Werror ${{ matrix.opt }}"
+
+  # Pickup is built by molto, the same way molto is. The bootstrap Makefile
+  # exists because the first pickup has to be compiled by something that does
+  # not need pickup to find a compiler — it is not the supported path.
+  #
+  # Molto is built from source here rather than downloaded. Once molto
+  # publishes a release this becomes a curl of its static binary, which is both
+  # faster and the thing users do.
+  built-by-molto:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install GCC 12
+        run: sudo apt-get update && sudo apt-get install -y -o Acquire::Retries=3 gcc-12 g++-12
+      - name: Build molto from source
+        run: |
+          git clone --depth 1 https://github.com/moltobuild/molto.git "${RUNNER_TEMP}/molto"
+          make -C "${RUNNER_TEMP}/molto" build
+          echo "${RUNNER_TEMP}/molto/build" >> "$GITHUB_PATH"
+      - name: molto builds pickup, and runs its suite
+        env:
+          C_COMPILER: gcc-12
+          CPP_COMPILER: g++-12
+        run: |
+          molto build
+          molto test
+
+  # What molto says about pickup's own source. Same molto, same reason.
+  style:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install GCC 12 and LLVM ${{ env.LLVM_VERSION }}
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+            | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+          sudo add-apt-repository -y \
+            "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main"
+          sudo apt-get install -y -o Acquire::Retries=3 gcc-12 g++-12 \
+            clang-format-${LLVM_VERSION} clang-tidy-${LLVM_VERSION}
+      - name: Build molto from source
+        run: |
+          git clone --depth 1 https://github.com/moltobuild/molto.git "${RUNNER_TEMP}/molto"
+          make -C "${RUNNER_TEMP}/molto" build
+          echo "${RUNNER_TEMP}/molto/build" >> "$GITHUB_PATH"
+      - name: molto fmt --check
+        env:
+          C_COMPILER: gcc-12
+          MOLTO_CLANG_FORMAT: /usr/bin/clang-format-19
+        run: molto fmt --check
+      - name: molto lint
+        env:
+          C_COMPILER: gcc-12
+          MOLTO_CLANG_TIDY: /usr/bin/clang-tidy-19
+        run: molto lint
+
+  # The shape the release ships, built on every push rather than only at a tag.
+  # Static glibc is safe here for the same reason it is in molto: pickup shells
+  # out to curl and tar and never resolves a hostname itself, so no NSS is
+  # linked in. A build that started doing its own networking would link cleanly
+  # and fail on a machine other than this one.
+  static:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install GCC 12
+        run: sudo apt-get update && sudo apt-get install -y -o Acquire::Retries=3 gcc-12 g++-12
+      - name: Link it statically
+        run: |
+          make build LDFLAGS="-static"
+          file build/pickup | grep -q 'statically linked'
+      - name: And it still answers about this machine
+        run: |
+          ./build/pickup --version
+          ./build/pickup scan
+          ./build/pickup list
+          ./build/pickup resolve --lang c
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      ASAN_OPTIONS: detect_leaks=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install GCC 12
+        run: sudo apt-get update && sudo apt-get install -y -o Acquire::Retries=3 gcc-12 g++-12
+      # EXTRA_CFLAGS and not CFLAGS: the flags have to reach the compiler to
+      # instrument anything. Passing -fsanitize through LDFLAGS alone links the
+      # runtime and instruments nothing, which reads as a pass and checks
+      # almost nothing.
+      - name: Address and undefined behaviour
+        run: |
+          make test \
+            EXTRA_CFLAGS="-g -fsanitize=address,undefined -fno-omit-frame-pointer" \
+            LDFLAGS="-fsanitize=address,undefined"

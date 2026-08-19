@@ -18,8 +18,8 @@
 #define FEATURE_ID_SIZE 64
 
 /* Language names accepted on the command line. */
-#define LANG_C_NAME    "c"
-#define LANG_CXX_NAME  "c++"
+#define LANG_C_NAME "c"
+#define LANG_CXX_NAME "c++"
 
 /* Parse the language, defaulting to C. Returns false if it is not a language
    Pickup knows. */
@@ -38,8 +38,8 @@ static bool parse_lang(const char *name, capability_lang *out) {
 /* Add the features named in a comma-separated list to `required`. An unknown
    id is rejected rather than ignored: silently dropping a requirement would
    return a compiler that does not meet it. */
-static bool add_named_features(const char *list, capability_set *required,
-                               char *unknown, size_t unknown_size) {
+static bool add_named_features(const char *list, capability_set *required, char *unknown,
+                               size_t unknown_size) {
     const char *cursor = list;
     while (*cursor != '\0') {
         const char *separator = strchr(cursor, FEATURE_SEPARATOR);
@@ -80,10 +80,9 @@ static const char *driver_for(const toolchain *chain, capability_lang lang) {
    you be invoked in this mode?", which is about the flag. `--require` asks
    "does this actually work?", which is about the implementation. Conflating
    them is what makes a tool recommend a compiler that then fails to build. */
-static bool satisfies(const toolchain *chain, const resolve_request *request,
-                      capability_lang lang, capability_set required) {
-    if (request->vendor != NULL
-        && chain->vendor != toolchain_vendor_parse(request->vendor))
+static bool satisfies(const toolchain *chain, const resolve_request *request, capability_lang lang,
+                      capability_set required) {
+    if (request->vendor != NULL && chain->vendor != toolchain_vendor_parse(request->vendor))
         return false;
     /* A C++ request needs a C++ driver, not merely a compiler that can parse
        C++: without one there is nothing to invoke. */
@@ -91,16 +90,16 @@ static bool satisfies(const toolchain *chain, const resolve_request *request,
         return false;
     if (!capability_set_contains(features_of(chain, lang), required))
         return false;
-    if (request->standard != NULL
-        && !capability_accepts_standard(driver_for(chain, lang), lang, request->standard))
+    if (request->standard != NULL &&
+        !capability_accepts_standard(driver_for(chain, lang), lang, request->standard))
         return false;
     return true;
 }
 
 /* Print, for one rejected candidate, the first requirement it fails. Naming
    what is missing is the difference between a diagnosis and a shrug. */
-static void print_missing(const toolchain *chain, capability_lang lang,
-                          capability_set required, const char *standard) {
+static void print_missing(const toolchain *chain, const resolve_request *request,
+                          capability_lang lang, capability_set required) {
     char version[32];
     toolchain_version_format(chain->version, version, sizeof version);
 
@@ -109,13 +108,22 @@ static void print_missing(const toolchain *chain, capability_lang lang,
     capability_set proven = features_of(chain, lang);
 
     fprintf(stderr, "  %-16s (%s) missing:", chain->name, version);
+    /* First, and in the order `satisfies` rejects them. A vendor is the one
+       requirement that describes the candidate rather than something it lacks,
+       so a loop over the feature catalogue can never name it — which is why
+       every one of these lines used to end at the colon when the vendor was
+       what did not match. */
+    if (request->vendor != NULL && chain->vendor != toolchain_vendor_parse(request->vendor)) {
+        fprintf(stderr, " vendor %s\n", request->vendor);
+        return;
+    }
     if (lang == lang_cxx && chain->cxx_path[0] == '\0') {
         fprintf(stderr, " a C++ driver\n");
         return;
     }
-    if (standard != NULL
-        && !capability_accepts_standard(driver_for(chain, lang), lang, standard))
-        fprintf(stderr, " -std=%s", standard);
+    if (request->standard != NULL &&
+        !capability_accepts_standard(driver_for(chain, lang), lang, request->standard))
+        fprintf(stderr, " -std=%s", request->standard);
     for (size_t i = 0; i < count; i++) {
         if (capability_set_has(required, i) && !capability_set_has(proven, i))
             fprintf(stderr, " %s", catalog[i].id);
@@ -181,8 +189,7 @@ static size_t preferred_index(const inventory *list) {
  * error the caller has to work around. That it was passed over is said aloud,
  * on stderr, by warn_if_default_unused.
  */
-static const toolchain *select_buildable(const inventory *list,
-                                         const resolve_request *request,
+static const toolchain *select_buildable(const inventory *list, const resolve_request *request,
                                          capability_lang lang, capability_set required,
                                          cxx_stdlib wanted, link_recipe *recipe_out) {
     bool *tried = calloc(list->count > 0 ? list->count : 1, sizeof *tried);
@@ -196,17 +203,16 @@ static const toolchain *select_buildable(const inventory *list,
         /* The preferred one while it is still untried and can serve the
            request, and the best candidate not yet tried after that. */
         size_t best = SIZE_MAX;
-        bool took_preferred = preferred != SIZE_MAX && !tried[preferred]
-            && satisfies(&list->items[preferred], request, lang, required);
+        bool took_preferred = preferred != SIZE_MAX && !tried[preferred] &&
+                              satisfies(&list->items[preferred], request, lang, required);
         if (took_preferred)
             best = preferred;
 
         for (size_t i = 0; !took_preferred && i < list->count; i++) {
             if (tried[i] || !satisfies(&list->items[i], request, lang, required))
                 continue;
-            if (best == SIZE_MAX
-                || toolchain_version_compare(list->items[i].version,
-                                             list->items[best].version) > 0)
+            if (best == SIZE_MAX ||
+                toolchain_version_compare(list->items[i].version, list->items[best].version) > 0)
                 best = i;
         }
         if (best == SIZE_MAX)
@@ -250,22 +256,21 @@ static void warn_if_default_unused(const inventory *list, const toolchain *chose
         installed = strcmp(list->items[i].id, id) == 0;
 
     if (installed)
-        fprintf(stderr, "pickup: the default %s cannot serve this request; chose %s\n",
-                id, chosen->id);
+        fprintf(stderr, "pickup: the default %s cannot serve this request; chose %s\n", id,
+                chosen->id);
     else
-        fprintf(stderr, "pickup: the default %s is not installed; chose %s\n",
-                id, chosen->id);
+        fprintf(stderr, "pickup: the default %s is not installed; chose %s\n", id, chosen->id);
 }
 
 static void print_text(const toolchain *chain, capability_lang lang) {
     char version[32];
     toolchain_version_format(chain->version, version, sizeof version);
-    printf("%s %s %s (%s)\n", chain->name, toolchain_vendor_name(chain->vendor),
-           version, lang == lang_cxx ? chain->cxx_path : chain->path);
+    printf("%s %s %s (%s)\n", chain->name, toolchain_vendor_name(chain->vendor), version,
+           lang == lang_cxx ? chain->cxx_path : chain->path);
 }
 
-static void print_toml(const toolchain *chain, capability_lang lang,
-                       const char *standard, const link_recipe *recipe) {
+static void print_toml(const toolchain *chain, capability_lang lang, const char *standard,
+                       const link_recipe *recipe) {
     char version[32];
     toolchain_version_format(chain->version, version, sizeof version);
 
@@ -294,8 +299,7 @@ int resolve_command_run(const resolve_request *request, bool as_toml) {
         fprintf(stderr, "pickup: unknown language '%s'\n", request->lang);
         return exit_usage_error;
     }
-    if (request->vendor != NULL
-        && toolchain_vendor_parse(request->vendor) == vendor_unknown) {
+    if (request->vendor != NULL && toolchain_vendor_parse(request->vendor) == vendor_unknown) {
         fprintf(stderr, "pickup: unknown vendor '%s'\n", request->vendor);
         return exit_usage_error;
     }
@@ -313,7 +317,7 @@ int resolve_command_run(const resolve_request *request, bool as_toml) {
         return exit_usage_error;
     }
 
-    capability_set required = { 0 };
+    capability_set required = {0};
     if (request->features != NULL) {
         char unknown[FEATURE_ID_SIZE] = "";
         if (!add_named_features(request->features, &required, unknown, sizeof unknown)) {
@@ -332,13 +336,13 @@ int resolve_command_run(const resolve_request *request, bool as_toml) {
     }
 
     link_recipe recipe;
-    const toolchain *best = select_buildable(&list, request, lang, required,
-                                             wanted_stdlib, &recipe);
+    const toolchain *best =
+        select_buildable(&list, request, lang, required, wanted_stdlib, &recipe);
     if (best == NULL) {
         fprintf(stderr, "pickup: no %s compiler satisfies the request\n",
                 lang == lang_cxx ? LANG_CXX_NAME : LANG_C_NAME);
         for (size_t i = 0; i < list.count; i++)
-            print_missing(&list.items[i], lang, required, request->standard);
+            print_missing(&list.items[i], request, lang, required);
         inventory_free(&list);
         return exit_no_match;
     }

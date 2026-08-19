@@ -3,6 +3,9 @@
 #include <pickup/commands/resolve_command.h>
 #include <pickup/exit_code.h>
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 MOLTEST(resolve_rejects_a_malformed_request) {
@@ -68,4 +71,41 @@ MOLTEST(resolve_requires_a_cxx_driver_for_cxx) {
     const resolve_request cxx = { .lang = "c++" };
     int code = resolve_command_run(&cxx, false);
     EXPECT_TRUE(code == exit_ok || code == exit_no_match);
+}
+
+/* The bug this closes: a candidate rejected for its vendor was listed with an
+   empty `missing:`, because the reason was walked out of a feature catalogue
+   that cannot hold it. Seven compilers, seven blank lines, and no diagnosis. */
+MOLTEST(resolve_says_the_vendor_when_the_vendor_is_what_did_not_match) {
+    char path[] = "/tmp/pickup_resolve_err_XXXXXX";
+    int fd = mkstemp(path);
+    ASSERT_TRUE(fd >= 0);
+
+    int saved = dup(STDERR_FILENO);
+    ASSERT_TRUE(saved >= 0);
+    fflush(stderr);
+    ASSERT_TRUE(dup2(fd, STDERR_FILENO) >= 0);
+
+    /* Every machine has some C compiler and none of them is MSVC, so every
+       candidate is rejected and rejected for this reason. */
+    const resolve_request wrong_vendor = { .lang = "c", .vendor = "msvc" };
+    const int code = resolve_command_run(&wrong_vendor, false);
+
+    fflush(stderr);
+    (void)dup2(saved, STDERR_FILENO);
+    (void)close(saved);
+    (void)close(fd);
+
+    FILE *written = fopen(path, "r");
+    ASSERT_NOT_NULL(written);
+    char text[8192] = "";
+    const size_t read = fread(text, 1, sizeof text - 1, written);
+    text[read] = '\0';
+    fclose(written);
+    (void)remove(path);
+
+    EXPECT_EQ(exit_no_match, code);
+    EXPECT_NOT_NULL(strstr(text, "vendor msvc"));
+    /* And no line is left saying nothing. */
+    EXPECT_NULL(strstr(text, "missing:\n"));
 }

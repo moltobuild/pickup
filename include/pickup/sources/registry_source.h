@@ -50,7 +50,7 @@
 /* Where artifacts come from, in falling order of precedence: the environment,
    the configuration file, this. */
 #define REGISTRY_URL_ENV "PICKUP_REGISTRY_URL"
-#define REGISTRY_DEFAULT_URL "https://molto-registry.joseb-twelve.workers.dev"
+#define REGISTRY_DEFAULT_URL "https://molto-registry.molto-build.workers.dev"
 
 typedef enum {
     registry_kind_toolchain,

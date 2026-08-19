@@ -499,7 +499,7 @@ target   linux-x86_64
 format   tar.zst
 size     44M (46459314 bytes)
 sha256   f221669aeffba6a6a77c43387ecd098aa160105591a4249671be159bdf9fd8b9
-url      https://molto-registry.joseb-twelve.workers.dev/v1/toolchains/clang/19.1.6/linux-x86_64/download
+url      https://molto-registry.molto-build.workers.dev/v1/toolchains/clang/19.1.6/linux-x86_64/download
 about    LLVM C and C++ compiler, shipping libc++ so C++ needs nothing from the host
 ```
 

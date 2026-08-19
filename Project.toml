@@ -8,6 +8,12 @@
 [package]
 name = "pickup"
 version = "0.3.2"
+description = "The toolchain manager of the Molto ecosystem"
+repository = "https://github.com/moltobuild/pickup"
+# The key states a licence; LICENSE and NOTICE at the root grant it. Apache-2.0
+# for the patent grant, and the same one molto carries: pickup downloads and
+# runs other people's compilers, which is the risk worth naming.
+license = "Apache-2.0"
 
 [target]
 std = "c2x"

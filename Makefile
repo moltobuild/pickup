@@ -17,7 +17,16 @@ STD    ?= c2x
 VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' Project.toml | head -1)
 
 CFLAGS ?= -std=$(STD) -D_DEFAULT_SOURCE -Wall -Wextra -Wpedantic -Iinclude
-CFLAGS += -DMOLTO_PKG_VERSION='"$(VERSION)"' 
+CFLAGS += -DMOLTO_PKG_VERSION='"$(VERSION)"'
+
+# For a caller that wants to add to the build rather than replace it: -Werror,
+# sanitizers, an optimisation level. Setting CFLAGS on the command line wins
+# over both lines above and takes the version define with it, and a binary
+# built that way answers -V with 0.0.0-unknown. Adding through here keeps
+# everything that is not being changed — and, unlike LDFLAGS alone, it reaches
+# the compiler, which is where -fsanitize has to land to instrument anything.
+EXTRA_CFLAGS ?=
+CFLAGS += $(EXTRA_CFLAGS)
 LDFLAGS ?=
 
 # Record which headers each object was built from, and read those records back

@@ -60,13 +60,13 @@
 
 /* What an extraction selects, and what it reports while it runs. */
 typedef struct {
-    const char *const *patterns;   /* entries to extract; NULL for all of them */
+    const char *const *patterns; /* entries to extract; NULL for all of them */
     size_t pattern_count;
-    const char *const *excludes;   /* entries to skip even if they match */
+    const char *const *excludes; /* entries to skip even if they match */
     size_t exclude_count;
     int strip_components;
-    const char *label;             /* shown while extracting; NULL to stay quiet */
-    const char *waiting_label;     /* shown until the first entry lands */
+    const char *label;         /* shown while extracting; NULL to stay quiet */
+    const char *waiting_label; /* shown until the first entry lands */
 } archive_request;
 
 /* Extract the entries of `archive` that `request` selects into `destination`.

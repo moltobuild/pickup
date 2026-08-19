@@ -1,0 +1,103 @@
+name: Release
+
+# A tag is what publishes. Nothing here runs on a branch, so a release is
+# always something someone decided to make rather than something a merge did.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install GCC 12
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y -o Acquire::Retries=3 gcc-12 g++-12
+
+      # The tag and the manifest are two claims about the same number, and a
+      # binary whose version disagrees with the tag it was published under is
+      # the one failure nobody notices until much later.
+      - name: The tag and the manifest agree
+        run: |
+          declared=$(sed -n 's/^version = "\(.*\)"/\1/p' Project.toml | head -1)
+          tagged=${GITHUB_REF_NAME#v}
+          echo "manifest: $declared"
+          echo "tag:      $tagged"
+          test "$declared" = "$tagged"
+          echo "VERSION=$declared" >> "$GITHUB_ENV"
+
+      # Static, so the artifact does not carry the runner's glibc with it. A
+      # dynamic build needs GLIBC_2.34 and rules out Debian 11, Ubuntu 20.04
+      # and RHEL 8 — the machines most likely to want a newer compiler than
+      # they ship, which is the whole reason pickup exists.
+      - name: Build the static binary
+        run: |
+          make build LDFLAGS="-static"
+          file build/pickup
+          file build/pickup | grep -q 'statically linked'
+
+      # The artifact itself is exercised, not a sibling of it: a static binary
+      # that cannot probe a compiler is the failure this catches.
+      - name: It answers about this machine
+        run: |
+          pickup="$PWD/build/pickup"
+          test "$("$pickup" --version)" = "pickup ${VERSION}"
+          "$pickup" scan
+          "$pickup" list
+          "$pickup" resolve --lang c --format toml
+
+      - name: Name it, hash it, and describe it
+        run: |
+          mkdir -p dist
+          name="pickup-${VERSION}-x86_64-linux"
+          cp build/pickup "dist/$name"
+          cd dist
+          sha256sum "$name" > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Write the release notes
+        run: |
+          cat > dist/NOTES.md <<NOTES
+          Static x86-64 Linux binary. No glibc requirement, nothing to unpack.
+
+          \`\`\`sh
+          base=https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}
+          curl -fsSLO \$base/pickup-${VERSION}-x86_64-linux
+          curl -fsSLO \$base/SHA256SUMS
+          sha256sum --check --ignore-missing SHA256SUMS
+          chmod +x pickup-${VERSION}-x86_64-linux
+          sudo install pickup-${VERSION}-x86_64-linux /usr/local/bin/pickup
+          \`\`\`
+
+          Then ask it what this machine already has, or fetch a toolchain:
+
+          \`\`\`sh
+          pickup list
+          pickup install clang
+          \`\`\`
+
+          Everything installs under \`~/.pickup\`, no root. Needs \`curl\`, \`tar\` and
+          \`zstd\` on the PATH to install anything; \`pickup doctor\` says so when one
+          is missing.
+          NOTES
+          cat dist/NOTES.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "pickup ${VERSION}" \
+            --notes-file dist/NOTES.md \
+            --generate-notes \
+            "dist/pickup-${VERSION}-x86_64-linux" \
+            dist/SHA256SUMS

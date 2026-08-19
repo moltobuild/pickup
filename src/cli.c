@@ -22,7 +22,7 @@
    reads the same line out of the same file -- so the number lives in one place
    and a binary cannot disagree with the manifest it was built from. */
 #ifndef MOLTO_PKG_VERSION
-#  define MOLTO_PKG_VERSION "0.0.0-unknown"
+#define MOLTO_PKG_VERSION "0.0.0-unknown"
 #endif
 #define PICKUP_VERSION MOLTO_PKG_VERSION
 
@@ -31,14 +31,11 @@
 #define FORMAT_TOML "toml"
 #define FORMAT_TEXT "text"
 
-const char *cli_version(void) {
-    return PICKUP_VERSION;
-}
+const char *cli_version(void) { return PICKUP_VERSION; }
 
 /* The --format option shared by every command that produces data. */
 static const cli_option format_option[] = {
-    { "--format", 'f', cli_opt_value, "<text|toml>",
-      "Output format", FORMAT_TEXT },
+    {"--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT},
 };
 
 static bool wants_toml(const cli_args *args) {
@@ -49,61 +46,57 @@ static bool wants_toml(const cli_args *args) {
 /* What `pickup resolve` accepts. A request states what the caller needs; none
    of it names a machine. */
 static const cli_option resolve_options[] = {
-    { "--lang", 'l', cli_opt_value, "<c|c++>", "Language to compile", "c" },
-    { "--std", 's', cli_opt_value, "<name>", "Standard flag the compiler must accept", NULL },
-    { "--require", 'r', cli_opt_value, "<ids>",
-      "Comma-separated features that must be present", NULL },
-    { "--vendor", 'v', cli_opt_value, "<name>", "Restrict to one vendor", NULL },
-    { "--stdlib", 0, cli_opt_value, "<libstdc++|libc++>",
-      "C++ standard library the build must use", NULL },
-    { "--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT },
+    {"--lang", 'l', cli_opt_value, "<c|c++>", "Language to compile", "c"},
+    {"--std", 's', cli_opt_value, "<name>", "Standard flag the compiler must accept", NULL},
+    {"--require", 'r', cli_opt_value, "<ids>", "Comma-separated features that must be present",
+     NULL},
+    {"--vendor", 'v', cli_opt_value, "<name>", "Restrict to one vendor", NULL},
+    {"--stdlib", 0, cli_opt_value, "<libstdc++|libc++>", "C++ standard library the build must use",
+     NULL},
+    {"--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT},
 };
 
 /* What `pickup doctor` accepts. */
 static const cli_option doctor_options[] = {
-    { "--all", 'a', cli_opt_flag, NULL,
-      "Include what is true but not stopping anything", NULL },
-    { "--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT },
+    {"--all", 'a', cli_opt_flag, NULL, "Include what is true but not stopping anything", NULL},
+    {"--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT},
 };
 
 /* What `pickup search` accepts. */
 static const cli_option search_options[] = {
-    { "--version", 'v', cli_opt_value, "<version>",
-      "Only versions matching this, whole or partial", NULL },
-    { "--refresh", 0, cli_opt_flag, NULL,
-      "Ask the registry again instead of using the cached catalogue", NULL },
-    { "--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT },
+    {"--version", 'v', cli_opt_value, "<version>", "Only versions matching this, whole or partial",
+     NULL},
+    {"--refresh", 0, cli_opt_flag, NULL,
+     "Ask the registry again instead of using the cached catalogue", NULL},
+    {"--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT},
 };
 
 /* What `pickup install` accepts. */
 static const cli_option install_options[] = {
-    { "--version", 'v', cli_opt_value, "<version>",
-      "Version to install, whole or partial (default: the newest offered)", NULL },
-    { "--dry-run", 0, cli_opt_flag, NULL,
-      "Report what would be installed and download nothing", NULL },
-    { "--refresh", 0, cli_opt_flag, NULL,
-      "Ask the registry again instead of using the cached catalogue", NULL },
+    {"--version", 'v', cli_opt_value, "<version>",
+     "Version to install, whole or partial (default: the newest offered)", NULL},
+    {"--dry-run", 0, cli_opt_flag, NULL, "Report what would be installed and download nothing",
+     NULL},
+    {"--refresh", 0, cli_opt_flag, NULL,
+     "Ask the registry again instead of using the cached catalogue", NULL},
 };
 
 /* What `pickup uninstall` accepts. */
 static const cli_option uninstall_options[] = {
-    { "--yes", 'y', cli_opt_flag, NULL,
-      "Remove without asking for confirmation", NULL },
+    {"--yes", 'y', cli_opt_flag, NULL, "Remove without asking for confirmation", NULL},
 };
 
 /* What `pickup default` accepts. Without a name it reports the current one,
    which is why there is no separate command to ask. */
 static const cli_option default_options[] = {
-    { "--clear", 0, cli_opt_flag, NULL,
-      "Forget the preference and let resolve rank candidates", NULL },
-    { "--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT },
+    {"--clear", 0, cli_opt_flag, NULL, "Forget the preference and let resolve rank candidates",
+     NULL},
+    {"--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT},
 };
 
 /* --- command handlers --- */
 
-static int handle_list(const cli_args *args) {
-    return list_command_run(wants_toml(args));
-}
+static int handle_list(const cli_args *args) { return list_command_run(wants_toml(args)); }
 
 static int handle_show(const cli_args *args) {
     return show_command_run(cli_args_positional(args, 0), wants_toml(args));
@@ -145,17 +138,14 @@ static int handle_install(const cli_args *args) {
     return install_command_run(&request);
 }
 
-static int handle_tools(const cli_args *args) {
-    return tools_command_run(wants_toml(args));
-}
+static int handle_tools(const cli_args *args) { return tools_command_run(wants_toml(args)); }
 
 static int handle_doctor(const cli_args *args) {
     return doctor_command_run(wants_toml(args), cli_args_flag(args, "--all"));
 }
 
 static int handle_uninstall(const cli_args *args) {
-    return uninstall_command_run(cli_args_positional(args, 0),
-                                 cli_args_flag(args, "--yes"));
+    return uninstall_command_run(cli_args_positional(args, 0), cli_args_flag(args, "--yes"));
 }
 
 static int handle_default(const cli_args *args) {
@@ -170,30 +160,25 @@ static int handle_default(const cli_args *args) {
 /* --- command table --- */
 
 static const cli_command commands[] = {
-    { "list", "List the compilers found on this machine", NULL,
-      format_option, sizeof format_option / sizeof format_option[0], handle_list },
-    { "show", "Show one toolchain in detail, feature by feature", "<name>",
-      format_option, sizeof format_option / sizeof format_option[0], handle_show },
-    { "scan", "Probe every compiler again and rewrite the cache", NULL,
-      NULL, 0, handle_scan },
-    { "tools", "List the formatter and linter this machine has, and where", NULL,
-      format_option, sizeof format_option / sizeof format_option[0], handle_tools },
-    { "doctor", "Report what stops this machine from building, and what fixes it",
-      NULL, doctor_options, sizeof doctor_options / sizeof doctor_options[0],
-      handle_doctor },
-    { "resolve", "Find the best toolchain for a set of requirements", NULL,
-      resolve_options, sizeof resolve_options / sizeof resolve_options[0], handle_resolve },
-    { "search", "List what the registry publishes, or the versions of one of it", "[name]",
-      search_options, sizeof search_options / sizeof search_options[0], handle_search },
-    { "install", "Download and install a toolchain or a tool from the registry", "<name>",
-      install_options, sizeof install_options / sizeof install_options[0],
-      handle_install },
-    { "uninstall", "Remove a toolchain pickup installed", "<toolchain>",
-      uninstall_options, sizeof uninstall_options / sizeof uninstall_options[0],
-      handle_uninstall },
-    { "default", "Show or set the toolchain resolve should prefer", "[toolchain]",
-      default_options, sizeof default_options / sizeof default_options[0],
-      handle_default },
+    {"list", "List the compilers found on this machine", NULL, format_option,
+     sizeof format_option / sizeof format_option[0], handle_list},
+    {"show", "Show one toolchain in detail, feature by feature", "<name>", format_option,
+     sizeof format_option / sizeof format_option[0], handle_show},
+    {"scan", "Probe every compiler again and rewrite the cache", NULL, NULL, 0, handle_scan},
+    {"tools", "List the formatter and linter this machine has, and where", NULL, format_option,
+     sizeof format_option / sizeof format_option[0], handle_tools},
+    {"doctor", "Report what stops this machine from building, and what fixes it", NULL,
+     doctor_options, sizeof doctor_options / sizeof doctor_options[0], handle_doctor},
+    {"resolve", "Find the best toolchain for a set of requirements", NULL, resolve_options,
+     sizeof resolve_options / sizeof resolve_options[0], handle_resolve},
+    {"search", "List what the registry publishes, or the versions of one of it", "[name]",
+     search_options, sizeof search_options / sizeof search_options[0], handle_search},
+    {"install", "Download and install a toolchain or a tool from the registry", "<name>",
+     install_options, sizeof install_options / sizeof install_options[0], handle_install},
+    {"uninstall", "Remove a toolchain pickup installed", "<toolchain>", uninstall_options,
+     sizeof uninstall_options / sizeof uninstall_options[0], handle_uninstall},
+    {"default", "Show or set the toolchain resolve should prefer", "[toolchain]", default_options,
+     sizeof default_options / sizeof default_options[0], handle_default},
 };
 
 int cli_run(int argc, char **argv) {

@@ -32,10 +32,10 @@
 
 typedef enum {
     health_ok,
-    health_no_driver,   /* there is no driver for that language at all */
-    health_no_headers,  /* the standard header does not resolve */
-    health_no_link,     /* it compiles and will not link */
-    health_no_run,      /* it links and the executable will not start */
+    health_no_driver,  /* there is no driver for that language at all */
+    health_no_headers, /* the standard header does not resolve */
+    health_no_link,    /* it compiles and will not link */
+    health_no_run,     /* it links and the executable will not start */
 } health_status;
 
 typedef struct {

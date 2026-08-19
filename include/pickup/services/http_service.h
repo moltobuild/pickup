@@ -32,8 +32,7 @@
    bar is measured against; pass 0 when it is unknown and no bar is drawn. The
    bar only appears on a terminal. */
 [[nodiscard]] bool http_download_with_progress(const char *url, const char *dest,
-                                               long long expected_size,
-                                               const char *label);
+                                               long long expected_size, const char *label);
 
 /* Told, about ten times a second, that the transfer is still running.
 
@@ -44,7 +43,7 @@ typedef void (*http_tick)(size_t frame, void *context);
 
 /* Download `url` into `dest`, ticking while it runs. A NULL `tick` is the plain
    download. */
-[[nodiscard]] bool http_download_watched(const char *url, const char *dest,
-                                         http_tick tick, void *context);
+[[nodiscard]] bool http_download_watched(const char *url, const char *dest, http_tick tick,
+                                         void *context);
 
 #endif /* PICKUP_HTTP_SERVICE_H */

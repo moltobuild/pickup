@@ -7,8 +7,8 @@
 
 /* Result of running a command that Pickup interrogates rather than displays. */
 typedef struct {
-    int exit_code;   /* the child's exit status, or -1 if it never ran */
-    bool completed;  /* false if the process could not be started or waited on */
+    int exit_code;  /* the child's exit status, or -1 if it never ran */
+    bool completed; /* false if the process could not be started or waited on */
 } process_result;
 
 /* A child still running. */
@@ -26,8 +26,8 @@ typedef struct {
 /* Run `argv` and capture what it writes to stdout into `out`, NUL-terminated
    and truncated to `out_size`. `input` is fed to the child's stdin (may be
    NULL). Used to ask a compiler about itself. */
-[[nodiscard]] process_result process_capture(const char *const argv[], const char *input,
-                                             char *out, size_t out_size);
+[[nodiscard]] process_result process_capture(const char *const argv[], const char *input, char *out,
+                                             size_t out_size);
 
 /* The same, capturing stderr instead.
 
@@ -36,8 +36,7 @@ typedef struct {
    it *decided* — which GCC installation it picked, which directories it
    searched — is written to stderr by `-v`. Reading that is the only way to
    learn a choice the driver makes internally and never prints anywhere else. */
-[[nodiscard]] process_result process_capture_stderr(const char *const argv[],
-                                                    const char *input,
+[[nodiscard]] process_result process_capture_stderr(const char *const argv[], const char *input,
                                                     char *out, size_t out_size);
 
 /* Start `argv` and return without waiting for it, with its output discarded.

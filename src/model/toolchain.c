@@ -6,11 +6,8 @@
 
 /* Vendor names, indexed by toolchain_vendor. */
 static const char *const vendor_names[] = {
-    [vendor_unknown]     = "unknown",
-    [vendor_gcc]         = "gcc",
-    [vendor_clang]       = "clang",
-    [vendor_apple_clang] = "apple-clang",
-    [vendor_msvc]        = "msvc",
+    [vendor_unknown] = "unknown",         [vendor_gcc] = "gcc",   [vendor_clang] = "clang",
+    [vendor_apple_clang] = "apple-clang", [vendor_msvc] = "msvc",
 };
 
 #define VENDOR_COUNT (sizeof vendor_names / sizeof vendor_names[0])
@@ -39,7 +36,7 @@ bool toolchain_version_parse(const char *text, toolchain_version *out) {
     if (end == text)
         return false;
 
-    *out = (toolchain_version){ .major = (int)major, .minor = 0, .patch = 0 };
+    *out = (toolchain_version){.major = (int)major, .minor = 0, .patch = 0};
     if (*end != '.')
         return true;
 
@@ -87,24 +84,45 @@ const char *toolchain_source_name(toolchain_source source) {
  */
 static const char *const ordinary_target_parts[] = {
     /* architectures */
-    "x86_64", "i386", "i486", "i586", "i686", "aarch64", "arm64",
-    "armv7l", "armv6l", "riscv64", "ppc64le", "ppc64", "s390x", "mips64",
+    "x86_64",
+    "i386",
+    "i486",
+    "i586",
+    "i686",
+    "aarch64",
+    "arm64",
+    "armv7l",
+    "armv6l",
+    "riscv64",
+    "ppc64le",
+    "ppc64",
+    "s390x",
+    "mips64",
     /* operating systems and ABIs */
-    "linux", "gnu", "gnueabi", "gnueabihf", "darwin", "windows", "elf",
-    "eabi", "eabihf", "msvc",
+    "linux",
+    "gnu",
+    "gnueabi",
+    "gnueabihf",
+    "darwin",
+    "windows",
+    "elf",
+    "eabi",
+    "eabihf",
+    "msvc",
     /* vendor fields that name nobody */
-    "unknown", "pc", "none",
+    "unknown",
+    "pc",
+    "none",
 };
 
-#define ORDINARY_COUNT \
-    (sizeof ordinary_target_parts / sizeof ordinary_target_parts[0])
+#define ORDINARY_COUNT (sizeof ordinary_target_parts / sizeof ordinary_target_parts[0])
 
 /* True if `part` is one of the components every triple has. Compared over a
    length because the caller hands slices of the triple, not strings. */
 static bool is_ordinary_part(const char *part, size_t length) {
     for (size_t i = 0; i < ORDINARY_COUNT; i++) {
-        if (strlen(ordinary_target_parts[i]) == length
-            && strncmp(ordinary_target_parts[i], part, length) == 0)
+        if (strlen(ordinary_target_parts[i]) == length &&
+            strncmp(ordinary_target_parts[i], part, length) == 0)
             return true;
     }
     return false;
@@ -145,11 +163,11 @@ void toolchain_make_id(toolchain *chain) {
     toolchain_target_tag(chain->target, tag, sizeof tag);
 
     if (tag[0] != '\0')
-        snprintf(chain->id, sizeof chain->id, "%s@%s-%s",
-                 toolchain_vendor_name(chain->vendor), version, tag);
+        snprintf(chain->id, sizeof chain->id, "%s@%s-%s", toolchain_vendor_name(chain->vendor),
+                 version, tag);
     else
-        snprintf(chain->id, sizeof chain->id, "%s@%s",
-                 toolchain_vendor_name(chain->vendor), version);
+        snprintf(chain->id, sizeof chain->id, "%s@%s", toolchain_vendor_name(chain->vendor),
+                 version);
 }
 
 /* What a query asks for: a vendor, and how much of a version. */
@@ -161,8 +179,8 @@ bool toolchain_matches(const toolchain *chain, const char *query) {
 
     /* The full identity, the path, and the binary's own name: each is
        something a person may reasonably have in front of them. */
-    if (strcmp(chain->id, query) == 0 || strcmp(chain->path, query) == 0
-        || strcmp(chain->name, query) == 0)
+    if (strcmp(chain->id, query) == 0 || strcmp(chain->path, query) == 0 ||
+        strcmp(chain->name, query) == 0)
         return true;
 
     const char *at = strchr(query, '@');

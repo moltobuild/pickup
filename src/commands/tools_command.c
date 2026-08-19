@@ -8,7 +8,7 @@
 
 /* The columns of the human-readable table. SOURCE last, and meaning what it
    means in `list`: who is responsible for this, pickup or the system. */
-static const char *const tools_headers[] = { "KIND", "NAME", "VERSION", "SOURCE" };
+static const char *const tools_headers[] = {"KIND", "NAME", "VERSION", "SOURCE"};
 #define TOOLS_COLUMNS (sizeof tools_headers / sizeof tools_headers[0])
 
 /* What is said when there is nothing to list. */

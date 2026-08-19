@@ -24,11 +24,12 @@ static const char *const candidate_prefixes[] = {
    the conventional entry points, but accepting them as prefixes would drag in
    every unrelated tool starting with those letters. */
 static const char *const candidate_exact[] = {
-    "cc", "c++",
+    "cc",
+    "c++",
 };
 
 #define PREFIX_COUNT (sizeof candidate_prefixes / sizeof candidate_prefixes[0])
-#define EXACT_COUNT  (sizeof candidate_exact / sizeof candidate_exact[0])
+#define EXACT_COUNT (sizeof candidate_exact / sizeof candidate_exact[0])
 
 /* True if `text` is a version suffix: empty, or "-" followed by a digit.
    Distinguishes arm-none-eabi-gcc-12 from arm-none-eabi-gcc-wrapper. */

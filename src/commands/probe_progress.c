@@ -16,7 +16,7 @@ static void watch_probe(size_t done, size_t total, void *context) {
 }
 
 bool probe_progress_load(inventory *out, bool refresh) {
-    progress_line line = { .drawn = false };
+    progress_line line = {.drawn = false};
     bool loaded = inventory_load_watched(out, refresh, watch_probe, &line);
     /* Wiped whether the load worked or not: a failure prints a message of its
        own, and half a bar in front of it reads as part of the message. */

@@ -1,8 +1,14 @@
 # Build output
 /build/
 
+# Release artifacts, assembled by the release workflow
+/dist/
+
 # Workspace database (molto-owned metadata)
 /.bin/
 
 # Object files
 *.o
+
+# The compilation database every build writes (derived, never edited by hand)
+/compile_commands.json

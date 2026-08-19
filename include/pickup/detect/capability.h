@@ -24,7 +24,7 @@ typedef enum {
 /* One provable feature. Adding a feature means adding a table entry and
    nothing else. */
 typedef struct {
-    const char *id;       /* stable identifier, e.g. "attr_nodiscard" */
+    const char *id; /* stable identifier, e.g. "attr_nodiscard" */
     capability_lang lang;
     const char *standard; /* the -std= value that introduced it, e.g. "c2x" */
     const char *program;  /* a minimal program that uses the feature */

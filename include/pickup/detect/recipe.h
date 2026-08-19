@@ -50,19 +50,19 @@
 
 /* Which C++ standard library the recipe settled on. */
 typedef enum {
-    stdlib_unknown,     /* nothing was needed, or nothing worked */
-    stdlib_libstdcxx,   /* the GNU one, shared with the rest of the system */
-    stdlib_libcxx,      /* the compiler's own, self-contained */
+    stdlib_unknown,   /* nothing was needed, or nothing worked */
+    stdlib_libstdcxx, /* the GNU one, shared with the rest of the system */
+    stdlib_libcxx,    /* the compiler's own, self-contained */
 } cxx_stdlib;
 
 /* Room for the flags a recipe may carry. Three is the most any candidate
    below uses; the rest is slack for candidates added later. */
 #define RECIPE_MAX_FLAGS 8
-#define RECIPE_FLAG_MAX  1024
-#define RECIPE_MAX_DIRS  4
+#define RECIPE_FLAG_MAX 1024
+#define RECIPE_MAX_DIRS 4
 
 typedef struct {
-    bool usable;        /* false when no candidate produced a running program */
+    bool usable; /* false when no candidate produced a running program */
     cxx_stdlib stdlib;
 
     /* What to add when compiling, and when linking. They overlap: -stdlib=
@@ -125,8 +125,7 @@ typedef struct {
  *
  * `driver` is the C compiler to check against. False when nothing was changed.
  */
-[[nodiscard]] bool recipe_align_gcc(const link_recipe *cxx, const char *driver,
-                                    link_recipe *c);
+[[nodiscard]] bool recipe_align_gcc(const link_recipe *cxx, const char *driver, link_recipe *c);
 
 /* Leave `recipe` beside the driver as a configuration file the compiler reads
    by itself, so the toolchain works when invoked directly and not only through
@@ -170,8 +169,7 @@ typedef struct {
    way probe_identify reads a compiler's identity: the default differs by
    platform — libstdc++ on Linux, libc++ on macOS — so it is one more thing
    that must be asked rather than known. */
-[[nodiscard]] cxx_stdlib recipe_detect_stdlib(const char *compiler,
-                                              const char *const *flags,
+[[nodiscard]] cxx_stdlib recipe_detect_stdlib(const char *compiler, const char *const *flags,
                                               size_t flag_count);
 
 #endif /* PICKUP_RECIPE_H */

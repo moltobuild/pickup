@@ -15,14 +15,14 @@
 
 /* Bytes in a digest, and in its hex form counting the terminator. */
 #define SHA256_DIGEST_SIZE 32
-#define SHA256_HEX_SIZE    65
+#define SHA256_HEX_SIZE 65
 
 /* How much of a file is read at a time when hashing it. */
 #define SHA256_CHUNK_SIZE 65536
 
 typedef struct {
     uint32_t state[8];
-    uint64_t length;                   /* total bytes fed in */
+    uint64_t length; /* total bytes fed in */
     unsigned char block[64];
     size_t buffered;
 } sha256_state;
@@ -50,8 +50,8 @@ typedef void (*sha256_watcher)(long long done, long long total, void *context);
    to show, and unexplained silence is indistinguishable from a hang. The total
    is known here — it is the size of the file — so this can be reported as a
    real fraction rather than mere animation. `watcher` may be NULL. */
-[[nodiscard]] bool sha256_file_watched(const char *path, char *hex_out,
-                                       sha256_watcher watcher, void *context);
+[[nodiscard]] bool sha256_file_watched(const char *path, char *hex_out, sha256_watcher watcher,
+                                       void *context);
 
 /* Compare two hex digests without regard to case, and without giving up early,
    so the comparison cannot be timed. Either being NULL is false. */

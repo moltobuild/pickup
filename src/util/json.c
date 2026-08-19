@@ -10,22 +10,22 @@
 
 /* How the node array and the text pool start and grow. */
 #define NODES_INITIAL 16
-#define TEXT_INITIAL  256
+#define TEXT_INITIAL 256
 #define GROWTH_FACTOR 2
 
 /* Ranges of the UTF-16 surrogate pair a \u escape may encode. */
 #define SURROGATE_HIGH_FIRST 0xD800u
-#define SURROGATE_HIGH_LAST  0xDBFFu
-#define SURROGATE_LOW_FIRST  0xDC00u
-#define SURROGATE_LOW_LAST   0xDFFFu
+#define SURROGATE_HIGH_LAST 0xDBFFu
+#define SURROGATE_LOW_FIRST 0xDC00u
+#define SURROGATE_LOW_LAST 0xDFFFu
 
 typedef struct {
     json_type type;
-    size_t text;          /* offset into the text pool, or NO_INDEX */
-    size_t key;           /* offset of a member's name, or NO_INDEX */
+    size_t text; /* offset into the text pool, or NO_INDEX */
+    size_t key;  /* offset of a member's name, or NO_INDEX */
     bool boolean;
     size_t first_child;
-    size_t last_child;    /* kept so appending stays O(1) */
+    size_t last_child; /* kept so appending stays O(1) */
     size_t next_sibling;
     size_t child_count;
 } json_node;
@@ -42,8 +42,7 @@ struct json_document {
 /* --- document storage --- */
 
 static bool grow_nodes(json_document *doc) {
-    size_t next = doc->node_capacity == 0 ? NODES_INITIAL
-                                          : doc->node_capacity * GROWTH_FACTOR;
+    size_t next = doc->node_capacity == 0 ? NODES_INITIAL : doc->node_capacity * GROWTH_FACTOR;
     json_node *nodes = realloc(doc->nodes, next * sizeof *nodes);
     if (nodes == NULL)
         return false;
@@ -100,14 +99,12 @@ typedef struct {
 static bool parse_value(parser *state, size_t *out);
 
 static void skip_whitespace(parser *state) {
-    while (*state->cursor == ' ' || *state->cursor == '\t'
-           || *state->cursor == '\n' || *state->cursor == '\r')
+    while (*state->cursor == ' ' || *state->cursor == '\t' || *state->cursor == '\n' ||
+           *state->cursor == '\r')
         state->cursor++;
 }
 
-static bool is_digit(char c) {
-    return c >= '0' && c <= '9';
-}
+static bool is_digit(char c) { return c >= '0' && c <= '9'; }
 
 /* Read four hex digits of a \u escape. */
 static bool read_hex4(parser *state, unsigned *out) {
@@ -135,16 +132,16 @@ static bool push_utf8(json_document *doc, unsigned code) {
     if (code < 0x80u)
         return push_byte(doc, (char)code);
     if (code < 0x800u)
-        return push_byte(doc, (char)(0xC0u | (code >> 6)))
-            && push_byte(doc, (char)(0x80u | (code & 0x3Fu)));
+        return push_byte(doc, (char)(0xC0u | (code >> 6))) &&
+               push_byte(doc, (char)(0x80u | (code & 0x3Fu)));
     if (code < 0x10000u)
-        return push_byte(doc, (char)(0xE0u | (code >> 12)))
-            && push_byte(doc, (char)(0x80u | ((code >> 6) & 0x3Fu)))
-            && push_byte(doc, (char)(0x80u | (code & 0x3Fu)));
-    return push_byte(doc, (char)(0xF0u | (code >> 18)))
-        && push_byte(doc, (char)(0x80u | ((code >> 12) & 0x3Fu)))
-        && push_byte(doc, (char)(0x80u | ((code >> 6) & 0x3Fu)))
-        && push_byte(doc, (char)(0x80u | (code & 0x3Fu)));
+        return push_byte(doc, (char)(0xE0u | (code >> 12))) &&
+               push_byte(doc, (char)(0x80u | ((code >> 6) & 0x3Fu))) &&
+               push_byte(doc, (char)(0x80u | (code & 0x3Fu)));
+    return push_byte(doc, (char)(0xF0u | (code >> 18))) &&
+           push_byte(doc, (char)(0x80u | ((code >> 12) & 0x3Fu))) &&
+           push_byte(doc, (char)(0x80u | ((code >> 6) & 0x3Fu))) &&
+           push_byte(doc, (char)(0x80u | (code & 0x3Fu)));
 }
 
 /* Decode a \uXXXX escape, joining a surrogate pair into the one code point it
@@ -155,8 +152,8 @@ static bool parse_unicode_escape(parser *state) {
     if (!read_hex4(state, &code))
         return false;
 
-    if (code >= SURROGATE_HIGH_FIRST && code <= SURROGATE_HIGH_LAST
-        && state->cursor[0] == '\\' && state->cursor[1] == 'u') {
+    if (code >= SURROGATE_HIGH_FIRST && code <= SURROGATE_HIGH_LAST && state->cursor[0] == '\\' &&
+        state->cursor[1] == 'u') {
         const char *rewind = state->cursor;
         state->cursor += 2;
         unsigned low;
@@ -171,16 +168,26 @@ static bool parse_unicode_escape(parser *state) {
 static bool parse_escape(parser *state) {
     char escape = *state->cursor++;
     switch (escape) {
-    case '"':  return push_byte(state->doc, '"');
-    case '\\': return push_byte(state->doc, '\\');
-    case '/':  return push_byte(state->doc, '/');
-    case 'b':  return push_byte(state->doc, '\b');
-    case 'f':  return push_byte(state->doc, '\f');
-    case 'n':  return push_byte(state->doc, '\n');
-    case 'r':  return push_byte(state->doc, '\r');
-    case 't':  return push_byte(state->doc, '\t');
-    case 'u':  return parse_unicode_escape(state);
-    default:   return false;
+    case '"':
+        return push_byte(state->doc, '"');
+    case '\\':
+        return push_byte(state->doc, '\\');
+    case '/':
+        return push_byte(state->doc, '/');
+    case 'b':
+        return push_byte(state->doc, '\b');
+    case 'f':
+        return push_byte(state->doc, '\f');
+    case 'n':
+        return push_byte(state->doc, '\n');
+    case 'r':
+        return push_byte(state->doc, '\r');
+    case 't':
+        return push_byte(state->doc, '\t');
+    case 'u':
+        return parse_unicode_escape(state);
+    default:
+        return false;
     }
 }
 
@@ -407,8 +414,7 @@ static bool parse_value(parser *state, size_t *out) {
     case 'f':
         return match_literal(state, "false") && add_bool(state, false, out);
     case 'n':
-        return match_literal(state, "null")
-            && add_leaf(state, json_type_null, NO_INDEX, out);
+        return match_literal(state, "null") && add_leaf(state, json_type_null, NO_INDEX, out);
     default: {
         size_t text;
         return parse_number(state, &text) && add_leaf(state, json_type_number, text, out);
@@ -424,7 +430,7 @@ json_document *json_parse(const char *text) {
     if (doc == NULL)
         return NULL;
 
-    parser state = { .cursor = text, .doc = doc, .depth = 0 };
+    parser state = {.cursor = text, .doc = doc, .depth = 0};
     size_t root;
     if (!parse_value(&state, &root)) {
         json_free(doc);
@@ -457,12 +463,10 @@ static const json_node *node_of(json_value value) {
     return &value.doc->nodes[value.index];
 }
 
-static json_value invalid_value(void) {
-    return (json_value){ .doc = NULL, .index = NO_INDEX };
-}
+static json_value invalid_value(void) { return (json_value){.doc = NULL, .index = NO_INDEX}; }
 
 static json_value value_at(const json_document *doc, size_t index) {
-    return (json_value){ .doc = doc, .index = index };
+    return (json_value){.doc = doc, .index = index};
 }
 
 json_value json_root(const json_document *doc) {
@@ -471,9 +475,7 @@ json_value json_root(const json_document *doc) {
     return value_at(doc, 0);
 }
 
-bool json_is_valid(json_value value) {
-    return node_of(value) != NULL;
-}
+bool json_is_valid(json_value value) { return node_of(value) != NULL; }
 
 json_type json_type_of(json_value value) {
     const json_node *node = node_of(value);

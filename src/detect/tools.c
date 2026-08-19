@@ -31,29 +31,33 @@ typedef struct {
 } tool_candidate;
 
 static const tool_candidate candidates[] = {
-    { "clang-format", tool_formatter },
-    { "clang-tidy",   tool_linter },
-    { "cppcheck",     tool_linter },
+    {"clang-format", tool_formatter},
+    {"clang-tidy", tool_linter},
+    {"cppcheck", tool_linter},
 };
 
 #define CANDIDATE_COUNT (sizeof candidates / sizeof candidates[0])
 
 /* What `install` is told to fetch for each kind. */
 #define PACKAGE_FORMATTER "clang-format"
-#define PACKAGE_LINTER    "clang-tidy"
+#define PACKAGE_LINTER "clang-tidy"
 
 const char *tool_kind_name(tool_kind kind) {
     switch (kind) {
-    case tool_formatter: return "formatter";
-    case tool_linter:    return "linter";
+    case tool_formatter:
+        return "formatter";
+    case tool_linter:
+        return "linter";
     }
     return "tool";
 }
 
 const char *tool_kind_package(tool_kind kind) {
     switch (kind) {
-    case tool_formatter: return PACKAGE_FORMATTER;
-    case tool_linter:    return PACKAGE_LINTER;
+    case tool_formatter:
+        return PACKAGE_FORMATTER;
+    case tool_linter:
+        return PACKAGE_LINTER;
     }
     return PACKAGE_FORMATTER;
 }
@@ -88,7 +92,7 @@ bool tools_kind_of(const char *name, tool_kind *kind) {
 static void extract_version(char *text) {
     char *chosen = NULL;
 
-    for (char *line = text; line != NULL && *line != '\0'; ) {
+    for (char *line = text; line != NULL && *line != '\0';) {
         char *end = strpbrk(line, "\r\n");
         if (end != NULL)
             *end = '\0';
@@ -96,7 +100,7 @@ static void extract_version(char *text) {
         while (*line == ' ' || *line == '\t')
             line++;
         if (*line != '\0' && chosen == NULL)
-            chosen = line;                 /* the first line, as a fallback */
+            chosen = line; /* the first line, as a fallback */
         if (strstr(line, "version") != NULL) {
             chosen = line;
             break;
@@ -118,7 +122,7 @@ static void extract_version(char *text) {
 /* Ask the binary at `path` to identify itself. False when it does not answer,
    which is the difference between a tool and a file with the right name. */
 static bool interrogate(const char *path, char *version, size_t version_size) {
-    const char *argv[] = { path, ARG_VERSION, NULL };
+    const char *argv[] = {path, ARG_VERSION, NULL};
     char answer[ANSWER_SIZE];
     process_result result = process_capture(argv, NULL, answer, sizeof answer);
     if (!result.completed || result.exit_code != 0)
@@ -130,18 +134,18 @@ static bool interrogate(const char *path, char *version, size_t version_size) {
     /* Truncated rather than refused if it runs long: this is a line of text to
        show a reader, not a path where a missing tail would mean a different
        file. */
-    (void)snprintf(version, version_size, "%s", answer);
+    (void)snprintf(version, version_size, "%.*s", (int)(version_size - 1), answer);
     return true;
 }
 
 /* Record `path` as `candidate`, if it runs. */
-static bool accept(const tool_candidate *candidate, const char *path,
-                   toolchain_source source, dev_tool *out) {
+static bool accept(const tool_candidate *candidate, const char *path, toolchain_source source,
+                   dev_tool *out) {
     char version[TOOL_VERSION_MAX];
     if (!interrogate(path, version, sizeof version))
         return false;
 
-    *out = (dev_tool){ .kind = candidate->kind, .source = source };
+    *out = (dev_tool){.kind = candidate->kind, .source = source};
     (void)fs_format_path(out->name, sizeof out->name, "%s", candidate->name);
     (void)fs_format_path(out->path, sizeof out->path, "%s", path);
     (void)fs_format_path(out->version, sizeof out->version, "%s", version);
@@ -149,8 +153,8 @@ static bool accept(const tool_candidate *candidate, const char *path,
 }
 
 /* Look for `candidate` inside one directory. */
-static bool find_in(const char *directory, const tool_candidate *candidate,
-                    toolchain_source source, dev_tool *out) {
+static bool find_in(const char *directory, const tool_candidate *candidate, toolchain_source source,
+                    dev_tool *out) {
     char path[PICKUP_PATHS_MAX];
     if (!fs_format_path(path, sizeof path, "%s/%s", directory, candidate->name))
         return false;
@@ -168,8 +172,7 @@ static bool find_on_path(const tool_candidate *candidate, dev_tool *out) {
     const char *cursor = path_env;
     while (*cursor != '\0') {
         const char *separator = strchr(cursor, PATH_SEPARATOR);
-        size_t length = separator != NULL ? (size_t)(separator - cursor)
-                                          : strlen(cursor);
+        size_t length = separator != NULL ? (size_t)(separator - cursor) : strlen(cursor);
 
         if (length > 0 && length < PICKUP_PATHS_MAX) {
             char directory[PICKUP_PATHS_MAX];
@@ -189,8 +192,7 @@ static bool find_on_path(const tool_candidate *candidate, dev_tool *out) {
 /* And in the bin directory of everything Pickup installed, which is not on
    PATH and would otherwise be invisible — a clang toolchain carries both of
    these, so missing them would report a machine as barer than it is. */
-static bool find_under(const char *root, const tool_candidate *candidate,
-                       dev_tool *out) {
+static bool find_under(const char *root, const tool_candidate *candidate, dev_tool *out) {
     DIR *dir = opendir(root);
     if (dir == NULL)
         return false;
@@ -213,18 +215,16 @@ static bool find_under(const char *root, const tool_candidate *candidate,
    of their own, and tools are installed on their own. */
 static bool find_in_pickup(const tool_candidate *candidate, dev_tool *out) {
     char directory[PICKUP_PATHS_MAX];
-    if (paths_tools(directory, sizeof directory)
-        && find_under(directory, candidate, out))
+    if (paths_tools(directory, sizeof directory) && find_under(directory, candidate, out))
         return true;
-    return paths_toolchains(directory, sizeof directory)
-        && find_under(directory, candidate, out);
+    return paths_toolchains(directory, sizeof directory) && find_under(directory, candidate, out);
 }
 
 size_t tools_discover(dev_tool *out, size_t max) {
     size_t count = 0;
     for (size_t i = 0; i < CANDIDATE_COUNT && count < max; i++) {
-        if (find_on_path(&candidates[i], &out[count])
-            || find_in_pickup(&candidates[i], &out[count]))
+        if (find_on_path(&candidates[i], &out[count]) ||
+            find_in_pickup(&candidates[i], &out[count]))
             count++;
     }
     return count;

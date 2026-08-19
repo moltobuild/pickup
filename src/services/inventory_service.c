@@ -12,12 +12,11 @@
 
 /* How many toolchains the inventory holds before it grows. */
 #define INVENTORY_INITIAL_CAPACITY 8
-#define INVENTORY_GROWTH_FACTOR    2
+#define INVENTORY_GROWTH_FACTOR 2
 
 static bool inventory_grow(inventory *list) {
-    size_t next = list->capacity == 0
-        ? INVENTORY_INITIAL_CAPACITY
-        : list->capacity * INVENTORY_GROWTH_FACTOR;
+    size_t next =
+        list->capacity == 0 ? INVENTORY_INITIAL_CAPACITY : list->capacity * INVENTORY_GROWTH_FACTOR;
     toolchain *items = realloc(list->items, next * sizeof(toolchain));
     if (items == NULL)
         return false;
@@ -43,15 +42,14 @@ bool inventory_append(inventory *list, const toolchain *chain) {
  * nowhere — it is already the C++ side. Keep the wrong one and the toolchain
  * ends up recorded as having no C++ at all.
  */
-static const char *const preferred_names[] = { "gcc", "clang", "cc" };
+static const char *const preferred_names[] = {"gcc", "clang", "cc"};
 #define PREFERRED_COUNT (sizeof preferred_names / sizeof preferred_names[0])
 
 /* Names that are already the C++ side, and so lead nowhere when the C++ driver
    is looked for by transforming them. */
 static bool names_a_cxx_driver(const char *name) {
-    return strcmp(name, "c++") == 0
-        || strncmp(name, "g++", 3) == 0
-        || strncmp(name, "clang++", 7) == 0;
+    return strcmp(name, "c++") == 0 || strncmp(name, "g++", 3) == 0 ||
+           strncmp(name, "clang++", 7) == 0;
 }
 
 /* Lower is better. Decided from the name alone, because this runs before
@@ -63,8 +61,7 @@ static int name_rank(const toolchain *chain) {
     }
     /* Anything is better than a C++ driver: `gcc` leads to `g++`, and `g++`
        leads nowhere. */
-    return names_a_cxx_driver(chain->name) ? (int)PREFERRED_COUNT + 1
-                                           : (int)PREFERRED_COUNT;
+    return names_a_cxx_driver(chain->name) ? (int)PREFERRED_COUNT + 1 : (int)PREFERRED_COUNT;
 }
 
 /* True if both spellings are the same installed compiler.
@@ -74,10 +71,8 @@ static int name_rank(const toolchain *chain) {
    while the system's gcc 12.3.0 and a conda one of the same version are not,
    because their targets differ. */
 static bool same_toolchain(const toolchain *a, const toolchain *b) {
-    return a->vendor == b->vendor
-        && toolchain_version_compare(a->version, b->version) == 0
-        && strcmp(a->target, b->target) == 0
-        && a->source == b->source;
+    return a->vendor == b->vendor && toolchain_version_compare(a->version, b->version) == 0 &&
+           strcmp(a->target, b->target) == 0 && a->source == b->source;
 }
 
 /*
@@ -90,8 +85,8 @@ static bool same_toolchain(const toolchain *a, const toolchain *b) {
  */
 static void merge_into(toolchain *into, const toolchain *other) {
     /* Everything proven about either spelling, kept. */
-    capability_set c = { into->c_features.bits | other->c_features.bits };
-    capability_set cxx = { into->cxx_features.bits | other->cxx_features.bits };
+    capability_set c = {into->c_features.bits | other->c_features.bits};
+    capability_set cxx = {into->cxx_features.bits | other->cxx_features.bits};
 
     const toolchain *better = name_rank(other) < name_rank(into) ? other : into;
     const toolchain *worse = better == other ? into : other;
@@ -137,8 +132,7 @@ static int compare_toolchains(const void *left, const void *right) {
     const toolchain *a = left;
     const toolchain *b = right;
 
-    int by_vendor = strcmp(toolchain_vendor_name(a->vendor),
-                           toolchain_vendor_name(b->vendor));
+    int by_vendor = strcmp(toolchain_vendor_name(a->vendor), toolchain_vendor_name(b->vendor));
     if (by_vendor != 0)
         return by_vendor;
 
@@ -159,8 +153,8 @@ static void notify(inventory_watch watch, void *context, size_t done, size_t tot
 
 /* Probe every candidate and fill `out`. Shared by the cached and uncached
    paths, which differ only in where the candidate list comes from. */
-static bool probe_candidates(const str_list *candidates, inventory *out,
-                             inventory_watch watch, void *context) {
+static bool probe_candidates(const str_list *candidates, inventory *out, inventory_watch watch,
+                             void *context) {
     /*
      * Identify everything first, collapse the aliases, and only then ask what
      * is left to compile.
@@ -273,8 +267,7 @@ bool inventory_load(inventory *out, bool refresh) {
     return inventory_load_watched(out, refresh, NULL, NULL);
 }
 
-bool inventory_load_watched(inventory *out, bool refresh,
-                            inventory_watch watch, void *context) {
+bool inventory_load_watched(inventory *out, bool refresh, inventory_watch watch, void *context) {
     memset(out, 0, sizeof *out);
 
     /* Scanning PATH is cheap; probing is not. So the candidate list is always

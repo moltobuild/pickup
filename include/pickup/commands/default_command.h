@@ -5,8 +5,8 @@
 
 /* What `pickup default` was asked to do. */
 typedef struct {
-    const char *name;   /* the toolchain to prefer; NULL reports the current one */
-    bool clear;         /* forget the preference instead of setting one */
+    const char *name; /* the toolchain to prefer; NULL reports the current one */
+    bool clear;       /* forget the preference instead of setting one */
     bool as_toml;
 } default_command_request;
 

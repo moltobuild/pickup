@@ -27,7 +27,7 @@ typedef enum {
     tool_linter,
 } tool_kind;
 
-#define TOOL_NAME_MAX    64
+#define TOOL_NAME_MAX 64
 /* What a tool prints when asked. Generous because these are sentences, not
    version numbers: clang-format answers with its version, the URL of the
    feedstock it was built from, and a commit hash. */
@@ -38,9 +38,9 @@ typedef enum {
 
 typedef struct {
     tool_kind kind;
-    char name[TOOL_NAME_MAX];      /* "clang-format" */
-    char path[PICKUP_PATHS_MAX];   /* where it was found */
-    char version[TOOL_VERSION_MAX];/* what it said when asked */
+    char name[TOOL_NAME_MAX];       /* "clang-format" */
+    char path[PICKUP_PATHS_MAX];    /* where it was found */
+    char version[TOOL_VERSION_MAX]; /* what it said when asked */
     /* Who is responsible for it, decided by where it lives — the same
        distinction `list` draws for compilers. */
     toolchain_source source;

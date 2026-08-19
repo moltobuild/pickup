@@ -81,13 +81,11 @@ static int report_current(bool as_toml) {
  * change. What must not happen is the choice going unmentioned, since the
  * identity that gets stored is the resolved one and not what was typed.
  */
-static void note_if_loose(const inventory *list, const char *query,
-                          const toolchain *chosen) {
+static void note_if_loose(const inventory *list, const char *query, const toolchain *chosen) {
     size_t matching = inventory_count_matching(list, query);
     if (matching < 2)
         return;
-    fprintf(stderr, "pickup: '%s' names %zu toolchains; chose %s\n",
-            query, matching, chosen->id);
+    fprintf(stderr, "pickup: '%s' names %zu toolchains; chose %s\n", query, matching, chosen->id);
 }
 
 static int set_default(const char *name, bool as_toml) {

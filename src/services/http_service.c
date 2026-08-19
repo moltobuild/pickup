@@ -11,19 +11,17 @@
    -f  treat an HTTP error as a failure instead of saving the error page
    -sS quiet, but still say why it failed
    -L  follow redirects, which is how release downloads are served */
-#define CURL_COMMAND  "curl"
-#define ARG_FAIL      "-f"
-#define ARG_SILENT    "-sS"
-#define ARG_LOCATION  "-L"
-#define ARG_OUTPUT    "-o"
-#define ARG_VERSION   "--version"
+#define CURL_COMMAND "curl"
+#define ARG_FAIL "-f"
+#define ARG_SILENT "-sS"
+#define ARG_LOCATION "-L"
+#define ARG_OUTPUT "-o"
+#define ARG_VERSION "--version"
 
 /* How often the growing file is measured while drawing the bar. */
 #define POLL_INTERVAL_NS 100000000L /* 0.1 s */
 
-const char *http_requirement(void) {
-    return CURL_COMMAND;
-}
+const char *http_requirement(void) { return CURL_COMMAND; }
 
 bool http_available(void) {
     static bool checked = false;
@@ -31,7 +29,7 @@ bool http_available(void) {
     if (checked)
         return available;
 
-    const char *argv[] = { CURL_COMMAND, ARG_VERSION, NULL };
+    const char *argv[] = {CURL_COMMAND, ARG_VERSION, NULL};
     process_result result = process_try(argv, NULL);
     available = result.completed && result.exit_code == 0;
     checked = true;
@@ -72,22 +70,21 @@ bool http_download(const char *url, const char *dest) {
 }
 
 static void wait_a_moment(void) {
-    struct timespec pause = { .tv_sec = 0, .tv_nsec = POLL_INTERVAL_NS };
+    struct timespec pause = {.tv_sec = 0, .tv_nsec = POLL_INTERVAL_NS};
     nanosleep(&pause, NULL);
 }
 
 /* Draw the bar from the size of the file as it grows, which is why the total
    has to be known in advance: curl is not asked anything. */
-static void draw_current(FILE *out, const char *label, const char *dest,
-                         long long expected_size) {
+static void draw_current(FILE *out, const char *label, const char *dest, long long expected_size) {
     long long done = 0;
     if (!fs_file_size(dest, &done))
         done = 0;
     progress_draw(out, label, done, expected_size);
 }
 
-bool http_download_with_progress(const char *url, const char *dest,
-                                 long long expected_size, const char *label) {
+bool http_download_with_progress(const char *url, const char *dest, long long expected_size,
+                                 const char *label) {
     if (!http_available())
         return false;
 
@@ -120,8 +117,7 @@ bool http_download_with_progress(const char *url, const char *dest,
     return true;
 }
 
-bool http_download_watched(const char *url, const char *dest,
-                           http_tick tick, void *context) {
+bool http_download_watched(const char *url, const char *dest, http_tick tick, void *context) {
     if (tick == NULL)
         return http_download(url, dest);
     if (!http_available())

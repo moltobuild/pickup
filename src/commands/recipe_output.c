@@ -3,16 +3,14 @@
 #include <stdio.h>
 
 /* Print a TOML array of strings on one line. */
-static void print_string_array(const char *key, const char rows[][RECIPE_FLAG_MAX],
-                               size_t count) {
+static void print_string_array(const char *key, const char rows[][RECIPE_FLAG_MAX], size_t count) {
     printf("%s = [", key);
     for (size_t i = 0; i < count; i++)
         printf("%s\"%s\"", i == 0 ? "" : ", ", rows[i]);
     printf("]\n");
 }
 
-static void print_dir_array(const char *key, const char rows[][PICKUP_PATHS_MAX],
-                            size_t count) {
+static void print_dir_array(const char *key, const char rows[][PICKUP_PATHS_MAX], size_t count) {
     printf("%s = [", key);
     for (size_t i = 0; i < count; i++)
         printf("%s\"%s\"", i == 0 ? "" : ", ", rows[i]);

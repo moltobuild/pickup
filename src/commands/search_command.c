@@ -27,7 +27,7 @@ static const char *const release_headers[] = {
 /* What a withdrawn release is marked with. Still listed: it remains
    resolvable, and hiding it would leave an existing install unexplained. */
 #define STATUS_YANKED "yanked"
-#define STATUS_NONE   ""
+#define STATUS_NONE ""
 
 /* What stands in for an author the registry does not know, because the artifact
    was published before it had accounts. */
@@ -76,8 +76,8 @@ static void join_targets(const registry_entry *entry, char *out, size_t out_size
     out[0] = '\0';
     size_t used = 0;
     for (size_t i = 0; i < entry->target_count; i++) {
-        int written = snprintf(out + used, out_size - used, "%s%s",
-                               used > 0 ? ", " : "", entry->targets[i]);
+        int written =
+            snprintf(out + used, out_size - used, "%s%s", used > 0 ? ", " : "", entry->targets[i]);
         if (written < 0 || (size_t)written >= out_size - used)
             return;
         used += (size_t)written;
@@ -99,8 +99,10 @@ static void print_catalogue_text(const registry_entry_list *list) {
             char targets[TARGETS_CELL_MAX];
             join_targets(&list->items[i], targets, sizeof targets);
             const char *cells[CATALOGUE_COLUMNS] = {
-                list->items[i].name, registry_kind_name(list->items[i].kind),
-                list->items[i].latest_version, targets,
+                list->items[i].name,
+                registry_kind_name(list->items[i].kind),
+                list->items[i].latest_version,
+                targets,
                 publisher_cell(list->items[i].published_by),
             };
             if (pass == 0)
@@ -138,17 +140,17 @@ static void print_catalogue_toml(const registry_entry_list *list) {
  * asking what they can install, one list.
  */
 static int search_everything(const search_command_request *request) {
-    static const registry_kind kinds[] = { registry_kind_toolchain, registry_kind_tool };
+    static const registry_kind kinds[] = {registry_kind_toolchain, registry_kind_tool};
 
     registry_entry_list all;
     registry_entry_list_init(&all);
-    progress_line line = { .drawn = false };
+    progress_line line = {.drawn = false};
 
     bool any = false;
     for (size_t i = 0; i < sizeof kinds / sizeof kinds[0]; i++) {
         registry_entry_list list;
-        if (!registry_fetch_catalogue_watched(kinds[i], request->refresh,
-                                              watch_fetch, &line, &list)) {
+        if (!registry_fetch_catalogue_watched(kinds[i], request->refresh, watch_fetch, &line,
+                                              &list)) {
             registry_entry_list_free(&list);
             continue;
         }
@@ -190,7 +192,9 @@ static void print_releases_text(const registry_artifact_list *list) {
             char size[FORMAT_SIZE_MAX];
             format_size(list->items[i].size_bytes, size, sizeof size);
             const char *cells[RELEASE_COLUMNS] = {
-                list->items[i].version, size, list->items[i].target,
+                list->items[i].version,
+                size,
+                list->items[i].target,
                 publisher_cell(list->items[i].published_by),
                 list->items[i].yanked ? STATUS_YANKED : STATUS_NONE,
             };
@@ -250,11 +254,10 @@ static int search_one(const search_command_request *request) {
     }
 
     registry_artifact_list list;
-    progress_line line = { .drawn = false };
-    bool fetched = registry_fetch_releases_watched(entry.kind, request->name,
-                                                   request->version, target,
-                                                   request->refresh, watch_fetch,
-                                                   &line, &list);
+    progress_line line = {.drawn = false};
+    bool fetched =
+        registry_fetch_releases_watched(entry.kind, request->name, request->version, target,
+                                        request->refresh, watch_fetch, &line, &list);
     progress_line_clear(stderr, &line);
 
     if (!fetched) {
@@ -267,11 +270,9 @@ static int search_one(const search_command_request *request) {
 
     if (list.count == 0) {
         if (request->version != NULL && request->version[0] != '\0')
-            fprintf(stderr, "pickup: no %s matches version %s\n",
-                    request->name, request->version);
+            fprintf(stderr, "pickup: no %s matches version %s\n", request->name, request->version);
         else
-            fprintf(stderr, "pickup: no %s is published for %s\n",
-                    request->name, target);
+            fprintf(stderr, "pickup: no %s is published for %s\n", request->name, target);
         registry_artifact_list_free(&list);
         return exit_no_match;
     }
@@ -287,8 +288,7 @@ static int search_one(const search_command_request *request) {
 
 int search_command_run(const search_command_request *request) {
     if (!http_available()) {
-        fprintf(stderr, "pickup: %s is required to reach the registry\n",
-                http_requirement());
+        fprintf(stderr, "pickup: %s is required to reach the registry\n", http_requirement());
         return exit_failure;
     }
 
@@ -296,8 +296,7 @@ int search_command_run(const search_command_request *request) {
         return search_everything(request);
 
     if (!registry_name_is_simple(request->name)) {
-        fprintf(stderr, "pickup: '%s' is not a name the registry could publish\n",
-                request->name);
+        fprintf(stderr, "pickup: '%s' is not a name the registry could publish\n", request->name);
         return exit_usage_error;
     }
     return search_one(request);

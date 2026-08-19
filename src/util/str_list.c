@@ -11,7 +11,7 @@ void str_list_init(str_list *list) {
 
 static bool str_list_grow(str_list *list) {
     size_t next = list->capacity == 0 ? 8 : list->capacity * 2;
-    char **items = realloc(list->items, next * sizeof(char *));
+    char **items = (char **)realloc((void *)list->items, next * sizeof(char *));
     if (items == NULL)
         return false;
     list->items = items;
@@ -30,9 +30,7 @@ bool str_list_push(str_list *list, const char *value) {
     return true;
 }
 
-size_t str_list_count(const str_list *list) {
-    return list->count;
-}
+size_t str_list_count(const str_list *list) { return list->count; }
 
 const char *str_list_get(const str_list *list, size_t index) {
     if (index >= list->count)
@@ -53,19 +51,19 @@ bool str_list_replace(str_list *list, size_t index, const char *value) {
 
 /* Compare two elements through the pointers qsort hands to the callback. */
 static int compare_items(const void *left, const void *right) {
-    const char *const *a = left;
-    const char *const *b = right;
+    const char *const *a = (const char *const *)left;
+    const char *const *b = (const char *const *)right;
     return strcmp(*a, *b);
 }
 
 void str_list_sort(str_list *list) {
     if (list->count > 1)
-        qsort(list->items, list->count, sizeof(char *), compare_items);
+        qsort((void *)list->items, list->count, sizeof(char *), compare_items);
 }
 
 void str_list_free(str_list *list) {
     for (size_t i = 0; i < list->count; i++)
         free(list->items[i]);
-    free(list->items);
+    free((void *)list->items);
     str_list_init(list);
 }

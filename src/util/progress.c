@@ -10,7 +10,7 @@
 
 /* What the bar is drawn with. */
 #define CELL_FILLED "\xe2\x96\x88" /* U+2588 FULL BLOCK */
-#define CELL_EMPTY  "\xe2\x96\x91" /* U+2591 LIGHT SHADE */
+#define CELL_EMPTY "\xe2\x96\x91"  /* U+2591 LIGHT SHADE */
 
 #define PERCENT_MAX 100
 
@@ -20,7 +20,7 @@
 #define PROGRESS_LINE_WIDTH 100
 
 progress_bar progress_measure(long long done, long long total, size_t width) {
-    progress_bar bar = { .percent = 0, .filled = 0, .width = width };
+    progress_bar bar = {.percent = 0, .filled = 0, .width = width};
     if (total <= 0 || done <= 0)
         return bar;
 
@@ -64,11 +64,11 @@ void progress_draw_steps(FILE *out, const char *label, long long done, long long
 }
 
 /* Read as rotation rather than as four unrelated characters. */
-static const char *const spinner_frames[SPINNER_FRAMES] = { "-", "\\", "|", "/" };
+static const char *const spinner_frames[SPINNER_FRAMES] = {"-", "\\", "|", "/"};
 
 void spinner_wait(FILE *out, const char *label, size_t frame) {
-    fprintf(out, "\r%s  %s%s%s   ", label,
-            color_accent(), spinner_frames[frame % SPINNER_FRAMES], color_reset());
+    fprintf(out, "\r%s  %s%s%s   ", label, color_accent(), spinner_frames[frame % SPINNER_FRAMES],
+            color_reset());
     fflush(out);
 }
 
@@ -76,9 +76,9 @@ void spinner_draw(FILE *out, const char *label, size_t frame, long long done) {
     char done_text[FORMAT_SIZE_MAX];
     format_size(done, done_text, sizeof done_text);
 
-    fprintf(out, "\r%s  %s%s%s  %s%s extracted%s", label,
-            color_accent(), spinner_frames[frame % SPINNER_FRAMES], color_reset(),
-            color_dim(), done_text, color_reset());
+    fprintf(out, "\r%s  %s%s%s  %s%s extracted%s", label, color_accent(),
+            spinner_frames[frame % SPINNER_FRAMES], color_reset(), color_dim(), done_text,
+            color_reset());
     fflush(out);
 }
 
@@ -102,6 +102,4 @@ void progress_line_clear(FILE *out, progress_line *line) {
     line->drawn = false;
 }
 
-bool progress_is_interactive(FILE *out) {
-    return isatty(fileno(out)) == 1;
-}
+bool progress_is_interactive(FILE *out) { return isatty(fileno(out)) == 1; }

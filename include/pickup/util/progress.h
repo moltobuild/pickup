@@ -21,9 +21,9 @@
 #define PROGRESS_BAR_WIDTH 25
 
 typedef struct {
-    int percent;     /* 0 to 100, clamped */
-    size_t filled;   /* cells to draw as done */
-    size_t width;    /* cells in total */
+    int percent;   /* 0 to 100, clamped */
+    size_t filled; /* cells to draw as done */
+    size_t width;  /* cells in total */
 } progress_bar;
 
 /* Work out the bar for `done` of `total` bytes.

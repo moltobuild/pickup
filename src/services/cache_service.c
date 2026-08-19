@@ -18,7 +18,7 @@
 #define CACHE_FILENAME "toolchains"
 
 /* Size of the buffers holding the cache path and one record. */
-#define CACHE_PATH_SIZE   4096
+#define CACHE_PATH_SIZE 4096
 #define CACHE_RECORD_SIZE 8192
 
 /* Fields of a record are tab-separated: paths may contain spaces, never tabs. */
@@ -63,15 +63,14 @@ static bool parse_record(const char *line, toolchain *out) {
     char field[CACHE_PATH_SIZE];
     const char *cursor = line;
 
-    if (!next_field(&cursor, out->path, sizeof out->path)
-        || !next_field(&cursor, out->name, sizeof out->name)
-        || !next_field(&cursor, out->cxx_path, sizeof out->cxx_path)
-        || !next_field(&cursor, field, sizeof field))
+    if (!next_field(&cursor, out->path, sizeof out->path) ||
+        !next_field(&cursor, out->name, sizeof out->name) ||
+        !next_field(&cursor, out->cxx_path, sizeof out->cxx_path) ||
+        !next_field(&cursor, field, sizeof field))
         return false;
     out->vendor = toolchain_vendor_parse(field);
 
-    if (!next_field(&cursor, field, sizeof field)
-        || !toolchain_version_parse(field, &out->version))
+    if (!next_field(&cursor, field, sizeof field) || !toolchain_version_parse(field, &out->version))
         return false;
     if (!next_field(&cursor, out->target, sizeof out->target))
         return false;
@@ -130,11 +129,11 @@ bool cache_load(const str_list *candidates, inventory *out) {
     /* The catalog fingerprint has to match as well: the records store features
        as bit positions, so a catalog that changed makes every stored bit mean
        something else. */
-    bool ok = fgets(line, sizeof line, file) != NULL
-           && sscanf(line, "%d %llu %llu", &version, &candidate_mark, &catalog_mark) == 3
-           && version == CACHE_FORMAT_VERSION
-           && candidate_mark == candidates_fingerprint(candidates)
-           && catalog_mark == capability_catalog_fingerprint();
+    bool ok = fgets(line, sizeof line, file) != NULL &&
+              sscanf(line, "%d %llu %llu", &version, &candidate_mark, &catalog_mark) == 3 &&
+              version == CACHE_FORMAT_VERSION &&
+              candidate_mark == candidates_fingerprint(candidates) &&
+              catalog_mark == capability_catalog_fingerprint();
 
     while (ok && fgets(line, sizeof line, file) != NULL) {
         line[strcspn(line, "\n")] = '\0';
@@ -175,8 +174,7 @@ bool cache_store(const str_list *candidates, const inventory *list) {
         return false;
 
     bool ok = fprintf(file, "%d %llu %llu\n", CACHE_FORMAT_VERSION,
-                      candidates_fingerprint(candidates),
-                      capability_catalog_fingerprint()) > 0;
+                      candidates_fingerprint(candidates), capability_catalog_fingerprint()) > 0;
     for (size_t i = 0; ok && i < list->count; i++) {
         const toolchain *chain = &list->items[i];
         char version[32];
@@ -186,12 +184,10 @@ bool cache_store(const str_list *candidates, const inventory *list) {
         if (!binary_signature(chain->path, &mtime, &size))
             continue; /* it vanished mid-scan; simply do not record it */
 
-        ok = fprintf(file, "%s\t%s\t%s\t%s\t%s\t%s\t%llu\t%llu\t%lld\t%lld\n",
-                     chain->path, chain->name, chain->cxx_path,
-                     toolchain_vendor_name(chain->vendor), version, chain->target,
-                     (unsigned long long)chain->c_features.bits,
-                     (unsigned long long)chain->cxx_features.bits,
-                     mtime, size) > 0;
+        ok = fprintf(file, "%s\t%s\t%s\t%s\t%s\t%s\t%llu\t%llu\t%lld\t%lld\n", chain->path,
+                     chain->name, chain->cxx_path, toolchain_vendor_name(chain->vendor), version,
+                     chain->target, (unsigned long long)chain->c_features.bits,
+                     (unsigned long long)chain->cxx_features.bits, mtime, size) > 0;
     }
     return fclose(file) == 0 && ok;
 }

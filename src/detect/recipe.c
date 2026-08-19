@@ -14,9 +14,9 @@
 /* Asking a driver where one of its own files lives. It answers with a full
    path when it has the file, and echoes the name back when it does not. */
 #define ARG_PRINT_FILE_NAME "-print-file-name=%s"
-#define LIBCXX_SHARED       "libc++.so"
-#define LIBCXX_DYLIB        "libc++.dylib"
-#define LIBSTDCXX_SHARED    "libstdc++.so"
+#define LIBCXX_SHARED "libc++.so"
+#define LIBCXX_DYLIB "libc++.dylib"
+#define LIBSTDCXX_SHARED "libstdc++.so"
 
 /* The flags a candidate may carry.
 
@@ -25,12 +25,12 @@
    16, while --gcc-toolchain names a prefix and has been understood for far
    longer. Neither is assumed to work — both are candidates, and the driver
    decides by accepting one or refusing it. */
-#define FLAG_STDLIB_LIBCXX  "-stdlib=libc++"
-#define FLAG_STDLIB_FORMAT  "-stdlib=%s"
-#define FLAG_STDLIB_PREFIX  "-stdlib="
-#define FLAG_GCC_INSTALL    "--gcc-install-dir=%s"
-#define FLAG_GCC_TOOLCHAIN  "--gcc-toolchain=%s"
-#define FLAG_RPATH          "-Wl,-rpath,%s"
+#define FLAG_STDLIB_LIBCXX "-stdlib=libc++"
+#define FLAG_STDLIB_FORMAT "-stdlib=%s"
+#define FLAG_STDLIB_PREFIX "-stdlib="
+#define FLAG_GCC_INSTALL "--gcc-install-dir=%s"
+#define FLAG_GCC_TOOLCHAIN "--gcc-toolchain=%s"
+#define FLAG_RPATH "-Wl,-rpath,%s"
 
 /* How far above a GCC installation directory its prefix sits:
    <prefix>/lib/gcc/<triple>/<version> is four levels down. */
@@ -77,9 +77,12 @@ typedef struct {
 
 const char *recipe_stdlib_name(cxx_stdlib stdlib) {
     switch (stdlib) {
-    case stdlib_libstdcxx: return "libstdc++";
-    case stdlib_libcxx:    return "libc++";
-    case stdlib_unknown:   return "";
+    case stdlib_libstdcxx:
+        return "libstdc++";
+    case stdlib_libcxx:
+        return "libc++";
+    case stdlib_unknown:
+        return "";
     }
     return "";
 }
@@ -96,8 +99,8 @@ static bool directory_of(const char *path, char *out, size_t out_size) {
 
    It answers with a full path when it has the file and echoes the name back
    when it does not, so a bare name is the negative answer. */
-static bool own_library_dir(const char *compiler, const char *const *names,
-                            size_t name_count, char *out, size_t out_size) {
+static bool own_library_dir(const char *compiler, const char *const *names, size_t name_count,
+                            char *out, size_t out_size) {
     if (compiler == NULL || compiler[0] == '\0')
         return false;
 
@@ -105,7 +108,7 @@ static bool own_library_dir(const char *compiler, const char *const *names,
         char argument[64];
         snprintf(argument, sizeof argument, ARG_PRINT_FILE_NAME, names[i]);
 
-        const char *argv[] = { compiler, argument, NULL };
+        const char *argv[] = {compiler, argument, NULL};
         char answer[ANSWER_SIZE];
         process_result result = process_capture(argv, NULL, answer, sizeof answer);
         if (!result.completed || result.exit_code != 0)
@@ -128,9 +131,8 @@ static bool own_library_dir(const char *compiler, const char *const *names,
 }
 
 bool recipe_own_libcxx_dir(const char *compiler, char *out, size_t out_size) {
-    static const char *const names[] = { LIBCXX_SHARED, LIBCXX_DYLIB };
-    return own_library_dir(compiler, names, sizeof names / sizeof names[0],
-                           out, out_size);
+    static const char *const names[] = {LIBCXX_SHARED, LIBCXX_DYLIB};
+    return own_library_dir(compiler, names, sizeof names / sizeof names[0], out, out_size);
 }
 
 /* The same for the GNU standard library.
@@ -141,9 +143,8 @@ bool recipe_own_libcxx_dir(const char *compiler, char *out, size_t out_size) {
    linking its own libc++, and it takes the same answer: name the directory the
    library is actually in. */
 static bool own_libstdcxx_dir(const char *compiler, char *out, size_t out_size) {
-    static const char *const names[] = { LIBSTDCXX_SHARED };
-    return own_library_dir(compiler, names, sizeof names / sizeof names[0],
-                           out, out_size);
+    static const char *const names[] = {LIBSTDCXX_SHARED};
+    return own_library_dir(compiler, names, sizeof names / sizeof names[0], out, out_size);
 }
 
 /* Add a flag to a candidate, ignoring it once the candidate is full. */
@@ -164,17 +165,15 @@ static void add_flag(candidate *entry, const char *flag) {
    compiler that implements it — and the same answer: hand it a program and
    see whether it builds. */
 static bool takes_no_default_config(const char *driver) {
-    const char *argv[] = {
-        driver, FLAG_NO_DEFAULT_CONFIG, "-x", "c", "-fsyntax-only", "-", NULL
-    };
+    const char *argv[] = {driver, FLAG_NO_DEFAULT_CONFIG, "-x", "c", "-fsyntax-only", "-", NULL};
     process_result result = process_try(argv, "int main(void){return 0;}\n");
     return result.completed && result.exit_code == 0;
 }
 
 /* Lay out the flags a probe is run with: the candidate's own, plus the one
    that keeps the driver's config file out of the answer. Returns how many. */
-static size_t probe_flags(bool ignore_config, const char *const *flags,
-                          size_t flag_count, const char **out, size_t max) {
+static size_t probe_flags(bool ignore_config, const char *const *flags, size_t flag_count,
+                          const char **out, size_t max) {
     size_t count = 0;
     if (ignore_config && count < max)
         out[count++] = FLAG_NO_DEFAULT_CONFIG;
@@ -196,23 +195,21 @@ static size_t probe_flags(bool ignore_config, const char *const *flags,
  * any fixed buffer that read it back. Asking a question whose answer is one
  * bit avoids the whole problem, and is how capability_probe works already.
  */
-static const char program_is_libcxx[] =
-    "#include <cstddef>\n"
-    "#if !defined(_LIBCPP_VERSION)\n"
-    "#error not libc++\n"
-    "#endif\n"
-    "int main(){return 0;}\n";
+static const char program_is_libcxx[] = "#include <cstddef>\n"
+                                        "#if !defined(_LIBCPP_VERSION)\n"
+                                        "#error not libc++\n"
+                                        "#endif\n"
+                                        "int main(){return 0;}\n";
 
-static const char program_is_libstdcxx[] =
-    "#include <cstddef>\n"
-    "#if !defined(__GLIBCXX__) && !defined(__GLIBCPP__)\n"
-    "#error not libstdc++\n"
-    "#endif\n"
-    "int main(){return 0;}\n";
+static const char program_is_libstdcxx[] = "#include <cstddef>\n"
+                                           "#if !defined(__GLIBCXX__) && !defined(__GLIBCPP__)\n"
+                                           "#error not libstdc++\n"
+                                           "#endif\n"
+                                           "int main(){return 0;}\n";
 
 /* True if `program` compiles with these flags. */
-static bool accepts_program(const char *compiler, const char *const *flags,
-                            size_t flag_count, const char *program) {
+static bool accepts_program(const char *compiler, const char *const *flags, size_t flag_count,
+                            const char *program) {
     const char *argv[RECIPE_MAX_FLAGS + 8];
     size_t limit = sizeof argv / sizeof argv[0];
     size_t count = 0;
@@ -230,8 +227,7 @@ static bool accepts_program(const char *compiler, const char *const *flags,
     return result.completed && result.exit_code == 0;
 }
 
-cxx_stdlib recipe_detect_stdlib(const char *compiler, const char *const *flags,
-                                size_t flag_count) {
+cxx_stdlib recipe_detect_stdlib(const char *compiler, const char *const *flags, size_t flag_count) {
     if (compiler == NULL || compiler[0] == '\0')
         return stdlib_unknown;
 
@@ -292,8 +288,7 @@ static bool climb(const char *path, int levels, char *out, size_t out_size) {
  * ordering exactly as it was before this rule existed. This has nothing to say
  * about a compiler Pickup did not install.
  */
-static bool library_is_inside_the_toolchain(const char *driver,
-                                            const char *library_dir) {
+static bool library_is_inside_the_toolchain(const char *driver, const char *library_dir) {
     if (driver == NULL || library_dir == NULL || library_dir[0] == '\0')
         return false;
 
@@ -307,8 +302,8 @@ static bool library_is_inside_the_toolchain(const char *driver,
     /* A prefix match alone would claim a sibling directory whose name merely
        starts with the same characters. */
     size_t length = strlen(owner);
-    return strncmp(library_dir, owner, length) == 0
-        && (library_dir[length] == '/' || library_dir[length] == '\0');
+    return strncmp(library_dir, owner, length) == 0 &&
+           (library_dir[length] == '/' || library_dir[length] == '\0');
 }
 
 /* --- composing what a candidate could carry --- */
@@ -323,19 +318,18 @@ static bool library_is_inside_the_toolchain(const char *driver,
  * come before it. Composing first is what lets the order be a decision rather
  * than an accident of layout.
  */
-static void compose_flags(capability_lang lang, const char *driver,
-                          candidate_storage *storage) {
+static void compose_flags(capability_lang lang, const char *driver, candidate_storage *storage) {
     /* Where the toolchain keeps its own C++ library.
 
        A compiler carrying a newer libstdc++ than the system has links against
        it while the loader goes on finding the system's first, so the program
        builds and then dies on a missing symbol version. Nothing about that
        shows up until it is run, which is why running it is part of the test. */
-    storage->has_own_stdlib = lang == lang_cxx
-        && own_libstdcxx_dir(driver, storage->own_stdlib_dir,
-                             sizeof storage->own_stdlib_dir)
-        && fs_format_path(storage->own_rpath, sizeof storage->own_rpath,
-                          FLAG_RPATH, storage->own_stdlib_dir);
+    storage->has_own_stdlib =
+        lang == lang_cxx &&
+        own_libstdcxx_dir(driver, storage->own_stdlib_dir, sizeof storage->own_stdlib_dir) &&
+        fs_format_path(storage->own_rpath, sizeof storage->own_rpath, FLAG_RPATH,
+                       storage->own_stdlib_dir);
 
     /* The best complete GCC installation on the machine, named two ways.
 
@@ -343,12 +337,12 @@ static void compose_flags(capability_lang lang, const char *driver,
        from listing the others, and this is the code that has to choose. */
     gcc_install_list installs;
     gcc_install best;
-    bool have_best = gcc_install_query(driver, true, &installs) && installs.count > 0
-        && gcc_install_best(&installs, &best);
+    bool have_best = gcc_install_query(driver, true, &installs) && installs.count > 0 &&
+                     gcc_install_best(&installs, &best);
 
     if (have_best)
-        (void)fs_format_path(storage->gcc_install, sizeof storage->gcc_install,
-                             FLAG_GCC_INSTALL, best.path);
+        (void)fs_format_path(storage->gcc_install, sizeof storage->gcc_install, FLAG_GCC_INSTALL,
+                             best.path);
 
     char prefix[PICKUP_PATHS_MAX];
     if (have_best && climb(best.path, GCC_PREFIX_DEPTH, prefix, sizeof prefix))
@@ -356,12 +350,11 @@ static void compose_flags(capability_lang lang, const char *driver,
                              FLAG_GCC_TOOLCHAIN, prefix);
 
     /* And where it keeps its own libc++, when it carries one at all. */
-    storage->has_libcxx = lang == lang_cxx
-        && recipe_own_libcxx_dir(driver, storage->libcxx_dir,
-                                 sizeof storage->libcxx_dir);
+    storage->has_libcxx = lang == lang_cxx && recipe_own_libcxx_dir(driver, storage->libcxx_dir,
+                                                                    sizeof storage->libcxx_dir);
     if (storage->has_libcxx)
-        (void)fs_format_path(storage->rpath, sizeof storage->rpath,
-                             FLAG_RPATH, storage->libcxx_dir);
+        (void)fs_format_path(storage->rpath, sizeof storage->rpath, FLAG_RPATH,
+                             storage->libcxx_dir);
 }
 
 /* --- emitting them, in an order decided elsewhere --- */
@@ -370,26 +363,26 @@ static void compose_flags(capability_lang lang, const char *driver,
    flags is the most portable answer there is. */
 static void add_bare(candidate *out, size_t *count, size_t max) {
     if (*count < max)
-        out[(*count)++] = (candidate){ .stdlib = stdlib_unknown, .count = 0 };
+        out[(*count)++] = (candidate){.stdlib = stdlib_unknown, .count = 0};
 }
 
 /* Name where the toolchain's own C++ library lives. */
-static void add_own_libstdcxx(const candidate_storage *storage, candidate *out,
-                              size_t *count, size_t max) {
+static void add_own_libstdcxx(const candidate_storage *storage, candidate *out, size_t *count,
+                              size_t max) {
     if (!storage->has_own_stdlib || *count >= max)
         return;
-    candidate entry = { .stdlib = stdlib_libstdcxx, .count = 0 };
+    candidate entry = {.stdlib = stdlib_libstdcxx, .count = 0};
     add_flag(&entry, storage->own_rpath);
     out[(*count)++] = entry;
 }
 
 /* Pin the GCC installation. This is what answers a Clang that picked the
    highest-numbered GCC and found no C++ in it. */
-static void add_gcc_install(const candidate_storage *storage, candidate *out,
-                            size_t *count, size_t max) {
+static void add_gcc_install(const candidate_storage *storage, candidate *out, size_t *count,
+                            size_t max) {
     if (storage->gcc_install[0] == '\0' || *count >= max)
         return;
-    candidate entry = { .stdlib = stdlib_libstdcxx, .count = 0 };
+    candidate entry = {.stdlib = stdlib_libstdcxx, .count = 0};
     add_flag(&entry, storage->gcc_install);
     out[(*count)++] = entry;
 }
@@ -397,11 +390,11 @@ static void add_gcc_install(const candidate_storage *storage, candidate *out,
 /* The same intent through the older flag, for drivers that do not know the
    newer one. It names a prefix rather than a version, so it only helps where
    the wanted GCC is the one that prefix leads to. */
-static void add_gcc_toolchain(const candidate_storage *storage, candidate *out,
-                              size_t *count, size_t max) {
+static void add_gcc_toolchain(const candidate_storage *storage, candidate *out, size_t *count,
+                              size_t max) {
     if (storage->gcc_toolchain[0] == '\0' || *count >= max)
         return;
-    candidate entry = { .stdlib = stdlib_libstdcxx, .count = 0 };
+    candidate entry = {.stdlib = stdlib_libstdcxx, .count = 0};
     add_flag(&entry, storage->gcc_toolchain);
     out[(*count)++] = entry;
 }
@@ -411,11 +404,11 @@ static void add_gcc_toolchain(const candidate_storage *storage, candidate *out,
    The rpath is not optional. Without it the link succeeds and the program dies
    on its first run, which is precisely the failure this module was built to
    stop reporting as success. */
-static void add_own_libcxx(const candidate_storage *storage, candidate *out,
-                           size_t *count, size_t max) {
+static void add_own_libcxx(const candidate_storage *storage, candidate *out, size_t *count,
+                           size_t max) {
     if (!storage->has_libcxx || *count >= max)
         return;
-    candidate entry = { .stdlib = stdlib_libcxx, .count = 0 };
+    candidate entry = {.stdlib = stdlib_libcxx, .count = 0};
     add_flag(&entry, FLAG_STDLIB_LIBCXX);
     if (storage->rpath[0] != '\0')
         add_flag(&entry, storage->rpath);
@@ -425,7 +418,6 @@ static void add_own_libcxx(const candidate_storage *storage, candidate *out,
         add_flag(&entry, storage->gcc_install);
     out[(*count)++] = entry;
 }
-
 
 /*
  * The candidates for `driver`, in the order they should be tried.
@@ -449,16 +441,15 @@ static void add_own_libcxx(const candidate_storage *storage, candidate *out,
  * installed Clang answers for libstdc++ with a path into /usr, and a library
  * there is the host's however it was reached.
  */
-static size_t build_candidates(capability_lang lang, const char *driver,
-                               candidate_storage *storage,
+static size_t build_candidates(capability_lang lang, const char *driver, candidate_storage *storage,
                                candidate *out, size_t max) {
     size_t count = 0;
     compose_flags(lang, driver, storage);
 
-    bool stdlib_is_its_own = storage->has_own_stdlib
-        && library_is_inside_the_toolchain(driver, storage->own_stdlib_dir);
-    bool libcxx_is_its_own = storage->has_libcxx
-        && library_is_inside_the_toolchain(driver, storage->libcxx_dir);
+    bool stdlib_is_its_own =
+        storage->has_own_stdlib && library_is_inside_the_toolchain(driver, storage->own_stdlib_dir);
+    bool libcxx_is_its_own =
+        storage->has_libcxx && library_is_inside_the_toolchain(driver, storage->libcxx_dir);
 
     if (stdlib_is_its_own)
         add_own_libstdcxx(storage, out, &count, max);
@@ -478,45 +469,41 @@ static size_t build_candidates(capability_lang lang, const char *driver,
 
 /* Record a winning candidate as the published recipe, splitting its flags
    between the two command lines they belong on. */
-static void publish(const candidate *winner, const candidate_storage *storage,
-                    cxx_stdlib stdlib, link_recipe *recipe) {
+static void publish(const candidate *winner, const candidate_storage *storage, cxx_stdlib stdlib,
+                    link_recipe *recipe) {
     recipe->usable = true;
     recipe->stdlib = stdlib;
 
     for (size_t i = 0; i < winner->count; i++) {
         const char *flag = winner->flags[i];
-        bool linker_only = strncmp(flag, LINKER_FLAG_PREFIX,
-                                   sizeof LINKER_FLAG_PREFIX - 1) == 0;
+        bool linker_only = strncmp(flag, LINKER_FLAG_PREFIX, sizeof LINKER_FLAG_PREFIX - 1) == 0;
 
         if (!linker_only && recipe->compile_count < RECIPE_MAX_FLAGS)
-            (void)fs_format_path(recipe->compile_flags[recipe->compile_count++],
-                                 RECIPE_FLAG_MAX, "%s", flag);
+            (void)fs_format_path(recipe->compile_flags[recipe->compile_count++], RECIPE_FLAG_MAX,
+                                 "%s", flag);
         if (recipe->link_count < RECIPE_MAX_FLAGS)
-            (void)fs_format_path(recipe->link_flags[recipe->link_count++],
-                                 RECIPE_FLAG_MAX, "%s", flag);
+            (void)fs_format_path(recipe->link_flags[recipe->link_count++], RECIPE_FLAG_MAX, "%s",
+                                 flag);
 
         /* Reported only when the recipe had to name a search path to get the
            program running, and taken from the flag itself rather than worked
            out again: a library the loader already finds is not something a
            caller has to carry around. */
-        if (strncmp(flag, RPATH_FLAG_PREFIX, sizeof RPATH_FLAG_PREFIX - 1) == 0
-            && recipe->runtime_count < RECIPE_MAX_DIRS)
-            (void)fs_format_path(recipe->runtime_dirs[recipe->runtime_count++],
-                                 PICKUP_PATHS_MAX, "%s",
-                                 flag + sizeof RPATH_FLAG_PREFIX - 1);
+        if (strncmp(flag, RPATH_FLAG_PREFIX, sizeof RPATH_FLAG_PREFIX - 1) == 0 &&
+            recipe->runtime_count < RECIPE_MAX_DIRS)
+            (void)fs_format_path(recipe->runtime_dirs[recipe->runtime_count++], PICKUP_PATHS_MAX,
+                                 "%s", flag + sizeof RPATH_FLAG_PREFIX - 1);
     }
     (void)storage;
 }
 
 /* The two ways a recipe may name a GCC installation. */
-#define GCC_FLAG_INSTALL_PREFIX   "--gcc-install-dir="
+#define GCC_FLAG_INSTALL_PREFIX "--gcc-install-dir="
 #define GCC_FLAG_TOOLCHAIN_PREFIX "--gcc-toolchain="
 
 static bool is_gcc_flag(const char *flag) {
-    return strncmp(flag, GCC_FLAG_INSTALL_PREFIX,
-                   sizeof GCC_FLAG_INSTALL_PREFIX - 1) == 0
-        || strncmp(flag, GCC_FLAG_TOOLCHAIN_PREFIX,
-                   sizeof GCC_FLAG_TOOLCHAIN_PREFIX - 1) == 0;
+    return strncmp(flag, GCC_FLAG_INSTALL_PREFIX, sizeof GCC_FLAG_INSTALL_PREFIX - 1) == 0 ||
+           strncmp(flag, GCC_FLAG_TOOLCHAIN_PREFIX, sizeof GCC_FLAG_TOOLCHAIN_PREFIX - 1) == 0;
 }
 
 const char *recipe_gcc_flag(const link_recipe *recipe) {
@@ -545,16 +532,14 @@ bool recipe_align_gcc(const link_recipe *cxx, const char *driver, link_recipe *c
     wanted[count++] = flag;
 
     const char *candidate[RECIPE_MAX_FLAGS + 2];
-    size_t probe_count = probe_flags(takes_no_default_config(driver), wanted, count,
-                                     candidate, sizeof candidate / sizeof candidate[0]);
+    size_t probe_count = probe_flags(takes_no_default_config(driver), wanted, count, candidate,
+                                     sizeof candidate / sizeof candidate[0]);
 
     if (health_probe(driver, lang_c, candidate, probe_count) != health_ok)
         return false;
 
-    (void)fs_format_path(c->compile_flags[c->compile_count++], RECIPE_FLAG_MAX,
-                         "%s", flag);
-    (void)fs_format_path(c->link_flags[c->link_count++], RECIPE_FLAG_MAX,
-                         "%s", flag);
+    (void)fs_format_path(c->compile_flags[c->compile_count++], RECIPE_FLAG_MAX, "%s", flag);
+    (void)fs_format_path(c->link_flags[c->link_count++], RECIPE_FLAG_MAX, "%s", flag);
     return true;
 }
 
@@ -564,7 +549,7 @@ bool recipe_align_gcc(const link_recipe *cxx, const char *driver, link_recipe *c
 
 /* The line a file Pickup wrote opens with. It is what tells one apart from a
    file someone edited by hand, which is never overwritten. */
-#define CONFIG_HEADER \
+#define CONFIG_HEADER                                                                              \
     "# Written by pickup: the configuration this toolchain was proven to build with.\n"
 
 /* Room for the whole file. */
@@ -588,8 +573,7 @@ static bool compose_config(const link_recipe *recipe, char *out, size_t out_size
        and a flag that only matters to the linker is ignored when compiling. */
     size_t used = (size_t)written;
     for (size_t i = 0; i < recipe->link_count && used < out_size; i++) {
-        int line = snprintf(out + used, out_size - used, "%s\n",
-                            recipe->link_flags[i]);
+        int line = snprintf(out + used, out_size - used, "%s\n", recipe->link_flags[i]);
         if (line < 0)
             return false;
         used += (size_t)line;
@@ -606,8 +590,8 @@ static bool config_path(const char *driver, char *out, size_t out_size) {
 bool recipe_write_config(const char *driver, const link_recipe *recipe) {
     char path[PICKUP_PATHS_MAX];
     char contents[CONFIG_SIZE];
-    if (!config_path(driver, path, sizeof path)
-        || !compose_config(recipe, contents, sizeof contents))
+    if (!config_path(driver, path, sizeof path) ||
+        !compose_config(recipe, contents, sizeof contents))
         return false;
     return fs_write_file(path, contents);
 }
@@ -615,8 +599,7 @@ bool recipe_write_config(const char *driver, const link_recipe *recipe) {
 bool recipe_refresh_config(const char *driver, const link_recipe *recipe) {
     char path[PICKUP_PATHS_MAX];
     char wanted[CONFIG_SIZE];
-    if (!config_path(driver, path, sizeof path)
-        || !compose_config(recipe, wanted, sizeof wanted))
+    if (!config_path(driver, path, sizeof path) || !compose_config(recipe, wanted, sizeof wanted))
         return false;
 
     char *current = fs_read_file(path);
@@ -641,8 +624,8 @@ link_recipe recipe_discover(const toolchain *chain, capability_lang lang) {
 /* True if the recipe already says which standard library to use. */
 static bool names_a_stdlib(const link_recipe *recipe) {
     for (size_t i = 0; i < recipe->compile_count; i++) {
-        if (strncmp(recipe->compile_flags[i], FLAG_STDLIB_PREFIX,
-                    sizeof FLAG_STDLIB_PREFIX - 1) == 0)
+        if (strncmp(recipe->compile_flags[i], FLAG_STDLIB_PREFIX, sizeof FLAG_STDLIB_PREFIX - 1) ==
+            0)
             return true;
     }
     return false;
@@ -666,18 +649,15 @@ static bool names_a_stdlib(const link_recipe *recipe) {
  * a restatement of what the winning candidate already did, and "should be" is
  * not how this module decides things.
  */
-static void name_the_stdlib(const char *driver, capability_lang lang,
-                            cxx_stdlib wanted, bool ignore_config,
-                            link_recipe *recipe) {
+static void name_the_stdlib(const char *driver, capability_lang lang, cxx_stdlib wanted,
+                            bool ignore_config, link_recipe *recipe) {
     if (wanted == stdlib_unknown || lang != lang_cxx || names_a_stdlib(recipe))
         return;
-    if (recipe->compile_count >= RECIPE_MAX_FLAGS
-        || recipe->link_count >= RECIPE_MAX_FLAGS)
+    if (recipe->compile_count >= RECIPE_MAX_FLAGS || recipe->link_count >= RECIPE_MAX_FLAGS)
         return;
 
     char flag[RECIPE_FLAG_MAX];
-    if (!fs_format_path(flag, sizeof flag, FLAG_STDLIB_FORMAT,
-                        recipe_stdlib_name(wanted)))
+    if (!fs_format_path(flag, sizeof flag, FLAG_STDLIB_FORMAT, recipe_stdlib_name(wanted)))
         return;
 
     const char *wanted_flags[RECIPE_MAX_FLAGS + 1];
@@ -687,29 +667,26 @@ static void name_the_stdlib(const char *driver, capability_lang lang,
     wanted_flags[count++] = flag;
 
     const char *probe[RECIPE_MAX_FLAGS + 2];
-    size_t probe_count = probe_flags(ignore_config, wanted_flags, count, probe,
-                                     sizeof probe / sizeof probe[0]);
+    size_t probe_count =
+        probe_flags(ignore_config, wanted_flags, count, probe, sizeof probe / sizeof probe[0]);
     if (health_probe(driver, lang, probe, probe_count) != health_ok)
         return;
 
-    (void)fs_format_path(recipe->compile_flags[recipe->compile_count++],
-                         RECIPE_FLAG_MAX, "%s", flag);
-    (void)fs_format_path(recipe->link_flags[recipe->link_count++],
-                         RECIPE_FLAG_MAX, "%s", flag);
+    (void)fs_format_path(recipe->compile_flags[recipe->compile_count++], RECIPE_FLAG_MAX, "%s",
+                         flag);
+    (void)fs_format_path(recipe->link_flags[recipe->link_count++], RECIPE_FLAG_MAX, "%s", flag);
 }
 
-link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang,
-                                cxx_stdlib wanted) {
-    link_recipe recipe = { 0 };
+link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang, cxx_stdlib wanted) {
+    link_recipe recipe = {0};
 
     const char *driver = lang == lang_c ? chain->path : chain->cxx_path;
     if (driver == NULL || driver[0] == '\0')
         return recipe;
 
-    candidate_storage storage = { 0 };
+    candidate_storage storage = {0};
     candidate candidates[RECIPE_MAX_FLAGS];
-    size_t count = build_candidates(lang, driver, &storage,
-                                    candidates, RECIPE_MAX_FLAGS);
+    size_t count = build_candidates(lang, driver, &storage, candidates, RECIPE_MAX_FLAGS);
 
     /* Settled once: every probe below has to be run the same way, or the
        candidate that wins would have been judged under different conditions
@@ -718,9 +695,8 @@ link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang,
 
     for (size_t i = 0; i < count; i++) {
         const char *probe[RECIPE_MAX_FLAGS + 2];
-        size_t probe_count = probe_flags(ignore_config, candidates[i].flags,
-                                         candidates[i].count, probe,
-                                         sizeof probe / sizeof probe[0]);
+        size_t probe_count = probe_flags(ignore_config, candidates[i].flags, candidates[i].count,
+                                         probe, sizeof probe / sizeof probe[0]);
 
         if (health_probe(driver, lang, probe, probe_count) != health_ok)
             continue;
@@ -729,9 +705,8 @@ link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang,
            taken from what the candidate intended. The first candidate names no
            library at all and still uses one, and which one that is depends on
            the platform. */
-        cxx_stdlib stdlib = lang == lang_cxx
-            ? recipe_detect_stdlib(driver, probe, probe_count)
-            : stdlib_unknown;
+        cxx_stdlib stdlib =
+            lang == lang_cxx ? recipe_detect_stdlib(driver, probe, probe_count) : stdlib_unknown;
 
         /* A caller that named a library is stating an ABI constraint, so a
            working recipe using the other one is not an acceptable answer:

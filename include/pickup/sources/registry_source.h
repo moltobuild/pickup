@@ -30,18 +30,18 @@
  * name directories on the machine that installs it.
  */
 
-#define REGISTRY_NAME_MAX     64
-#define REGISTRY_VERSION_MAX  64
-#define REGISTRY_TARGET_MAX   64
-#define REGISTRY_FORMAT_MAX   32
-#define REGISTRY_URL_MAX      1024
-#define REGISTRY_TIME_MAX     32   /* "2026-08-05T19:41:45Z" */
-#define REGISTRY_ABOUT_MAX    256
-#define REGISTRY_BINARY_MAX   128  /* "bin/clang-format", relative to the prefix */
-#define REGISTRY_TARGETS_MAX  8
+#define REGISTRY_NAME_MAX 64
+#define REGISTRY_VERSION_MAX 64
+#define REGISTRY_TARGET_MAX 64
+#define REGISTRY_FORMAT_MAX 32
+#define REGISTRY_URL_MAX 1024
+#define REGISTRY_TIME_MAX 32 /* "2026-08-05T19:41:45Z" */
+#define REGISTRY_ABOUT_MAX 256
+#define REGISTRY_BINARY_MAX 128 /* "bin/clang-format", relative to the prefix */
+#define REGISTRY_TARGETS_MAX 8
 #define REGISTRY_FEATURES_MAX 40
-#define REGISTRY_FEATURE_MAX  32
-#define REGISTRY_EMAIL_MAX    255  /* 254 is the longest address, plus the NUL */
+#define REGISTRY_FEATURE_MAX 32
+#define REGISTRY_EMAIL_MAX 255 /* 254 is the longest address, plus the NUL */
 
 /* The one packing this build knows how to open. Published by the registry as
    `format`, and compared rather than guessed. */
@@ -49,7 +49,7 @@
 
 /* Where artifacts come from, in falling order of precedence: the environment,
    the configuration file, this. */
-#define REGISTRY_URL_ENV     "PICKUP_REGISTRY_URL"
+#define REGISTRY_URL_ENV "PICKUP_REGISTRY_URL"
 #define REGISTRY_DEFAULT_URL "https://molto-registry.joseb-twelve.workers.dev"
 
 typedef enum {
@@ -71,9 +71,9 @@ typedef struct {
     char version[REGISTRY_VERSION_MAX];
     char target[REGISTRY_TARGET_MAX];
     char format[REGISTRY_FORMAT_MAX];
-    char checksum[SHA256_HEX_SIZE];  /* lowercase hex sha256 */
+    char checksum[SHA256_HEX_SIZE]; /* lowercase hex sha256 */
     long long size_bytes;
-    bool yanked;                     /* resolvable, but not for new builds */
+    bool yanked; /* resolvable, but not for new builds */
     char published_at[REGISTRY_TIME_MAX];
     char download_url[REGISTRY_URL_MAX];
 
@@ -126,8 +126,7 @@ void registry_entry_list_free(registry_entry_list *list);
 
 /* Append to a list. Public because more than one catalogue is shown as one
    table, and joining them is the caller's business rather than the parser's. */
-[[nodiscard]] bool registry_entry_list_push(registry_entry_list *list,
-                                            const registry_entry *item);
+[[nodiscard]] bool registry_entry_list_push(registry_entry_list *list, const registry_entry *item);
 
 /* --- reading what the registry says --- */
 
@@ -144,8 +143,7 @@ void registry_entry_list_free(registry_entry_list *list);
    `version_filter` NULL or "" accepts every version; `target` NULL accepts
    every target. An empty result is an answer, not a failure. */
 [[nodiscard]] bool registry_parse_releases(const char *json, const char *version_filter,
-                                           const char *target,
-                                           registry_artifact_list *out);
+                                           const char *target, registry_artifact_list *out);
 
 /* One artifact, as the coordinate endpoint returns it. */
 [[nodiscard]] bool registry_parse_artifact(const char *json, registry_artifact *out);
@@ -175,8 +173,7 @@ void registry_entry_list_free(registry_entry_list *list);
  *
  * False when nothing matches, which is an answer rather than a failure.
  */
-[[nodiscard]] bool registry_select(const registry_artifact_list *list,
-                                   const char *version_filter,
+[[nodiscard]] bool registry_select(const registry_artifact_list *list, const char *version_filter,
                                    registry_artifact *out);
 
 /* What the registry calls this machine, or "" when it publishes nothing that
@@ -214,9 +211,8 @@ void registry_entry_list_free(registry_entry_list *list);
                                            const char *version_filter, const char *target,
                                            bool refresh, registry_artifact_list *out);
 [[nodiscard]] bool registry_fetch_releases_watched(registry_kind kind, const char *name,
-                                                   const char *version_filter,
-                                                   const char *target, bool refresh,
-                                                   http_tick tick, void *context,
+                                                   const char *version_filter, const char *target,
+                                                   bool refresh, http_tick tick, void *context,
                                                    registry_artifact_list *out);
 
 /*

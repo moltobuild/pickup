@@ -6,12 +6,12 @@
 #include <unistd.h>
 
 /* Compiler arguments. */
-#define ARG_LANG        "-x"
-#define LANG_C_NAME     "c"
-#define LANG_CXX_NAME   "c++"
-#define ARG_STDIN       "-"
+#define ARG_LANG "-x"
+#define LANG_C_NAME "c"
+#define LANG_CXX_NAME "c++"
+#define ARG_STDIN "-"
 #define ARG_SYNTAX_ONLY "-fsyntax-only"
-#define ARG_OUTPUT      "-o"
+#define ARG_OUTPUT "-o"
 
 /* Room for the composed command line: the driver, the language, the caller's
    flags, the output and the terminator. */
@@ -29,34 +29,34 @@
  * is what the capability catalog deliberately does not do, and prints through
  * it so that the standard library is linked and not merely parsed.
  */
-static const char program_c[] =
-    "#include <stdio.h>\n"
-    "int main(void){ puts(\"ok\"); return 0; }\n";
+static const char program_c[] = "#include <stdio.h>\n"
+                                "int main(void){ puts(\"ok\"); return 0; }\n";
 
-static const char program_cxx[] =
-    "#include <iostream>\n"
-    "int main(){ std::cout << \"ok\\n\"; return 0; }\n";
+static const char program_cxx[] = "#include <iostream>\n"
+                                  "int main(){ std::cout << \"ok\\n\"; return 0; }\n";
 
 const char *health_status_message(health_status status) {
     switch (status) {
-    case health_ok:         return "builds";
-    case health_no_driver:  return "no driver";
-    case health_no_headers: return "the standard header does not resolve";
-    case health_no_link:    return "compiles but does not link";
-    case health_no_run:     return "links but the executable does not start";
+    case health_ok:
+        return "builds";
+    case health_no_driver:
+        return "no driver";
+    case health_no_headers:
+        return "the standard header does not resolve";
+    case health_no_link:
+        return "compiles but does not link";
+    case health_no_run:
+        return "links but the executable does not start";
     }
     return "unknown";
 }
 
-bool health_is_usable(health_status status) {
-    return status == health_ok;
-}
+bool health_is_usable(health_status status) { return status == health_ok; }
 
 /* Lay out the fixed head of a command line, returning how many slots it used.
    Every invocation starts the same way and differs only in what follows. */
-static size_t begin_command(const char *argv[], const char *compiler,
-                            capability_lang lang, const char *const *flags,
-                            size_t flag_count) {
+static size_t begin_command(const char *argv[], const char *compiler, capability_lang lang,
+                            const char *const *flags, size_t flag_count) {
     size_t count = 0;
     argv[count++] = compiler;
     argv[count++] = ARG_LANG;
@@ -75,9 +75,8 @@ static size_t begin_command(const char *argv[], const char *compiler,
    present compiler with an incomplete standard library. */
 typedef enum { compile_ok, compile_rejected, compile_not_runnable } compile_outcome;
 
-static compile_outcome compiles(const char *compiler, capability_lang lang,
-                                const char *program, const char *const *flags,
-                                size_t flag_count) {
+static compile_outcome compiles(const char *compiler, capability_lang lang, const char *program,
+                                const char *const *flags, size_t flag_count) {
     const char *argv[HEALTH_MAX_ARGS];
     size_t count = begin_command(argv, compiler, lang, flags, flag_count);
     argv[count++] = ARG_SYNTAX_ONLY;
@@ -109,21 +108,24 @@ static bool links(const char *compiler, capability_lang lang, const char *progra
    Nothing else Pickup does runs what a compiler produced, and nothing else
    would notice a toolchain whose libraries the loader cannot find. */
 static bool runs(const char *path) {
-    const char *argv[] = { path, NULL };
+    const char *argv[] = {path, NULL};
     process_result result = process_try(argv, NULL);
     return result.completed && result.exit_code == 0;
 }
 
-health_status health_probe(const char *compiler, capability_lang lang,
-                           const char *const *flags, size_t flag_count) {
+health_status health_probe(const char *compiler, capability_lang lang, const char *const *flags,
+                           size_t flag_count) {
     if (compiler == NULL || compiler[0] == '\0')
         return health_no_driver;
 
     const char *program = lang == lang_c ? program_c : program_cxx;
     switch (compiles(compiler, lang, program, flags, flag_count)) {
-    case compile_not_runnable: return health_no_driver;
-    case compile_rejected:     return health_no_headers;
-    case compile_ok:           break;
+    case compile_not_runnable:
+        return health_no_driver;
+    case compile_rejected:
+        return health_no_headers;
+    case compile_ok:
+        break;
     }
 
     char output[] = TEMPLATE_PATH;

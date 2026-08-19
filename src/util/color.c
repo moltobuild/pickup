@@ -6,11 +6,11 @@
 
 /* SGR sequences. Kept to the eight basic colours, which every terminal worth
    colouring for renders, and none of which assume a light or dark background. */
-#define SGR_GREEN  "\x1b[32m"
-#define SGR_RED    "\x1b[31m"
-#define SGR_CYAN   "\x1b[36m"
-#define SGR_DIM    "\x1b[2m"
-#define SGR_RESET  "\x1b[0m"
+#define SGR_GREEN "\x1b[32m"
+#define SGR_RED "\x1b[31m"
+#define SGR_CYAN "\x1b[36m"
+#define SGR_DIM "\x1b[2m"
+#define SGR_RESET "\x1b[0m"
 
 #define NO_COLOUR ""
 
@@ -31,26 +31,14 @@ bool color_enabled(FILE *out) {
     return true;
 }
 
-void color_configure(FILE *out) {
-    enabled = color_enabled(out);
-}
+void color_configure(FILE *out) { enabled = color_enabled(out); }
 
-const char *color_ok(void) {
-    return enabled ? SGR_GREEN : NO_COLOUR;
-}
+const char *color_ok(void) { return enabled ? SGR_GREEN : NO_COLOUR; }
 
-const char *color_error(void) {
-    return enabled ? SGR_RED : NO_COLOUR;
-}
+const char *color_error(void) { return enabled ? SGR_RED : NO_COLOUR; }
 
-const char *color_accent(void) {
-    return enabled ? SGR_CYAN : NO_COLOUR;
-}
+const char *color_accent(void) { return enabled ? SGR_CYAN : NO_COLOUR; }
 
-const char *color_dim(void) {
-    return enabled ? SGR_DIM : NO_COLOUR;
-}
+const char *color_dim(void) { return enabled ? SGR_DIM : NO_COLOUR; }
 
-const char *color_reset(void) {
-    return enabled ? SGR_RESET : NO_COLOUR;
-}
+const char *color_reset(void) { return enabled ? SGR_RESET : NO_COLOUR; }

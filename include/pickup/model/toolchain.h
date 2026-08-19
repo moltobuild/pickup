@@ -8,12 +8,12 @@
 #include <pickup/detect/capability.h>
 
 /* Buffer sizes for the fields Pickup records about a toolchain. */
-#define PICKUP_PATH_MAX    4096
-#define PICKUP_TARGET_MAX  128
-#define PICKUP_NAME_MAX    64
+#define PICKUP_PATH_MAX 4096
+#define PICKUP_TARGET_MAX 128
+#define PICKUP_NAME_MAX 64
 
 /* Room for the canonical identity, "gcc@12.3.0-conda". */
-#define PICKUP_ID_MAX      160
+#define PICKUP_ID_MAX 160
 
 /* Where a toolchain came from.
 
@@ -21,8 +21,8 @@
    installed and can remove again, the rest were already on the machine and are
    the package manager's business, not Pickup's. */
 typedef enum {
-    toolchain_source_system,  /* found on PATH; Pickup did not put it there */
-    toolchain_source_pickup,  /* installed by Pickup, under its own home */
+    toolchain_source_system, /* found on PATH; Pickup did not put it there */
+    toolchain_source_pickup, /* installed by Pickup, under its own home */
 } toolchain_source;
 
 /* Who made the compiler. Determined by asking it, never by its filename:
@@ -43,15 +43,15 @@ typedef struct {
 
 /* A compiler Pickup can invoke, and everything it learned about it. */
 typedef struct {
-    char path[PICKUP_PATH_MAX];      /* the real binary, symlinks resolved */
-    char name[PICKUP_NAME_MAX];      /* basename of the binary, as invoked */
-    char id[PICKUP_ID_MAX];          /* canonical identity, "gcc@12.3.0" */
-    char cxx_path[PICKUP_PATH_MAX];  /* companion C++ driver; "" if none found */
+    char path[PICKUP_PATH_MAX];     /* the real binary, symlinks resolved */
+    char name[PICKUP_NAME_MAX];     /* basename of the binary, as invoked */
+    char id[PICKUP_ID_MAX];         /* canonical identity, "gcc@12.3.0" */
+    char cxx_path[PICKUP_PATH_MAX]; /* companion C++ driver; "" if none found */
     toolchain_vendor vendor;
     toolchain_version version;
-    char target[PICKUP_TARGET_MAX];  /* target triple, from -dumpmachine */
+    char target[PICKUP_TARGET_MAX]; /* target triple, from -dumpmachine */
     toolchain_source source;
-    capability_set c_features;       /* what it actually compiles */
+    capability_set c_features; /* what it actually compiles */
     capability_set cxx_features;
 } toolchain;
 

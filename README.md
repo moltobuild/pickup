@@ -9,6 +9,30 @@ and what can each of them actually do?**
 That is what lets a project manifest say *what it needs* instead of *which
 machine it was written on*.
 
+## Install
+
+A static x86-64 Linux binary is attached to every
+[release](https://github.com/moltobuild/pickup/releases). It carries no glibc
+requirement, which matters here more than most: the machines that most want a
+newer compiler are the ones with an older libc.
+
+```sh
+base=https://github.com/moltobuild/pickup/releases/latest/download
+curl -fsSLO $base/SHA256SUMS
+curl -fsSLO $base/pickup-0.3.3-x86_64-linux
+sha256sum --check --ignore-missing SHA256SUMS
+sudo install pickup-0.3.3-x86_64-linux /usr/local/bin/pickup
+```
+
+```sh
+pickup list             # what this machine already has
+pickup install clang    # or fetch one, under ~/.pickup, no root
+```
+
+Installing anything needs `curl`, `tar` and `zstd` on the `PATH`;
+`pickup doctor` says so when one is missing. Licensed Apache-2.0, see
+[`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+
 ## Why probing, not version tables
 
 A compiler that accepts a flag has not necessarily implemented the standard

@@ -23,8 +23,7 @@ static void print_features(const toolchain *chain, capability_lang lang) {
             current_standard = catalog[i].standard;
             printf("  %s\n", current_standard);
         }
-        printf("    %-24s %s\n", catalog[i].id,
-               capability_set_has(proven, i) ? "yes" : "no");
+        printf("    %-24s %s\n", catalog[i].id, capability_set_has(proven, i) ? "yes" : "no");
     }
 }
 
@@ -109,22 +108,20 @@ static void print_toml(const toolchain *chain) {
  * The chosen one is still shown. The warning goes to stderr, so a script
  * reading the answer is unaffected by it.
  */
-static void warn_if_ambiguous(const inventory *list, const char *query,
-                              const toolchain *chosen) {
+static void warn_if_ambiguous(const inventory *list, const char *query, const toolchain *chosen) {
     size_t tied = 0;
     for (size_t i = 0; i < list->count; i++) {
-        if (toolchain_matches(&list->items[i], query)
-            && toolchain_version_compare(list->items[i].version, chosen->version) == 0)
+        if (toolchain_matches(&list->items[i], query) &&
+            toolchain_version_compare(list->items[i].version, chosen->version) == 0)
             tied++;
     }
     if (tied < 2)
         return;
 
-    fprintf(stderr, "pickup: '%s' names %zu toolchains; showing %s\n",
-            query, tied, chosen->id);
+    fprintf(stderr, "pickup: '%s' names %zu toolchains; showing %s\n", query, tied, chosen->id);
     for (size_t i = 0; i < list->count; i++) {
-        if (toolchain_matches(&list->items[i], query)
-            && toolchain_version_compare(list->items[i].version, chosen->version) == 0)
+        if (toolchain_matches(&list->items[i], query) &&
+            toolchain_version_compare(list->items[i].version, chosen->version) == 0)
             fprintf(stderr, "  %s  (%s)\n", list->items[i].id,
                     toolchain_source_name(list->items[i].source));
     }

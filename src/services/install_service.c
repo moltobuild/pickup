@@ -31,38 +31,48 @@
 
 /* What the progress bar says. */
 #define DOWNLOAD_LABEL_FORMAT "downloading %s %s"
-#define EXTRACT_LABEL_FORMAT  "extracting %s %s"
-#define VERIFY_LABEL_FORMAT   "verifying %s %s"
-#define PREPARING_LABEL       "preparing the extraction"
+#define EXTRACT_LABEL_FORMAT "extracting %s %s"
+#define VERIFY_LABEL_FORMAT "verifying %s %s"
+#define PREPARING_LABEL "preparing the extraction"
 #define LABEL_SIZE (REGISTRY_NAME_MAX + REGISTRY_VERSION_MAX + 32)
 
 /* The name a downloaded archive is kept under while it is on its way in. */
 #define ARCHIVE_NAME_FORMAT "%s-%s-%s.%s"
 
 static install_report report_of(install_status status) {
-    install_report report = { 0 };
+    install_report report = {0};
     report.status = status;
     return report;
 }
 
-bool install_succeeded(install_status status) {
-    return status == install_ok;
-}
+bool install_succeeded(install_status status) { return status == install_ok; }
 
 const char *install_status_message(install_status status) {
     switch (status) {
-    case install_ok:                 return "installed";
-    case install_no_downloader:      return "curl is required to download from the registry";
-    case install_no_extractor:       return "tar is required to unpack what the registry packs";
-    case install_no_zstd:            return "this tar cannot open a zstd archive";
-    case install_unsupported_format: return "the registry packed this in a way this build cannot open";
-    case install_yanked:             return "withdrawn by the registry, and not to be used for new builds";
-    case install_download_failed:    return "the download failed";
-    case install_hash_mismatch:      return "sha256 mismatch, archive discarded";
-    case install_extract_failed:     return "the archive could not be unpacked";
-    case install_not_a_toolchain:    return "the archive holds no usable compiler";
-    case install_not_a_tool:         return "the archive holds no binary that answers";
-    case install_path_error:         return "the pickup home could not be prepared";
+    case install_ok:
+        return "installed";
+    case install_no_downloader:
+        return "curl is required to download from the registry";
+    case install_no_extractor:
+        return "tar is required to unpack what the registry packs";
+    case install_no_zstd:
+        return "this tar cannot open a zstd archive";
+    case install_unsupported_format:
+        return "the registry packed this in a way this build cannot open";
+    case install_yanked:
+        return "withdrawn by the registry, and not to be used for new builds";
+    case install_download_failed:
+        return "the download failed";
+    case install_hash_mismatch:
+        return "sha256 mismatch, archive discarded";
+    case install_extract_failed:
+        return "the archive could not be unpacked";
+    case install_not_a_toolchain:
+        return "the archive holds no usable compiler";
+    case install_not_a_tool:
+        return "the archive holds no binary that answers";
+    case install_path_error:
+        return "the pickup home could not be prepared";
     }
     return "unknown failure";
 }
@@ -78,15 +88,13 @@ static bool fetch_archive(const registry_artifact *artifact, char *out, size_t o
     /* Named from the coordinate rather than from the URL: what the blob is
        called is the registry's business, and a name taken from a URL is a name
        taken from something that may contain a path. */
-    if (!fs_format_path(out, out_size, "%s/" ARCHIVE_NAME_FORMAT, downloads,
-                        artifact->name, artifact->version, artifact->target,
-                        artifact->format))
+    if (!fs_format_path(out, out_size, "%s/" ARCHIVE_NAME_FORMAT, downloads, artifact->name,
+                        artifact->version, artifact->target, artifact->format))
         return false;
 
     char label[LABEL_SIZE];
     snprintf(label, sizeof label, DOWNLOAD_LABEL_FORMAT, artifact->name, artifact->version);
-    return http_download_with_progress(artifact->download_url, out,
-                                       artifact->size_bytes, label);
+    return http_download_with_progress(artifact->download_url, out, artifact->size_bytes, label);
 }
 
 /* Redraw the verification bar, but only when the figure it shows would change:
@@ -119,8 +127,7 @@ static bool digest_matches(const char *archive, const registry_artifact *artifac
     if (!hashed)
         return false;
 
-    (void)fs_format_path(report->expected, sizeof report->expected, "%s",
-                         artifact->checksum);
+    (void)fs_format_path(report->expected, sizeof report->expected, "%s", artifact->checksum);
     return sha256_hex_equal(report->actual, artifact->checksum);
 }
 
@@ -179,9 +186,8 @@ static size_t count_proven_features(const toolchain *chain) {
  * C counterpart to derive. Identify a toolchain through `c++` and it ends up
  * recorded as having no C++ driver at all.
  */
-static const char *const preferred_drivers[] = { "gcc", "clang", "cc" };
-#define PREFERRED_DRIVER_COUNT \
-    (sizeof preferred_drivers / sizeof preferred_drivers[0])
+static const char *const preferred_drivers[] = {"gcc", "clang", "cc"};
+#define PREFERRED_DRIVER_COUNT (sizeof preferred_drivers / sizeof preferred_drivers[0])
 
 /* Ask the binary at <bin>/<name> what it is. */
 static bool identify_named(const char *bin, const char *name, toolchain *out) {
@@ -242,27 +248,27 @@ static bool identify_in_prefix(const char *prefix, toolchain *out) {
  */
 static bool tool_answers(const char *prefix, const registry_artifact *artifact) {
     char path[PICKUP_PATHS_MAX];
-    bool composed = artifact->binary[0] != '\0'
-        ? fs_format_path(path, sizeof path, "%s/%s", prefix, artifact->binary)
-        : fs_format_path(path, sizeof path, "%s/%s/%s", prefix, PREFIX_BIN,
-                         artifact->name);
+    bool composed =
+        artifact->binary[0] != '\0'
+            ? fs_format_path(path, sizeof path, "%s/%s", prefix, artifact->binary)
+            : fs_format_path(path, sizeof path, "%s/%s/%s", prefix, PREFIX_BIN, artifact->name);
     if (!composed || !fs_path_exists(path))
         return false;
 
-    const char *argv[] = { path, "--version", NULL };
+    const char *argv[] = {path, "--version", NULL};
     process_result result = process_try(argv, NULL);
     return result.completed && result.exit_code == 0;
 }
 
 /* Move the finished tree to the name it is found under from now on. */
-static bool adopt(const char *partial, const toolchain *chain,
-                  char *final_path, size_t final_size) {
+static bool adopt(const char *partial, const toolchain *chain, char *final_path,
+                  size_t final_size) {
     char version[32];
     toolchain_version_format(chain->version, version, sizeof version);
 
     const char *target = chain->target[0] != '\0' ? chain->target : "unknown";
-    if (!paths_toolchain_dir(toolchain_vendor_name(chain->vendor), version, target,
-                             final_path, final_size))
+    if (!paths_toolchain_dir(toolchain_vendor_name(chain->vendor), version, target, final_path,
+                             final_size))
         return false;
 
     /* Reinstalling replaces what was there rather than merging into it. */
@@ -273,11 +279,10 @@ static bool adopt(const char *partial, const toolchain *chain,
 
 /* The same for a tool, named after what was asked for and the version that
    arrived, so two versions of one tool do not collide. */
-static bool adopt_tool(const char *partial, const char *tools,
-                       const registry_artifact *artifact,
+static bool adopt_tool(const char *partial, const char *tools, const registry_artifact *artifact,
                        char *final_path, size_t final_size) {
-    if (!fs_format_path(final_path, final_size, "%s/%s-%s", tools,
-                        artifact->name, artifact->version))
+    if (!fs_format_path(final_path, final_size, "%s/%s-%s", tools, artifact->name,
+                        artifact->version))
         return false;
 
     if (!fs_remove_tree(final_path))
@@ -311,8 +316,7 @@ static void configure_installed(install_report *report) {
        ignore one, so writing it would leave a file that looks like
        configuration and is not; what a caller needs is published by `resolve`,
        which covers both. */
-    bool reads_config = chain.vendor == vendor_clang
-                     || chain.vendor == vendor_apple_clang;
+    bool reads_config = chain.vendor == vendor_clang || chain.vendor == vendor_apple_clang;
     if (!reads_config)
         return;
 
@@ -415,8 +419,7 @@ install_report install_run(const install_request *request) {
        resolves against it. */
     bool is_tool = artifact->kind == registry_kind_tool;
     char root[PICKUP_PATHS_MAX];
-    bool located = is_tool ? paths_tools(root, sizeof root)
-                           : paths_toolchains(root, sizeof root);
+    bool located = is_tool ? paths_tools(root, sizeof root) : paths_toolchains(root, sizeof root);
 
     char partial[PICKUP_PATHS_MAX];
     if (!located || !prepare_partial(root, partial, sizeof partial)) {
@@ -440,8 +443,7 @@ install_report install_run(const install_request *request) {
             return report_of(install_not_a_tool);
         }
         (void)fs_tree_size(partial, &report.installed_size);
-        if (!adopt_tool(partial, root, artifact,
-                        report.directory, sizeof report.directory)) {
+        if (!adopt_tool(partial, root, artifact, report.directory, sizeof report.directory)) {
             (void)fs_remove_tree(partial);
             return report_of(install_path_error);
         }

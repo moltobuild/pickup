@@ -11,7 +11,7 @@
 #define CONFIG_FILENAME "config.toml"
 
 /* The keys this version understands. Only the first is ever written. */
-#define KEY_DEFAULT  "default"
+#define KEY_DEFAULT "default"
 #define KEY_REGISTRY "registry"
 
 /* Room for the whole file. It holds a handful of short keys; anything larger
@@ -56,8 +56,7 @@ static bool line_assigns(const char *line, const char *key) {
 
 /* The quoted value out of `key = "value"`. False if the line is not in that
    shape: a value Pickup did not write is not one it can act on. */
-static bool read_assigned(const char *line, const char *key,
-                          char *out, size_t out_size) {
+static bool read_assigned(const char *line, const char *key, char *out, size_t out_size) {
     const char *cursor = skip_spaces(skip_spaces(line) + strlen(key));
     if (*cursor != '=')
         return false;
@@ -106,8 +105,7 @@ static bool read_key(const char *key, char *out, size_t out_size) {
  * rewriting one by regenerating only the parts this version understands would
  * quietly delete the rest.
  */
-static bool copy_without(const char *text, const char *key,
-                         char *out, size_t out_size) {
+static bool copy_without(const char *text, const char *key, char *out, size_t out_size) {
     size_t used = 0;
     for (const char *line = text; line != NULL; line = next_line(line)) {
         const char *after = next_line(line);
@@ -150,8 +148,7 @@ static bool write_key(const char *key, const char *value) {
 
     if (value != NULL) {
         size_t used = strlen(content);
-        int written = snprintf(content + used, sizeof content - used,
-                               KEY_FORMAT, key, value);
+        int written = snprintf(content + used, sizeof content - used, KEY_FORMAT, key, value);
         if (written < 0 || (size_t)written >= sizeof content - used)
             return false;
     }
@@ -180,9 +177,7 @@ bool preference_default_set(const char *id) {
     return write_key(KEY_DEFAULT, id);
 }
 
-bool preference_default_clear(void) {
-    return write_key(KEY_DEFAULT, NULL);
-}
+bool preference_default_clear(void) { return write_key(KEY_DEFAULT, NULL); }
 
 bool preference_registry_get(char *out, size_t out_size) {
     return read_key(KEY_REGISTRY, out, out_size);

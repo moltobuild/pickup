@@ -13,14 +13,17 @@
 #define NOTHING_WRONG "everything pickup checks is in order"
 
 /* How many lines of a finding are indented under its heading. */
-#define INDENT       "      "
-#define DEEP_INDENT  "        "
+#define INDENT "      "
+#define DEEP_INDENT "        "
 
 static const char *color_of(finding_severity severity) {
     switch (severity) {
-    case finding_error:   return color_error();
-    case finding_warning: return color_accent();
-    case finding_ok:      return color_ok();
+    case finding_error:
+        return color_error();
+    case finding_warning:
+        return color_accent();
+    case finding_ok:
+        return color_ok();
     }
     return "";
 }
@@ -41,18 +44,16 @@ static void print_finding(const finding *entry) {
        more to say than a line holds. */
     bool one_line = entry->location[0] == '\0' && entry->symptom_count == 0;
 
-    printf("  %s%s%s %s", color_of(entry->severity), mark_of(entry),
-           color_reset(), entry->subject);
+    printf("  %s%s%s %s", color_of(entry->severity), mark_of(entry), color_reset(), entry->subject);
 
     if (one_line) {
         printf("%*s%s\n",
-               (int)(entry->subject[0] != '\0'
-                     && strlen(entry->subject) < SUBJECT_COLUMN
-                         ? SUBJECT_COLUMN - strlen(entry->subject) : 1), "",
-               entry->detail);
+               (int)(entry->subject[0] != '\0' && strlen(entry->subject) < SUBJECT_COLUMN
+                         ? SUBJECT_COLUMN - strlen(entry->subject)
+                         : 1),
+               "", entry->detail);
         for (size_t i = 0; i < entry->remedy_count; i++)
-            printf(INDENT "%s->%s %s\n", color_accent(), color_reset(),
-                   entry->remedies[i]);
+            printf(INDENT "%s->%s %s\n", color_accent(), color_reset(), entry->remedies[i]);
         return;
     }
 
@@ -69,32 +70,27 @@ static void print_finding(const finding *entry) {
         printf(DEEP_INDENT "%s\n", entry->symptoms[i]);
 
     for (size_t i = 0; i < entry->remedy_count; i++)
-        printf(INDENT "%s->%s %s\n", color_accent(), color_reset(),
-               entry->remedies[i]);
+        printf(INDENT "%s->%s %s\n", color_accent(), color_reset(), entry->remedies[i]);
 }
 
 /* True if this finding belongs in the output as asked for. */
-static bool worth_showing(const finding *entry, bool all) {
-    return all || entry->blocking;
-}
+static bool worth_showing(const finding *entry, bool all) { return all || entry->blocking; }
 
 /* Everything a section has to say, or nothing at all when it has none. */
-static bool section_has_content(const diagnostics_report *report,
-                                finding_section section, bool all) {
+static bool section_has_content(const diagnostics_report *report, finding_section section,
+                                bool all) {
     for (size_t i = 0; i < report->summary_count; i++) {
         if (report->summary_section[i] == section)
             return true;
     }
     for (size_t i = 0; i < report->count; i++) {
-        if (report->items[i].section == section
-            && worth_showing(&report->items[i], all))
+        if (report->items[i].section == section && worth_showing(&report->items[i], all))
             return true;
     }
     return false;
 }
 
-static void print_section(const diagnostics_report *report,
-                          finding_section section, bool all) {
+static void print_section(const diagnostics_report *report, finding_section section, bool all) {
     if (!section_has_content(report, section, all))
         return;
 
@@ -105,12 +101,10 @@ static void print_section(const diagnostics_report *report,
     for (size_t i = 0; i < report->summary_count; i++) {
         if (report->summary_section[i] != section)
             continue;
-        printf("  %s%s%s %s\n", color_ok(), format_check(), color_reset(),
-               report->summary[i]);
+        printf("  %s%s%s %s\n", color_ok(), format_check(), color_reset(), report->summary[i]);
     }
     for (size_t i = 0; i < report->count; i++) {
-        if (report->items[i].section == section
-            && worth_showing(&report->items[i], all))
+        if (report->items[i].section == section && worth_showing(&report->items[i], all))
             print_finding(&report->items[i]);
     }
     printf("\n");
@@ -118,7 +112,9 @@ static void print_section(const diagnostics_report *report,
 
 static void print_text(const diagnostics_report *report, bool all) {
     static const finding_section order[] = {
-        section_compilers, section_tools, section_environment,
+        section_compilers,
+        section_tools,
+        section_environment,
     };
 
     bool anything = false;
@@ -141,15 +137,14 @@ static void print_text(const diagnostics_report *report, bool all) {
                 hidden++;
         }
         if (hidden > 0)
-            printf("%s%zu more thing%s worth knowing; pickup doctor --all%s\n",
-                   color_dim(), hidden, hidden == 1 ? "" : "s", color_reset());
+            printf("%s%zu more thing%s worth knowing; pickup doctor --all%s\n", color_dim(), hidden,
+                   hidden == 1 ? "" : "s", color_reset());
     }
 }
 
 /* Print an array of strings as a TOML array, one entry per line so that a long
    remedy does not produce an unreadable line. */
-static void print_toml_array(const char *key, const char rows[][FINDING_TEXT_MAX],
-                             size_t count) {
+static void print_toml_array(const char *key, const char rows[][FINDING_TEXT_MAX], size_t count) {
     printf("%s = [", key);
     for (size_t i = 0; i < count; i++)
         printf("%s\n  \"%s\"", i == 0 ? "" : ",", rows[i]);
@@ -162,8 +157,7 @@ static void print_toml_array(const char *key, const char rows[][FINDING_TEXT_MAX
 static void print_toml(const diagnostics_report *report) {
     for (size_t i = 0; i < report->summary_count; i++) {
         printf("[[summary]]\n");
-        printf("section = \"%s\"\n",
-               finding_section_name(report->summary_section[i]));
+        printf("section = \"%s\"\n", finding_section_name(report->summary_section[i]));
         printf("detail = \"%s\"\n\n", report->summary[i]);
     }
 
@@ -188,8 +182,7 @@ static void print_toml(const diagnostics_report *report) {
 
 /* On stderr, for the same reason the report is on stdout: one of them is the
    answer and the other is not. */
-static void watch_examine(const char *subject, size_t done, size_t total,
-                          void *context) {
+static void watch_examine(const char *subject, size_t done, size_t total, void *context) {
     progress_line *line = context;
     (void)subject;
     if (!progress_is_interactive(stderr))
@@ -200,7 +193,7 @@ static void watch_examine(const char *subject, size_t done, size_t total,
 
 int doctor_command_run(bool as_toml, bool all) {
     diagnostics_report report;
-    progress_line line = { .drawn = false };
+    progress_line line = {.drawn = false};
     bool examined = diagnostics_run_watched(watch_examine, &line, &report);
     /* Wiped whether it worked or not: a failure prints a message of its own,
        and half a bar in front of it reads as part of the message. */

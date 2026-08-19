@@ -23,8 +23,8 @@
 
 typedef enum {
     distro_unknown,
-    distro_debian,   /* Debian, Ubuntu, Mint, Pop!_OS */
-    distro_fedora,   /* Fedora, RHEL, CentOS, Rocky */
+    distro_debian, /* Debian, Ubuntu, Mint, Pop!_OS */
+    distro_fedora, /* Fedora, RHEL, CentOS, Rocky */
     distro_arch,
     distro_suse,
     distro_alpine,
@@ -52,8 +52,8 @@ typedef enum {
    the C++ compiler is part of the same package as the C one, so there is no
    second thing to install and pretending otherwise would send the reader
    looking for it. */
-[[nodiscard]] bool distro_gxx_package(distro_family family, int gcc_major,
-                                      char *out, size_t out_size);
+[[nodiscard]] bool distro_gxx_package(distro_family family, int gcc_major, char *out,
+                                      size_t out_size);
 
 /* The family's name, for reports. Never NULL. */
 [[nodiscard]] const char *distro_family_name(distro_family family);

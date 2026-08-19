@@ -7,9 +7,7 @@
    read. */
 #define COLUMN_GAP "  "
 
-static size_t cell_width(const char *cell) {
-    return cell != NULL ? strlen(cell) : 0;
-}
+static size_t cell_width(const char *cell) { return cell != NULL ? strlen(cell) : 0; }
 
 void table_init(table *columns, const char *const *headers, size_t count) {
     columns->column_count = count < TABLE_MAX_COLUMNS ? count : TABLE_MAX_COLUMNS;

@@ -6,11 +6,11 @@
 #include <string.h>
 
 /* Caps for a single command's parsed arguments (options are static tables). */
-#define CLI_MAX_OPTIONS     32
+#define CLI_MAX_OPTIONS 32
 #define CLI_MAX_POSITIONALS 32
 
 /* Exit codes the framework itself returns (see spec.md section 12). */
-#define CLI_EXIT_OK    exit_ok
+#define CLI_EXIT_OK exit_ok
 #define CLI_EXIT_USAGE exit_usage_error
 
 struct cli_args {
@@ -71,10 +71,8 @@ static void render_option(const cli_option *opt, FILE *stream) {
 }
 
 static void print_command_help(const cli_app *app, const cli_command *cmd, FILE *stream) {
-    fprintf(stream, "Usage:\n    %s %s [options]%s%s\n\n",
-            app->program, cmd->name,
-            cmd->arg_name != NULL ? " " : "",
-            cmd->arg_name != NULL ? cmd->arg_name : "");
+    fprintf(stream, "Usage:\n    %s %s [options]%s%s\n\n", app->program, cmd->name,
+            cmd->arg_name != NULL ? " " : "", cmd->arg_name != NULL ? cmd->arg_name : "");
     if (cmd->summary != NULL)
         fprintf(stream, "%s\n\n", cmd->summary);
     fprintf(stream, "Options:\n");
@@ -100,8 +98,8 @@ static void print_global_help(const cli_app *app, FILE *stream) {
 
 /* Record a value/flag for `opt`, consuming the next token for a value option
    when `inline_value` is NULL. Returns false on a missing value. */
-static bool apply_option(cli_args *args, const cli_option *opt, const char *inline_value,
-                         int argc, char **argv, int *index) {
+static bool apply_option(cli_args *args, const cli_option *opt, const char *inline_value, int argc,
+                         char **argv, int *index) {
     size_t slot = (size_t)(opt - args->command->options);
     args->opt_present[slot] = true;
     if (opt->kind == cli_opt_value) {
@@ -223,15 +221,11 @@ const char *cli_args_positional(const cli_args *args, size_t index) {
     return args->positionals[index];
 }
 
-size_t cli_args_positional_count(const cli_args *args) {
-    return args->positional_count;
-}
+size_t cli_args_positional_count(const cli_args *args) { return args->positional_count; }
 
 char *const *cli_args_forwarded(const cli_args *args, int *count) {
     *count = args->forwarded_count;
     return args->forwarded;
 }
 
-const char *cli_args_command_name(const cli_args *args) {
-    return args->command->name;
-}
+const char *cli_args_command_name(const cli_args *args) { return args->command->name; }

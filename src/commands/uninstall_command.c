@@ -14,8 +14,8 @@
 #include <unistd.h>
 
 /* Answers that mean yes. Anything else, including an empty line, does not. */
-#define ANSWER_YES       "y"
-#define ANSWER_YES_LONG  "yes"
+#define ANSWER_YES "y"
+#define ANSWER_YES_LONG "yes"
 
 /* Room for the answer. A line longer than this is not one of the above. */
 #define ANSWER_SIZE 16
@@ -33,8 +33,8 @@ static bool confirmed(const char *id, const char *directory) {
         format_size(bytes, size, sizeof size);
 
     printf("Remove %s\n", id);
-    printf("  %s%s%s%s\n", directory,
-           size[0] != '\0' ? "  (" : "", size, size[0] != '\0' ? ")" : "");
+    printf("  %s%s%s%s\n", directory, size[0] != '\0' ? "  (" : "", size,
+           size[0] != '\0' ? ")" : "");
     printf("This cannot be undone. Continue? [y/N] ");
     (void)fflush(stdout);
 
@@ -88,8 +88,7 @@ int uninstall_command_run(const char *name, bool assume_yes) {
        rather than resolved to the newest. */
     size_t matching = inventory_count_matching(&list, name);
     if (matching > 1) {
-        fprintf(stderr, "pickup: '%s' names %zu toolchains; name one exactly\n",
-                name, matching);
+        fprintf(stderr, "pickup: '%s' names %zu toolchains; name one exactly\n", name, matching);
         for (size_t i = 0; i < list.count; i++) {
             if (toolchain_matches(&list.items[i], name))
                 fprintf(stderr, "  %s  (%s)\n", list.items[i].id,
@@ -102,8 +101,7 @@ int uninstall_command_run(const char *name, bool assume_yes) {
     /* A compiler the package manager owns is not Pickup's to delete, and
        saying which one it is beats a refusal the reader has to interpret. */
     if (chain->source != toolchain_source_pickup) {
-        fprintf(stderr, "pickup: %s is a system toolchain; pickup did not install it\n",
-                chain->id);
+        fprintf(stderr, "pickup: %s is a system toolchain; pickup did not install it\n", chain->id);
         fprintf(stderr, "  %s\n", chain->path);
         inventory_free(&list);
         return exit_usage_error;
@@ -111,8 +109,7 @@ int uninstall_command_run(const char *name, bool assume_yes) {
 
     char directory[PICKUP_PATHS_MAX];
     if (!paths_owning_toolchain(chain->path, directory, sizeof directory)) {
-        fprintf(stderr, "pickup: %s is not inside the toolchains directory\n",
-                chain->id);
+        fprintf(stderr, "pickup: %s is not inside the toolchains directory\n", chain->id);
         inventory_free(&list);
         return exit_failure;
     }

@@ -15,9 +15,7 @@
    what it is: `pickup` for one Pickup installed and can remove again, `system`
    for one that was already on the machine and belongs to its package
    manager. */
-static const char *const list_headers[] = {
-    "NAME", "VENDOR", "VERSION", "TARGET", "SOURCE"
-};
+static const char *const list_headers[] = {"NAME", "VENDOR", "VERSION", "TARGET", "SOURCE"};
 #define LIST_COLUMNS (sizeof list_headers / sizeof list_headers[0])
 
 /* Room for a formatted version ("12.3.0"). */
@@ -37,15 +35,13 @@ static const char *const list_headers[] = {
 /* Lay one toolchain out as cells. `name` and `version` back the two cells with
    no string of their own in the model. `preferred` is the stored default, or
    NULL when there is none. */
-static void row_of(const toolchain *chain, const char *preferred,
-                   char *name, size_t name_size,
+static void row_of(const toolchain *chain, const char *preferred, char *name, size_t name_size,
                    char *version, size_t version_size, const char **cells) {
     toolchain_version_format(chain->version, version, version_size);
     /* The identity, not the basename of whichever link was found first: one
        compiler answering to four names was four rows saying one thing. */
     snprintf(name, name_size, "%s%s", chain->id,
-             preferred != NULL && strcmp(chain->id, preferred) == 0
-                 ? DEFAULT_MARK : "");
+             preferred != NULL && strcmp(chain->id, preferred) == 0 ? DEFAULT_MARK : "");
 
     cells[0] = name;
     cells[1] = toolchain_vendor_name(chain->vendor);
@@ -61,8 +57,7 @@ static void print_text(const inventory *list) {
     }
 
     char preferred[PREFERENCE_VALUE_MAX];
-    const char *marked = preference_default_get(preferred, sizeof preferred)
-        ? preferred : NULL;
+    const char *marked = preference_default_get(preferred, sizeof preferred) ? preferred : NULL;
 
     table columns;
     table_init(&columns, list_headers, LIST_COLUMNS);
@@ -71,8 +66,7 @@ static void print_text(const inventory *list) {
         char name[NAME_CELL_SIZE];
         char version[VERSION_SIZE];
         const char *cells[LIST_COLUMNS];
-        row_of(&list->items[i], marked, name, sizeof name,
-               version, sizeof version, cells);
+        row_of(&list->items[i], marked, name, sizeof name, version, sizeof version, cells);
         table_fit_row(&columns, cells);
     }
 
@@ -81,8 +75,7 @@ static void print_text(const inventory *list) {
         char name[NAME_CELL_SIZE];
         char version[VERSION_SIZE];
         const char *cells[LIST_COLUMNS];
-        row_of(&list->items[i], marked, name, sizeof name,
-               version, sizeof version, cells);
+        row_of(&list->items[i], marked, name, sizeof name, version, sizeof version, cells);
         table_print_row(&columns, cells, stdout);
     }
 }
@@ -93,8 +86,7 @@ static void print_text(const inventory *list) {
    them. */
 static void print_toml(const inventory *list) {
     char preferred[PREFERENCE_VALUE_MAX];
-    const char *marked = preference_default_get(preferred, sizeof preferred)
-        ? preferred : NULL;
+    const char *marked = preference_default_get(preferred, sizeof preferred) ? preferred : NULL;
 
     for (size_t i = 0; i < list->count; i++) {
         const toolchain *chain = &list->items[i];

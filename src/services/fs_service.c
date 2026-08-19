@@ -2,8 +2,8 @@
 
 #include <dirent.h>
 #include <stdarg.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -183,8 +183,7 @@ bool fs_mtime_ns(const char *path, int64_t *out) {
     struct stat info;
     if (stat(path, &info) != 0)
         return false;
-    *out = (int64_t)info.st_mtim.tv_sec * NANOS_PER_SECOND
-         + (int64_t)info.st_mtim.tv_nsec;
+    *out = (int64_t)info.st_mtim.tv_sec * NANOS_PER_SECOND + (int64_t)info.st_mtim.tv_nsec;
     return true;
 }
 
@@ -196,9 +195,7 @@ bool fs_file_size(const char *path, long long *out) {
     return true;
 }
 
-bool fs_rename(const char *from, const char *to) {
-    return rename(from, to) == 0;
-}
+bool fs_rename(const char *from, const char *to) { return rename(from, to) == 0; }
 
 /* Add up a directory, entry by entry. Symlinks count as the link itself and are
    never followed, so a link pointing back into the tree cannot be counted twice

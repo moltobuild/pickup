@@ -42,16 +42,14 @@ static void report_registry(void) {
  * apart from the network being down.
  */
 static int report_unknown_name(const char *name) {
-    fprintf(stderr, "pickup: nothing is published as '%s'\n",
-            name != NULL ? name : "");
+    fprintf(stderr, "pickup: nothing is published as '%s'\n", name != NULL ? name : "");
 
     registry_entry_list matches;
     if (registry_search_watched(name, NULL, NULL, &matches) && matches.count > 0) {
         fprintf(stderr, "  did you mean:\n");
         for (size_t i = 0; i < matches.count; i++)
             fprintf(stderr, "    %s (%s %s)\n", matches.items[i].name,
-                    registry_kind_name(matches.items[i].kind),
-                    matches.items[i].latest_version);
+                    registry_kind_name(matches.items[i].kind), matches.items[i].latest_version);
         registry_entry_list_free(&matches);
     } else {
         registry_entry_list_free(&matches);
@@ -81,8 +79,7 @@ static int report_dry_run(const registry_artifact *artifact) {
 }
 
 /* Say what went wrong, and what the user can do about it. */
-static int report_failure(const install_report *report,
-                          const registry_artifact *artifact) {
+static int report_failure(const install_report *report, const registry_artifact *artifact) {
     fprintf(stderr, "%s%s%s %s %s: %s\n", color_error(), format_cross(), color_reset(),
             artifact->name, artifact->version, install_status_message(report->status));
 
@@ -94,8 +91,9 @@ static int report_failure(const install_report *report,
         break;
     case install_yanked:
         fprintf(stderr, "  nothing was downloaded\n");
-        fprintf(stderr, "  name the whole version to install it anyway: "
-                        "pickup install %s --version %s\n",
+        fprintf(stderr,
+                "  name the whole version to install it anyway: "
+                "pickup install %s --version %s\n",
                 artifact->name, artifact->version);
         /* An answer rather than a breakage: the registry replied, and what it
            has is not to be used for new builds. */
@@ -109,15 +107,12 @@ static int report_failure(const install_report *report,
     return exit_failure;
 }
 
-static int report_tool_installed(const install_report *report,
-                                 const registry_artifact *artifact) {
+static int report_tool_installed(const install_report *report, const registry_artifact *artifact) {
     char size[FORMAT_SIZE_MAX];
     format_size(report->installed_size, size, sizeof size);
 
-    printf("%s%s%s %s %s installed in %s%s (%s)%s\n",
-           color_ok(), format_check(), color_reset(),
-           artifact->name, artifact->version,
-           color_dim(), report->directory, size, color_reset());
+    printf("%s%s%s %s %s installed in %s%s (%s)%s\n", color_ok(), format_check(), color_reset(),
+           artifact->name, artifact->version, color_dim(), report->directory, size, color_reset());
     return exit_ok;
 }
 
@@ -125,8 +120,7 @@ static int report_toolchain_installed(const install_report *report,
                                       const registry_artifact *artifact) {
     /* What was proven, in the same breath as the claim that it is installed:
        the number is what says the thing that arrived actually compiles. */
-    printf("probing installed toolchain%*s%zu features\n",
-           24, "", report->features_proven);
+    printf("probing installed toolchain%*s%zu features\n", 24, "", report->features_proven);
 
     char version[32];
     toolchain_version_format(report->installed.version, version, sizeof version);
@@ -134,10 +128,9 @@ static int report_toolchain_installed(const install_report *report,
     char size[FORMAT_SIZE_MAX];
     format_size(report->installed_size, size, sizeof size);
 
-    printf("%s%s%s %s %s installed in %s%s (%s)%s\n",
-           color_ok(), format_check(), color_reset(),
-           toolchain_vendor_name(report->installed.vendor), version,
-           color_dim(), report->directory, size, color_reset());
+    printf("%s%s%s %s %s installed in %s%s (%s)%s\n", color_ok(), format_check(), color_reset(),
+           toolchain_vendor_name(report->installed.vendor), version, color_dim(), report->directory,
+           size, color_reset());
 
     /* What was asked for and what answered are not always spelled the same, so
        say so rather than let it look like the wrong thing was installed. */
@@ -150,11 +143,10 @@ static int report_toolchain_installed(const install_report *report,
 static int choose(const install_command_request *request, const registry_entry *entry,
                   const char *target, registry_artifact *out) {
     registry_artifact_list list;
-    progress_line line = { .drawn = false };
-    bool fetched = registry_fetch_releases_watched(entry->kind, request->name,
-                                                   request->version, target,
-                                                   request->refresh, watch_fetch,
-                                                   &line, &list);
+    progress_line line = {.drawn = false};
+    bool fetched =
+        registry_fetch_releases_watched(entry->kind, request->name, request->version, target,
+                                        request->refresh, watch_fetch, &line, &list);
     progress_line_clear(stderr, &line);
 
     if (!fetched) {
@@ -173,8 +165,7 @@ static int choose(const install_command_request *request, const registry_entry *
     /* Nothing matched is an answer, and gets the exit code that says so rather
        than the one that means something broke. */
     if (request->version != NULL && request->version[0] != '\0')
-        fprintf(stderr, "pickup: no %s matches version %s\n",
-                request->name, request->version);
+        fprintf(stderr, "pickup: no %s matches version %s\n", request->name, request->version);
     else
         fprintf(stderr, "pickup: no %s is published for %s\n", request->name, target);
     report_registry();
@@ -188,8 +179,7 @@ int install_command_run(const install_command_request *request) {
         return exit_usage_error;
     }
     if (!http_available()) {
-        fprintf(stderr, "pickup: %s is required to reach the registry\n",
-                http_requirement());
+        fprintf(stderr, "pickup: %s is required to reach the registry\n", http_requirement());
         return exit_failure;
     }
 
@@ -220,15 +210,15 @@ int install_command_run(const install_command_request *request) {
         .allow_yanked = registry_version_is_exact(request->version),
     };
     if (artifact.yanked && install.allow_yanked)
-        fprintf(stderr, "! %s %s was withdrawn by the registry; "
-                        "installing it because you named it\n",
+        fprintf(stderr,
+                "! %s %s was withdrawn by the registry; "
+                "installing it because you named it\n",
                 artifact.name, artifact.version);
 
     install_report report = install_run(&install);
     if (!install_succeeded(report.status))
         return report_failure(&report, &artifact);
 
-    return artifact.kind == registry_kind_tool
-        ? report_tool_installed(&report, &artifact)
-        : report_toolchain_installed(&report, &artifact);
+    return artifact.kind == registry_kind_tool ? report_tool_installed(&report, &artifact)
+                                               : report_toolchain_installed(&report, &artifact);
 }

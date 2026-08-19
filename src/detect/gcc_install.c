@@ -10,11 +10,11 @@
 
 /* What clang -v is made to do: parse an empty C++ translation unit, which is
    the cheapest way to make the driver run its GCC detection and report it. */
-#define ARG_VERBOSE     "-v"
-#define ARG_LANG        "-x"
-#define LANG_CXX_NAME   "c++"
+#define ARG_VERBOSE "-v"
+#define ARG_LANG "-x"
+#define LANG_CXX_NAME "c++"
 #define ARG_SYNTAX_ONLY "-fsyntax-only"
-#define ARG_STDIN       "-"
+#define ARG_STDIN "-"
 
 /* Keeps the driver's own configuration file out of the answer. Understood by
    Clang and by nothing else, which is why it is only ever passed to a driver
@@ -30,7 +30,7 @@
 
 /* The two lines worth reading out of it. */
 #define LINE_CANDIDATE "Found candidate GCC installation:"
-#define LINE_SELECTED  "Selected GCC installation:"
+#define LINE_SELECTED "Selected GCC installation:"
 
 /* Where libstdc++ headers sit relative to a GCC installation directory.
    /usr/lib/gcc/<triple>/<version> climbs four levels to /usr, and a toolchain
@@ -68,8 +68,8 @@ bool gcc_install_has_libstdcxx(const char *directory) {
         return false;
 
     char header[PICKUP_PATHS_MAX];
-    if (!fs_format_path(header, sizeof header, LIBSTDCXX_RELATIVE,
-                        directory, version_of(directory)))
+    if (!fs_format_path(header, sizeof header, LIBSTDCXX_RELATIVE, directory,
+                        version_of(directory)))
         return false;
     /* The header itself, not the directory holding it: an empty include
        directory would otherwise count as a working C++ installation. */
@@ -118,13 +118,13 @@ static size_t index_of(const gcc_install_list *list, const char *path) {
 }
 
 bool gcc_install_parse(const char *verbose_output, gcc_install_list *out) {
-    *out = (gcc_install_list){ .count = 0, .selected = GCC_INSTALL_NONE };
+    *out = (gcc_install_list){.count = 0, .selected = GCC_INSTALL_NONE};
     if (verbose_output == NULL)
         return false;
 
     char selected[PICKUP_PATHS_MAX] = "";
 
-    for (const char *line = verbose_output; line != NULL; ) {
+    for (const char *line = verbose_output; line != NULL;) {
         const char *candidate = strstr(line, LINE_CANDIDATE);
         const char *chosen = strstr(line, LINE_SELECTED);
 
@@ -157,25 +157,19 @@ bool gcc_install_parse(const char *verbose_output, gcc_install_list *out) {
     return true;
 }
 
-bool gcc_install_query(const char *clang_path, bool ignore_config,
-                       gcc_install_list *out) {
-    *out = (gcc_install_list){ .count = 0, .selected = GCC_INSTALL_NONE };
+bool gcc_install_query(const char *clang_path, bool ignore_config, gcc_install_list *out) {
+    *out = (gcc_install_list){.count = 0, .selected = GCC_INSTALL_NONE};
     if (clang_path == NULL || clang_path[0] == '\0')
         return false;
 
-    const char *bare[] = {
-        clang_path, ARG_NO_DEFAULT_CONFIG, ARG_VERBOSE, ARG_LANG, LANG_CXX_NAME,
-        ARG_SYNTAX_ONLY, ARG_STDIN, NULL
-    };
-    const char *configured[] = {
-        clang_path, ARG_VERBOSE, ARG_LANG, LANG_CXX_NAME,
-        ARG_SYNTAX_ONLY, ARG_STDIN, NULL
-    };
+    const char *bare[] = {clang_path,    ARG_NO_DEFAULT_CONFIG, ARG_VERBOSE, ARG_LANG,
+                          LANG_CXX_NAME, ARG_SYNTAX_ONLY,       ARG_STDIN,   NULL};
+    const char *configured[] = {clang_path,      ARG_VERBOSE, ARG_LANG, LANG_CXX_NAME,
+                                ARG_SYNTAX_ONLY, ARG_STDIN,   NULL};
     const char *const *argv = ignore_config ? bare : configured;
     char answer[VERBOSE_SIZE];
     /* The report goes to stderr; stdout carries nothing here. */
-    process_result result = process_capture_stderr(argv, EMPTY_PROGRAM,
-                                                   answer, sizeof answer);
+    process_result result = process_capture_stderr(argv, EMPTY_PROGRAM, answer, sizeof answer);
     if (!result.completed)
         return false;
 
@@ -186,7 +180,7 @@ bool gcc_install_query(const char *clang_path, bool ignore_config,
 
 bool gcc_install_best(const gcc_install_list *list, gcc_install *out) {
     bool found = false;
-    toolchain_version best = { 0 };
+    toolchain_version best = {0};
 
     for (size_t i = 0; i < list->count; i++) {
         if (!list->items[i].has_libstdcxx)

@@ -35,14 +35,14 @@
 #define GCC_INSTALL_NONE SIZE_MAX
 
 typedef struct {
-    char path[PICKUP_PATHS_MAX];  /* e.g. /usr/lib/gcc/x86_64-linux-gnu/12 */
-    bool has_libstdcxx;           /* checked on disk, never inferred */
+    char path[PICKUP_PATHS_MAX]; /* e.g. /usr/lib/gcc/x86_64-linux-gnu/12 */
+    bool has_libstdcxx;          /* checked on disk, never inferred */
 } gcc_install;
 
 typedef struct {
     gcc_install items[GCC_INSTALL_MAX];
     size_t count;
-    size_t selected;  /* index into items, or GCC_INSTALL_NONE */
+    size_t selected; /* index into items, or GCC_INSTALL_NONE */
 } gcc_install_list;
 
 /*

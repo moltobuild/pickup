@@ -11,7 +11,7 @@
 /* Below this a decimal still says something; at or above it, it does not. */
 #define DECIMAL_LIMIT 10.0
 
-static const char *const unit_names[] = { "B", "K", "M", "G", "T" };
+static const char *const unit_names[] = {"B", "K", "M", "G", "T"};
 #define UNIT_COUNT (sizeof unit_names / sizeof unit_names[0])
 
 void format_size(long long bytes, char *out, size_t out_size) {
@@ -43,7 +43,7 @@ void format_size(long long bytes, char *out, size_t out_size) {
 #define CROSS_ASCII "x"
 
 /* The locale settings that say how output will be read, most specific first. */
-static const char *const locale_variables[] = { "LC_ALL", "LC_CTYPE", "LANG" };
+static const char *const locale_variables[] = {"LC_ALL", "LC_CTYPE", "LANG"};
 #define LOCALE_COUNT (sizeof locale_variables / sizeof locale_variables[0])
 
 static bool console_speaks_utf8(void) {
@@ -52,16 +52,12 @@ static bool console_speaks_utf8(void) {
         if (value == NULL || value[0] == '\0')
             continue;
         /* The first one set decides, the way the C library resolves them. */
-        return strstr(value, "UTF-8") != NULL || strstr(value, "utf8") != NULL
-            || strstr(value, "UTF8") != NULL || strstr(value, "utf-8") != NULL;
+        return strstr(value, "UTF-8") != NULL || strstr(value, "utf8") != NULL ||
+               strstr(value, "UTF8") != NULL || strstr(value, "utf-8") != NULL;
     }
     return false;
 }
 
-const char *format_check(void) {
-    return console_speaks_utf8() ? CHECK_UTF8 : CHECK_ASCII;
-}
+const char *format_check(void) { return console_speaks_utf8() ? CHECK_UTF8 : CHECK_ASCII; }
 
-const char *format_cross(void) {
-    return console_speaks_utf8() ? CROSS_UTF8 : CROSS_ASCII;
-}
+const char *format_cross(void) { return console_speaks_utf8() ? CROSS_UTF8 : CROSS_ASCII; }

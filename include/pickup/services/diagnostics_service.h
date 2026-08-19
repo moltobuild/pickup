@@ -27,9 +27,9 @@
  */
 
 typedef enum {
-    finding_ok,       /* worth stating, nothing to do */
-    finding_warning,  /* works, but not the way it should */
-    finding_error,    /* something cannot be built */
+    finding_ok,      /* worth stating, nothing to do */
+    finding_warning, /* works, but not the way it should */
+    finding_error,   /* something cannot be built */
 } finding_severity;
 
 /*
@@ -45,8 +45,8 @@ typedef enum {
     section_environment,
 } finding_section;
 
-#define FINDING_TEXT_MAX     512
-#define FINDING_SUBJECT_MAX  128
+#define FINDING_TEXT_MAX 512
+#define FINDING_SUBJECT_MAX 128
 #define FINDING_MAX_SYMPTOMS 16
 #define FINDING_MAX_REMEDIES 4
 #define DIAGNOSTICS_MAX_FINDINGS 64
@@ -70,9 +70,9 @@ typedef struct {
      */
     bool blocking;
 
-    char subject[FINDING_SUBJECT_MAX];   /* "gcc 12", "curl", "pickup home" */
-    char location[PICKUP_PATHS_MAX];     /* where it is; "" when it has no place */
-    char detail[FINDING_TEXT_MAX];       /* what is wrong with it */
+    char subject[FINDING_SUBJECT_MAX]; /* "gcc 12", "curl", "pickup home" */
+    char location[PICKUP_PATHS_MAX];   /* where it is; "" when it has no place */
+    char detail[FINDING_TEXT_MAX];     /* what is wrong with it */
 
     /* What it spoils. Empty when the subject is the only thing affected. */
     char symptoms[FINDING_MAX_SYMPTOMS][FINDING_TEXT_MAX];
@@ -119,8 +119,7 @@ typedef struct {
    several times over while the flags that make it work are found. That is
    seconds of silence otherwise, and silence is what makes people think a
    command has hung. */
-typedef void (*diagnostics_watch)(const char *subject, size_t done, size_t total,
-                                  void *context);
+typedef void (*diagnostics_watch)(const char *subject, size_t done, size_t total, void *context);
 
 /* Examine the machine and fill `out`. False only when the inventory could not
    be built at all; a machine with nothing wrong yields an empty report, which

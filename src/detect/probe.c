@@ -9,9 +9,9 @@
 
 /* Compiler arguments used to interrogate a candidate. */
 #define ARG_PREPROCESS "-E"
-#define ARG_LANG       "-x"
-#define LANG_C_NAME    "c"
-#define ARG_STDIN      "-"
+#define ARG_LANG "-x"
+#define LANG_C_NAME "c"
+#define ARG_STDIN "-"
 #define ARG_DUMPMACHINE "-dumpmachine"
 #define ARG_SYNTAX_ONLY "-fsyntax-only"
 
@@ -28,16 +28,13 @@
  * defines __GNUC__, so it has to be tested first.
  */
 static const char identity_program[] =
-    "#if defined(__apple_build_version__)\n"
-    IDENTITY_MARKER " apple-clang __clang_major__ __clang_minor__ __clang_patchlevel__\n"
-    "#elif defined(__clang__)\n"
-    IDENTITY_MARKER " clang __clang_major__ __clang_minor__ __clang_patchlevel__\n"
-    "#elif defined(_MSC_VER)\n"
-    IDENTITY_MARKER " msvc _MSC_VER 0 0\n"
-    "#elif defined(__GNUC__)\n"
-    IDENTITY_MARKER " gcc __GNUC__ __GNUC_MINOR__ __GNUC_PATCHLEVEL__\n"
-    "#else\n"
-    IDENTITY_MARKER " unknown 0 0 0\n"
+    "#if defined(__apple_build_version__)\n" IDENTITY_MARKER
+    " apple-clang __clang_major__ __clang_minor__ __clang_patchlevel__\n"
+    "#elif defined(__clang__)\n" IDENTITY_MARKER
+    " clang __clang_major__ __clang_minor__ __clang_patchlevel__\n"
+    "#elif defined(_MSC_VER)\n" IDENTITY_MARKER " msvc _MSC_VER 0 0\n"
+    "#elif defined(__GNUC__)\n" IDENTITY_MARKER " gcc __GNUC__ __GNUC_MINOR__ __GNUC_PATCHLEVEL__\n"
+    "#else\n" IDENTITY_MARKER " unknown 0 0 0\n"
     "#endif\n";
 
 /* Find the marker line in the preprocessor's output and read the fields. */
@@ -53,7 +50,7 @@ static bool parse_identity(const char *answer, toolchain *out) {
         return false;
 
     out->vendor = toolchain_vendor_parse(vendor);
-    out->version = (toolchain_version){ .major = major, .minor = minor, .patch = patch };
+    out->version = (toolchain_version){.major = major, .minor = minor, .patch = patch};
     return true;
 }
 
@@ -74,11 +71,8 @@ bool probe_identify(const char *path, toolchain *out) {
         return false;
 
     char answer[ANSWER_SIZE];
-    const char *identity_argv[] = {
-        path, ARG_PREPROCESS, ARG_LANG, LANG_C_NAME, ARG_STDIN, NULL
-    };
-    process_result result = process_capture(identity_argv, identity_program,
-                                            answer, sizeof answer);
+    const char *identity_argv[] = {path, ARG_PREPROCESS, ARG_LANG, LANG_C_NAME, ARG_STDIN, NULL};
+    process_result result = process_capture(identity_argv, identity_program, answer, sizeof answer);
     if (!result.completed || result.exit_code != 0)
         return false;
     if (!parse_identity(answer, out))
@@ -86,7 +80,7 @@ bool probe_identify(const char *path, toolchain *out) {
 
     /* The target triple is optional: a compiler without -dumpmachine is still
        usable, it just reports an unknown target. */
-    const char *target_argv[] = { path, ARG_DUMPMACHINE, NULL };
+    const char *target_argv[] = {path, ARG_DUMPMACHINE, NULL};
     char target[PICKUP_TARGET_MAX];
     result = process_capture(target_argv, NULL, target, sizeof target);
     if (result.completed && result.exit_code == 0) {
@@ -110,7 +104,7 @@ static bool cxx_name_for(const char *c_name, char *out, size_t out_size) {
 
 /* True if `path` behaves like a C++ compiler when asked to parse C++. */
 static bool runs_as_cxx(const char *path) {
-    const char *argv[] = { path, ARG_LANG, "c++", ARG_SYNTAX_ONLY, ARG_STDIN, NULL };
+    const char *argv[] = {path, ARG_LANG, "c++", ARG_SYNTAX_ONLY, ARG_STDIN, NULL};
     process_result result = process_try(argv, "int main(){return 0;}\n");
     return result.completed && result.exit_code == 0;
 }
@@ -127,9 +121,9 @@ void probe_find_cxx_driver(toolchain *chain) {
     char candidate[PICKUP_PATH_MAX];
     const char *slash = strrchr(chain->path, '/');
     bool composed = slash != NULL
-        ? fs_format_path(candidate, sizeof candidate, "%.*s/%s",
-                         (int)(slash - chain->path), chain->path, cxx_name)
-        : fs_format_path(candidate, sizeof candidate, "%s", cxx_name);
+                        ? fs_format_path(candidate, sizeof candidate, "%.*s/%s",
+                                         (int)(slash - chain->path), chain->path, cxx_name)
+                        : fs_format_path(candidate, sizeof candidate, "%s", cxx_name);
     if (!composed || !fs_path_exists(candidate))
         return;
 
@@ -145,5 +139,5 @@ void probe_capabilities(toolchain *chain) {
     if (chain->cxx_path[0] != '\0')
         chain->cxx_features = capability_probe(chain->cxx_path, lang_cxx);
     else
-        chain->cxx_features = (capability_set){ 0 };
+        chain->cxx_features = (capability_set){0};
 }

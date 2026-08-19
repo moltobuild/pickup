@@ -18,8 +18,8 @@
 
 /* Environment that turns colour off regardless of the terminal. */
 #define NO_COLOR_ENV "NO_COLOR"
-#define TERM_ENV     "TERM"
-#define TERM_DUMB    "dumb"
+#define TERM_ENV "TERM"
+#define TERM_DUMB "dumb"
 
 /* True if `out` should be written to in colour. */
 [[nodiscard]] bool color_enabled(FILE *out);

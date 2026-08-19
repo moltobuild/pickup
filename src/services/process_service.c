@@ -10,19 +10,19 @@
 #define EXIT_COMMAND_NOT_RUNNABLE 127
 
 /* Ends of a pipe, named so the code reads as data flow rather than indices. */
-#define PIPE_READ  0
+#define PIPE_READ 0
 #define PIPE_WRITE 1
 
 static process_result failed_result(void) {
-    return (process_result){ .exit_code = -1, .completed = false };
+    return (process_result){.exit_code = -1, .completed = false};
 }
 
 /* Turn a wait status into a result. */
 static process_result translate(int status) {
     if (WIFEXITED(status))
-        return (process_result){ .exit_code = WEXITSTATUS(status), .completed = true };
+        return (process_result){.exit_code = WEXITSTATUS(status), .completed = true};
     if (WIFSIGNALED(status))
-        return (process_result){ .exit_code = WTERMSIG(status), .completed = true };
+        return (process_result){.exit_code = WTERMSIG(status), .completed = true};
     return failed_result();
 }
 
@@ -150,8 +150,8 @@ process_result process_wait(process_handle *handle) {
 /* Run `argv` and read back whichever of the child's streams is `captured_fd`,
    silencing the other one. Both callers below want the same plumbing and differ
    only in which stream carries the answer they are after. */
-static process_result capture_stream(const char *const argv[], const char *input,
-                                     int captured_fd, char *out, size_t out_size) {
+static process_result capture_stream(const char *const argv[], const char *input, int captured_fd,
+                                     char *out, size_t out_size) {
     if (out == NULL || out_size == 0)
         return failed_result();
     out[0] = '\0';
@@ -211,12 +211,12 @@ static process_result capture_stream(const char *const argv[], const char *input
     return reap(pid);
 }
 
-process_result process_capture(const char *const argv[], const char *input,
-                               char *out, size_t out_size) {
+process_result process_capture(const char *const argv[], const char *input, char *out,
+                               size_t out_size) {
     return capture_stream(argv, input, STDOUT_FILENO, out, out_size);
 }
 
-process_result process_capture_stderr(const char *const argv[], const char *input,
-                                      char *out, size_t out_size) {
+process_result process_capture_stderr(const char *const argv[], const char *input, char *out,
+                                      size_t out_size) {
     return capture_stream(argv, input, STDERR_FILENO, out, out_size);
 }

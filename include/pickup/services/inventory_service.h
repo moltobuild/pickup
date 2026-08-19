@@ -34,8 +34,8 @@ typedef struct {
 typedef void (*inventory_watch)(size_t done, size_t total, void *context);
 
 /* `inventory_load`, watched. A NULL `watch` is the unwatched load. */
-[[nodiscard]] bool inventory_load_watched(inventory *out, bool refresh,
-                                          inventory_watch watch, void *context);
+[[nodiscard]] bool inventory_load_watched(inventory *out, bool refresh, inventory_watch watch,
+                                          void *context);
 
 /* Append a toolchain. Exposed so the cache can rebuild an inventory it read. */
 [[nodiscard]] bool inventory_append(inventory *list, const toolchain *chain);

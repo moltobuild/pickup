@@ -53,8 +53,8 @@
 
 /* The directory a toolchain of this identity is installed into, named so that
    two versions, or the same version for two targets, never collide. */
-[[nodiscard]] bool paths_toolchain_dir(const char *vendor, const char *version,
-                                       const char *target, char *out, size_t out_size);
+[[nodiscard]] bool paths_toolchain_dir(const char *vendor, const char *version, const char *target,
+                                       char *out, size_t out_size);
 
 /*
  * The installed directory that `path` belongs to: the first level under

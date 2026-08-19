@@ -35,19 +35,19 @@ typedef enum {
     install_download_failed,
     install_hash_mismatch,
     install_extract_failed,
-    install_not_a_toolchain,    /* unpacked, but nothing in it compiles */
-    install_not_a_tool,         /* unpacked, but the binary it named said nothing */
+    install_not_a_toolchain, /* unpacked, but nothing in it compiles */
+    install_not_a_tool,      /* unpacked, but the binary it named said nothing */
     install_path_error,
 } install_status;
 
 typedef struct {
     install_status status;
-    char directory[PICKUP_PATHS_MAX];  /* where it landed, when it landed */
-    char expected[SHA256_HEX_SIZE];    /* digests, on a mismatch */
+    char directory[PICKUP_PATHS_MAX]; /* where it landed, when it landed */
+    char expected[SHA256_HEX_SIZE];   /* digests, on a mismatch */
     char actual[SHA256_HEX_SIZE];
-    toolchain installed;               /* what the compiler said it is; empty for a tool */
-    size_t features_proven;            /* what it compiled once installed */
-    long long installed_size;          /* bytes on disk */
+    toolchain installed;      /* what the compiler said it is; empty for a tool */
+    size_t features_proven;   /* what it compiled once installed */
+    long long installed_size; /* bytes on disk */
 } install_report;
 
 typedef struct {

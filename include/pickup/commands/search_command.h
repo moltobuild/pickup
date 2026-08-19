@@ -4,9 +4,9 @@
 #include <stdbool.h>
 
 typedef struct {
-    const char *name;      /* what to look up; NULL lists everything published */
-    const char *version;   /* exact or partial; NULL for everything on offer */
-    bool refresh;          /* ignore the cached catalogue and ask again */
+    const char *name;    /* what to look up; NULL lists everything published */
+    const char *version; /* exact or partial; NULL for everything on offer */
+    bool refresh;        /* ignore the cached catalogue and ask again */
     bool as_toml;
 } search_command_request;
 

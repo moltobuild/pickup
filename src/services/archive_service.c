@@ -12,11 +12,11 @@
 
 /* The extractor Pickup drives.
    -x extract, -f from a file, -C into a directory */
-#define TAR_COMMAND    "tar"
-#define ARG_EXTRACT    "-xf"
-#define ARG_DIRECTORY  "-C"
+#define TAR_COMMAND "tar"
+#define ARG_EXTRACT "-xf"
+#define ARG_DIRECTORY "-C"
 #define ARG_STRIP_FORMAT "--strip-components=%d"
-#define ARG_VERSION    "--version"
+#define ARG_VERSION "--version"
 
 /* Asks for the member arguments to be read as globs. Only GNU tar has it, and
    only GNU tar needs it; whether this one does is settled by asking, in
@@ -26,13 +26,9 @@
 /* Room for the composed --strip-components argument. */
 #define STRIP_ARG_SIZE 32
 
-const char *archive_requirement(void) {
-    return TAR_COMMAND;
-}
+const char *archive_requirement(void) { return TAR_COMMAND; }
 
-const char *archive_zstd_requirement(void) {
-    return "zstd";
-}
+const char *archive_zstd_requirement(void) { return "zstd"; }
 
 bool archive_available(void) {
     static bool checked = false;
@@ -40,7 +36,7 @@ bool archive_available(void) {
     if (checked)
         return available;
 
-    const char *argv[] = { TAR_COMMAND, ARG_VERSION, NULL };
+    const char *argv[] = {TAR_COMMAND, ARG_VERSION, NULL};
     process_result result = process_try(argv, NULL);
     available = result.completed && result.exit_code == 0;
     checked = true;
@@ -57,7 +53,7 @@ bool archive_supports_wildcards(void) {
        options, finds nothing to do, and says whether it recognised the flag.
        An implementation that does not have it exits non-zero without touching
        an archive. */
-    const char *argv[] = { TAR_COMMAND, ARG_WILDCARDS, ARG_VERSION, NULL };
+    const char *argv[] = {TAR_COMMAND, ARG_WILDCARDS, ARG_VERSION, NULL};
     process_result result = process_try(argv, NULL);
     supported = result.completed && result.exit_code == 0;
     checked = true;
@@ -78,8 +74,8 @@ bool archive_supports_wildcards(void) {
  * Twenty-one bytes, and listing it is the whole probe.
  */
 static const unsigned char empty_tar_zst[] = {
-    0x28, 0xb5, 0x2f, 0xfd, 0x04, 0x68, 0x45, 0x00, 0x00, 0x08, 0x00, 0x01,
-    0x00, 0xfc, 0x87, 0x07, 0x42, 0xbc, 0xbd, 0x7e, 0xd6,
+    0x28, 0xb5, 0x2f, 0xfd, 0x04, 0x68, 0x45, 0x00, 0x00, 0x08, 0x00,
+    0x01, 0x00, 0xfc, 0x87, 0x07, 0x42, 0xbc, 0xbd, 0x7e, 0xd6,
 };
 
 /*
@@ -110,7 +106,7 @@ bool archive_supports_zstd(void) {
     /* Written through the same call the rest of the code uses: the probe must
        fail for the same reasons a real extraction would. */
     if (fs_write_bytes(path, empty_tar_zst, sizeof empty_tar_zst)) {
-        const char *argv[] = { TAR_COMMAND, ARG_LIST, path, NULL };
+        const char *argv[] = {TAR_COMMAND, ARG_LIST, path, NULL};
         process_result result = process_try(argv, NULL);
         supported = result.completed && result.exit_code == 0;
     }
@@ -120,7 +116,7 @@ bool archive_supports_zstd(void) {
 }
 
 bool archive_extract(const char *archive, const char *destination, int strip_components) {
-    const archive_request request = { .strip_components = strip_components };
+    const archive_request request = {.strip_components = strip_components};
     return archive_extract_selected(archive, destination, &request);
 }
 
@@ -128,7 +124,7 @@ bool archive_extract(const char *archive, const char *destination, int strip_com
 
 /* Fixed part of the command, plus room for the exclusions and patterns. */
 #define ARGV_FIXED 8
-#define ARGV_MAX   (ARGV_FIXED + 2 * ARCHIVE_MAX_PATTERNS)
+#define ARGV_MAX (ARGV_FIXED + 2 * ARCHIVE_MAX_PATTERNS)
 
 /* Composed --exclude= arguments, which have to outlive the argv holding them. */
 #define EXCLUDE_ARG_SIZE 256
@@ -149,15 +145,14 @@ static void push(tar_command *command, const char *argument) {
 }
 
 /* Build `tar -xf <archive> -C <destination> --strip-components=N [...]`. */
-static bool build_command(tar_command *command, const char *archive,
-                          const char *destination, const archive_request *request) {
-    if (request->pattern_count > ARCHIVE_MAX_PATTERNS
-        || request->exclude_count > ARCHIVE_MAX_PATTERNS)
+static bool build_command(tar_command *command, const char *archive, const char *destination,
+                          const archive_request *request) {
+    if (request->pattern_count > ARCHIVE_MAX_PATTERNS ||
+        request->exclude_count > ARCHIVE_MAX_PATTERNS)
         return false;
 
     command->count = 0;
-    snprintf(command->strip, sizeof command->strip, ARG_STRIP_FORMAT,
-             request->strip_components);
+    snprintf(command->strip, sizeof command->strip, ARG_STRIP_FORMAT, request->strip_components);
 
     push(command, TAR_COMMAND);
     push(command, ARG_EXTRACT);
@@ -169,8 +164,7 @@ static bool build_command(tar_command *command, const char *archive,
     /* Exclusions first, and they need no flag: both implementations already
        read those as globs. */
     for (size_t i = 0; i < request->exclude_count; i++) {
-        snprintf(command->excludes[i], EXCLUDE_ARG_SIZE, ARG_EXCLUDE_FORMAT,
-                 request->excludes[i]);
+        snprintf(command->excludes[i], EXCLUDE_ARG_SIZE, ARG_EXCLUDE_FORMAT, request->excludes[i]);
         push(command, command->excludes[i]);
     }
 
@@ -190,7 +184,7 @@ static bool build_command(tar_command *command, const char *archive,
 }
 
 static void wait_a_moment(void) {
-    struct timespec pause = { .tv_sec = 0, .tv_nsec = POLL_INTERVAL_NS };
+    struct timespec pause = {.tv_sec = 0, .tv_nsec = POLL_INTERVAL_NS};
     nanosleep(&pause, NULL);
 }
 

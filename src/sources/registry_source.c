@@ -19,8 +19,8 @@
 
 /* Cached index files, and how long they are trusted. */
 #define CATALOGUE_CACHE_FORMAT "registry-%s.json"
-#define RELEASES_CACHE_FORMAT  "registry-%s-%s.json"
-#define SEARCH_CACHE_FILE      "registry-search.json"
+#define RELEASES_CACHE_FORMAT "registry-%s-%s.json"
+#define SEARCH_CACHE_FILE "registry-search.json"
 #define REGISTRY_CACHE_TTL_SECONDS 3600
 
 /*
@@ -31,21 +31,21 @@
  * no name here asks for nothing rather than asking for the wrong thing.
  */
 #if defined(_WIN32)
-#  define HOST_TARGET "windows-x86_64"
+#define HOST_TARGET "windows-x86_64"
 #elif defined(__APPLE__) && defined(__aarch64__)
-#  define HOST_TARGET "darwin-aarch64"
+#define HOST_TARGET "darwin-aarch64"
 #elif defined(__APPLE__)
-#  define HOST_TARGET "darwin-x86_64"
+#define HOST_TARGET "darwin-x86_64"
 #elif defined(__linux__) && defined(__aarch64__)
-#  define HOST_TARGET "linux-aarch64"
+#define HOST_TARGET "linux-aarch64"
 #elif defined(__linux__) && defined(__x86_64__)
-#  define HOST_TARGET "linux-x86_64"
+#define HOST_TARGET "linux-x86_64"
 #else
-#  define HOST_TARGET ""
+#define HOST_TARGET ""
 #endif
 
 #define LIST_INITIAL_CAPACITY 8
-#define LIST_GROWTH_FACTOR    2
+#define LIST_GROWTH_FACTOR 2
 
 /* --- the lists --- */
 
@@ -62,8 +62,8 @@ void registry_artifact_list_free(registry_artifact_list *list) {
 
 static bool artifact_push(registry_artifact_list *list, const registry_artifact *item) {
     if (list->count == list->capacity) {
-        size_t next = list->capacity == 0 ? LIST_INITIAL_CAPACITY
-                                          : list->capacity * LIST_GROWTH_FACTOR;
+        size_t next =
+            list->capacity == 0 ? LIST_INITIAL_CAPACITY : list->capacity * LIST_GROWTH_FACTOR;
         registry_artifact *items = realloc(list->items, next * sizeof *items);
         if (items == NULL)
             return false;
@@ -87,8 +87,8 @@ void registry_entry_list_free(registry_entry_list *list) {
 
 static bool entry_push(registry_entry_list *list, const registry_entry *item) {
     if (list->count == list->capacity) {
-        size_t next = list->capacity == 0 ? LIST_INITIAL_CAPACITY
-                                          : list->capacity * LIST_GROWTH_FACTOR;
+        size_t next =
+            list->capacity == 0 ? LIST_INITIAL_CAPACITY : list->capacity * LIST_GROWTH_FACTOR;
         registry_entry *items = realloc(list->items, next * sizeof *items);
         if (items == NULL)
             return false;
@@ -107,17 +107,23 @@ bool registry_entry_list_push(registry_entry_list *list, const registry_entry *i
 
 const char *registry_kind_path(registry_kind kind) {
     switch (kind) {
-    case registry_kind_tool:    return "tools";
-    case registry_kind_package: return "packages";
-    default:                    return "toolchains";
+    case registry_kind_tool:
+        return "tools";
+    case registry_kind_package:
+        return "packages";
+    default:
+        return "toolchains";
     }
 }
 
 const char *registry_kind_name(registry_kind kind) {
     switch (kind) {
-    case registry_kind_tool:    return "tool";
-    case registry_kind_package: return "package";
-    default:                    return "toolchain";
+    case registry_kind_tool:
+        return "tool";
+    case registry_kind_package:
+        return "package";
+    default:
+        return "toolchain";
     }
 }
 
@@ -169,15 +175,14 @@ static void read_metadata(json_value artifact, registry_artifact *out) {
         return;
 
     read_provides(metadata, out);
-    copy_optional(json_get(json_get(metadata, "about"), "description"),
-                  out->description, sizeof out->description);
+    copy_optional(json_get(json_get(metadata, "about"), "description"), out->description,
+                  sizeof out->description);
 
     json_value toolchain = json_get(metadata, "toolchain");
     copy_optional(json_get(toolchain, "vendor"), out->vendor, sizeof out->vendor);
     copy_optional(json_get(toolchain, "triple"), out->triple, sizeof out->triple);
 
-    copy_optional(json_get(json_get(metadata, "tool"), "binary"),
-                  out->binary, sizeof out->binary);
+    copy_optional(json_get(json_get(metadata, "tool"), "binary"), out->binary, sizeof out->binary);
 }
 
 /*
@@ -187,18 +192,16 @@ static void read_metadata(json_value artifact, registry_artifact *out) {
  * verified, located or sized is not something to carry forward on the chance
  * that the rest of the pipeline copes.
  */
-static bool read_artifact(json_value value, registry_kind fallback,
-                          registry_artifact *out) {
-    *out = (registry_artifact){ 0 };
+static bool read_artifact(json_value value, registry_kind fallback, registry_artifact *out) {
+    *out = (registry_artifact){0};
     out->kind = kind_of(json_string(json_get(value, "kind")), fallback);
 
-    if (!copy_string(json_get(value, "name"), out->name, sizeof out->name)
-        || !copy_string(json_get(value, "version"), out->version, sizeof out->version)
-        || !copy_string(json_get(value, "target"), out->target, sizeof out->target)
-        || !copy_string(json_get(value, "format"), out->format, sizeof out->format)
-        || !copy_string(json_get(value, "checksum"), out->checksum, sizeof out->checksum)
-        || !copy_string(json_get(value, "download_url"),
-                        out->download_url, sizeof out->download_url))
+    if (!copy_string(json_get(value, "name"), out->name, sizeof out->name) ||
+        !copy_string(json_get(value, "version"), out->version, sizeof out->version) ||
+        !copy_string(json_get(value, "target"), out->target, sizeof out->target) ||
+        !copy_string(json_get(value, "format"), out->format, sizeof out->format) ||
+        !copy_string(json_get(value, "checksum"), out->checksum, sizeof out->checksum) ||
+        !copy_string(json_get(value, "download_url"), out->download_url, sizeof out->download_url))
         return false;
 
     long long size = 0;
@@ -207,10 +210,8 @@ static bool read_artifact(json_value value, registry_kind fallback,
     out->size_bytes = size;
 
     (void)json_bool(json_get(value, "yanked"), &out->yanked);
-    copy_optional(json_get(value, "published_at"),
-                  out->published_at, sizeof out->published_at);
-    copy_optional(json_get(value, "published_by"),
-                  out->published_by, sizeof out->published_by);
+    copy_optional(json_get(value, "published_at"), out->published_at, sizeof out->published_at);
+    copy_optional(json_get(value, "published_by"), out->published_by, sizeof out->published_by);
     read_metadata(value, out);
     return true;
 }
@@ -244,8 +245,7 @@ bool registry_version_matches(const char *filter, const char *version) {
 
     toolchain_version wanted;
     toolchain_version actual;
-    if (!toolchain_version_parse(filter, &wanted)
-        || !toolchain_version_parse(version, &actual))
+    if (!toolchain_version_parse(filter, &wanted) || !toolchain_version_parse(version, &actual))
         return false;
 
     /* Only the components the filter actually named are compared, so "19"
@@ -287,8 +287,8 @@ bool registry_select(const registry_artifact_list *list, const char *version_fil
 
 /* --- parsing documents --- */
 
-bool registry_parse_releases(const char *json, const char *version_filter,
-                             const char *target, registry_artifact_list *out) {
+bool registry_parse_releases(const char *json, const char *version_filter, const char *target,
+                             registry_artifact_list *out) {
     registry_artifact_list_init(out);
 
     json_document *doc = json_parse(json);
@@ -296,8 +296,7 @@ bool registry_parse_releases(const char *json, const char *version_filter,
         return false;
 
     json_value root = json_root(doc);
-    registry_kind kind = kind_of(json_string(json_get(root, "kind")),
-                                 registry_kind_toolchain);
+    registry_kind kind = kind_of(json_string(json_get(root, "kind")), registry_kind_toolchain);
 
     /* Either a list of releases or one release: the coordinate endpoints answer
        with the same shape one level down. */
@@ -333,12 +332,12 @@ bool registry_parse_releases(const char *json, const char *version_filter,
 /* One catalogue row. `targets` is a list of names in a catalogue and a count in
    a search result, so each caller reads the shape it gets. */
 static bool read_entry(json_value value, registry_kind fallback, registry_entry *out) {
-    *out = (registry_entry){ 0 };
+    *out = (registry_entry){0};
     out->kind = kind_of(json_string(json_get(value, "kind")), fallback);
 
-    if (!copy_string(json_get(value, "name"), out->name, sizeof out->name)
-        || !copy_string(json_get(value, "latest_version"),
-                        out->latest_version, sizeof out->latest_version))
+    if (!copy_string(json_get(value, "name"), out->name, sizeof out->name) ||
+        !copy_string(json_get(value, "latest_version"), out->latest_version,
+                     sizeof out->latest_version))
         return false;
 
     long long versions = 0;
@@ -355,17 +354,14 @@ static bool read_entry(json_value value, registry_kind fallback, registry_entry 
         }
     }
 
-    copy_optional(json_get(value, "published_at"),
-                  out->published_at, sizeof out->published_at);
-    copy_optional(json_get(value, "published_by"),
-                  out->published_by, sizeof out->published_by);
+    copy_optional(json_get(value, "published_at"), out->published_at, sizeof out->published_at);
+    copy_optional(json_get(value, "published_by"), out->published_by, sizeof out->published_by);
     return true;
 }
 
 /* Both index documents are a kind plus an array of rows; only the field holding
    the rows differs. */
-static bool parse_entries(const char *json, const char *field,
-                          registry_entry_list *out) {
+static bool parse_entries(const char *json, const char *field, registry_entry_list *out) {
     registry_entry_list_init(out);
 
     json_document *doc = json_parse(json);
@@ -373,8 +369,7 @@ static bool parse_entries(const char *json, const char *field,
         return false;
 
     json_value root = json_root(doc);
-    registry_kind kind = kind_of(json_string(json_get(root, "kind")),
-                                 registry_kind_toolchain);
+    registry_kind kind = kind_of(json_string(json_get(root, "kind")), registry_kind_toolchain);
     json_value rows = json_get(root, field);
 
     bool ok = true;
@@ -400,8 +395,8 @@ bool registry_parse_search(const char *json, registry_entry_list *out) {
     return parse_entries(json, "results", out);
 }
 
-bool registry_parse_error(const char *json, char *code, size_t code_size,
-                          char *message, size_t message_size) {
+bool registry_parse_error(const char *json, char *code, size_t code_size, char *message,
+                          size_t message_size) {
     json_document *doc = json_parse(json);
     if (doc == NULL)
         return false;
@@ -417,9 +412,7 @@ bool registry_parse_error(const char *json, char *code, size_t code_size,
 
 /* --- naming --- */
 
-const char *registry_host_target(void) {
-    return HOST_TARGET;
-}
+const char *registry_host_target(void) { return HOST_TARGET; }
 
 bool registry_name_is_simple(const char *name) {
     if (name == NULL || name[0] == '\0')
@@ -498,14 +491,12 @@ static char *fetch_json(const char *url, const char *path, bool cached, bool ref
     return fs_read_file(path);
 }
 
-bool registry_fetch_catalogue(registry_kind kind, bool refresh,
-                              registry_entry_list *out) {
+bool registry_fetch_catalogue(registry_kind kind, bool refresh, registry_entry_list *out) {
     return registry_fetch_catalogue_watched(kind, refresh, NULL, NULL, out);
 }
 
-bool registry_fetch_catalogue_watched(registry_kind kind, bool refresh,
-                                      http_tick tick, void *context,
-                                      registry_entry_list *out) {
+bool registry_fetch_catalogue_watched(registry_kind kind, bool refresh, http_tick tick,
+                                      void *context, registry_entry_list *out) {
     registry_entry_list_init(out);
 
     const char *segment = registry_kind_path(kind);
@@ -514,10 +505,10 @@ bool registry_fetch_catalogue_watched(registry_kind kind, bool refresh,
     char filename[REGISTRY_NAME_MAX * 2];
     char path[PICKUP_PATHS_MAX];
 
-    if (!registry_base_url(base, sizeof base)
-        || !fs_format_path(url, sizeof url, "%s/%s/%s", base, API_PREFIX, segment)
-        || !fs_format_path(filename, sizeof filename, CATALOGUE_CACHE_FORMAT, segment)
-        || !cache_file(filename, path, sizeof path))
+    if (!registry_base_url(base, sizeof base) ||
+        !fs_format_path(url, sizeof url, "%s/%s/%s", base, API_PREFIX, segment) ||
+        !fs_format_path(filename, sizeof filename, CATALOGUE_CACHE_FORMAT, segment) ||
+        !cache_file(filename, path, sizeof path))
         return false;
 
     char *text = fetch_json(url, path, true, refresh, tick, context);
@@ -533,17 +524,15 @@ bool registry_fetch_catalogue_watched(registry_kind kind, bool refresh,
     return ok;
 }
 
-bool registry_fetch_releases(registry_kind kind, const char *name,
-                             const char *version_filter, const char *target,
-                             bool refresh, registry_artifact_list *out) {
-    return registry_fetch_releases_watched(kind, name, version_filter, target,
-                                           refresh, NULL, NULL, out);
+bool registry_fetch_releases(registry_kind kind, const char *name, const char *version_filter,
+                             const char *target, bool refresh, registry_artifact_list *out) {
+    return registry_fetch_releases_watched(kind, name, version_filter, target, refresh, NULL, NULL,
+                                           out);
 }
 
 bool registry_fetch_releases_watched(registry_kind kind, const char *name,
-                                     const char *version_filter, const char *target,
-                                     bool refresh, http_tick tick, void *context,
-                                     registry_artifact_list *out) {
+                                     const char *version_filter, const char *target, bool refresh,
+                                     http_tick tick, void *context, registry_artifact_list *out) {
     registry_artifact_list_init(out);
     if (!registry_name_is_simple(name))
         return false;
@@ -554,10 +543,10 @@ bool registry_fetch_releases_watched(registry_kind kind, const char *name,
     char filename[REGISTRY_NAME_MAX * 3];
     char path[PICKUP_PATHS_MAX];
 
-    if (!registry_base_url(base, sizeof base)
-        || !fs_format_path(url, sizeof url, "%s/%s/%s/%s", base, API_PREFIX, segment, name)
-        || !fs_format_path(filename, sizeof filename, RELEASES_CACHE_FORMAT, segment, name)
-        || !cache_file(filename, path, sizeof path))
+    if (!registry_base_url(base, sizeof base) ||
+        !fs_format_path(url, sizeof url, "%s/%s/%s/%s", base, API_PREFIX, segment, name) ||
+        !fs_format_path(filename, sizeof filename, RELEASES_CACHE_FORMAT, segment, name) ||
+        !cache_file(filename, path, sizeof path))
         return false;
 
     char *text = fetch_json(url, path, true, refresh, tick, context);
@@ -576,7 +565,9 @@ bool registry_find(const char *name, bool refresh, registry_entry *out) {
         return false;
 
     static const registry_kind order[] = {
-        registry_kind_toolchain, registry_kind_tool, registry_kind_package,
+        registry_kind_toolchain,
+        registry_kind_tool,
+        registry_kind_package,
     };
 
     for (size_t i = 0; i < sizeof order / sizeof order[0]; i++) {
@@ -610,9 +601,9 @@ bool registry_search_watched(const char *query, http_tick tick, void *context,
     char url[REGISTRY_URL_MAX];
     char path[PICKUP_PATHS_MAX];
 
-    if (!registry_base_url(base, sizeof base)
-        || !fs_format_path(url, sizeof url, "%s/%s/search?q=%s", base, API_PREFIX, query)
-        || !cache_file(SEARCH_CACHE_FILE, path, sizeof path))
+    if (!registry_base_url(base, sizeof base) ||
+        !fs_format_path(url, sizeof url, "%s/%s/search?q=%s", base, API_PREFIX, query) ||
+        !cache_file(SEARCH_CACHE_FILE, path, sizeof path))
         return false;
 
     char *text = fetch_json(url, path, false, false, tick, context);

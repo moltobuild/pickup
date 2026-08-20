@@ -139,6 +139,26 @@ static int report_toolchain_installed(const install_report *report,
     return exit_ok;
 }
 
+/*
+ * Split "clang@22.1.0" into "clang" and "22.1.0". Returns false when `raw`
+ * carries no '@', which is the common case and not an error.
+ */
+static bool split_versioned_name(const char *raw, char *name, size_t name_size, char *version,
+                                 size_t version_size) {
+    const char *at = strchr(raw, '@');
+    if (at == NULL)
+        return false;
+
+    size_t length = (size_t)(at - raw);
+    if (length >= name_size)
+        length = name_size - 1;
+    memcpy(name, raw, length);
+    name[length] = '\0';
+
+    snprintf(version, version_size, "%s", at + 1);
+    return true;
+}
+
 /* Find the one artifact to install, or report why there is none. */
 static int choose(const install_command_request *request, const registry_entry *entry,
                   const char *target, registry_artifact *out) {

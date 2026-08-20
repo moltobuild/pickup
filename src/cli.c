@@ -74,7 +74,10 @@ static const cli_option search_options[] = {
 /* What `pickup install` accepts. */
 static const cli_option install_options[] = {
     {"--version", 'v', cli_opt_value, "<version>",
-     "Version to install, whole or partial (default: the newest offered)", NULL},
+     "Version to install, whole or partial (default: the newest offered); "
+     "same as naming it in <name>, e.g. clang@22.1.0", 
+     NULL
+    },
     {"--dry-run", 0, cli_opt_flag, NULL, "Report what would be installed and download nothing",
      NULL},
     {"--refresh", 0, cli_opt_flag, NULL,

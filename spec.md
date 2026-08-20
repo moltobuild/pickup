@@ -529,7 +529,7 @@ Commands:
 - `resolve` — the best toolchain for a set of requirements
 - `scan` — rebuild the inventory
 - `search [name]` — what the registry publishes, or one name's versions
-- `install <name>` — add a toolchain or a tool
+- `install <name>[@version]` — add a toolchain or a tool
 - `uninstall <toolchain>` — remove a toolchain Pickup installed
 - `default [toolchain]` — show or set the toolchain `resolve` should prefer
 

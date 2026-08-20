@@ -193,6 +193,23 @@ static int choose(const install_command_request *request, const registry_entry *
 }
 
 int install_command_run(const install_command_request *request) {
+   /* "install clang@22.1.0" is "install clang --version 22.1.0" spelled as
+       one token; naming the version twice is a conflict, not emphasis. */
+    char split_name[REGISTRY_NAME_MAX];
+    char split_version[REGISTRY_VERSION_MAX];
+    install_command_request resolved = *request;
+    if (request->name != NULL &&
+        split_versioned_name(request->name, split_name, sizeof split_name, split_version,
+                             sizeof split_version)) {
+        if (request->version != NULL && request->version[0] != '\0') {
+            fprintf(stderr, "pickup: '%s' already names a version; --version %s is redundant\n",
+                    request->name, request->version);
+            return exit_usage_error;
+        }
+        resolved.name = split_name;
+        resolved.version = split_version;
+        request = &resolved;
+    }
     if (!registry_name_is_simple(request->name)) {
         fprintf(stderr, "pickup: '%s' is not a name the registry could publish\n",
                 request->name != NULL ? request->name : "");

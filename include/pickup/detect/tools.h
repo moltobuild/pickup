@@ -25,6 +25,10 @@
 typedef enum {
     tool_formatter,
     tool_linter,
+    /* Nothing in a build runs one: it is what an editor talks to. It is here
+       because it has to match the compiler it indexes for, which is exactly
+       what this registry knows and a distribution package does not. */
+    tool_language_server,
 } tool_kind;
 
 #define TOOL_NAME_MAX 64
@@ -33,7 +37,7 @@ typedef enum {
    feedstock it was built from, and a commit hash. */
 #define TOOL_VERSION_MAX 256
 
-/* Most tools reported. Two kinds, with a few candidates each. */
+/* Most tools reported. A few candidates per kind. */
 #define TOOLS_MAX 8
 
 typedef struct {
@@ -50,7 +54,8 @@ typedef struct {
    installed. Returns how many were written to `out`. */
 [[nodiscard]] size_t tools_discover(dev_tool *out, size_t max);
 
-/* The name of a kind, for reports: "formatter", "linter". Never NULL. */
+/* The name of a kind, for reports: "formatter", "linter",
+   "language server". Never NULL. */
 [[nodiscard]] const char *tool_kind_name(tool_kind kind);
 
 /* What Pickup would install to provide `kind`, as a package name it knows how

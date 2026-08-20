@@ -34,6 +34,7 @@ static const tool_candidate candidates[] = {
     {"clang-format", tool_formatter},
     {"clang-tidy", tool_linter},
     {"cppcheck", tool_linter},
+    {"clangd", tool_language_server},
 };
 
 #define CANDIDATE_COUNT (sizeof candidates / sizeof candidates[0])
@@ -41,6 +42,7 @@ static const tool_candidate candidates[] = {
 /* What `install` is told to fetch for each kind. */
 #define PACKAGE_FORMATTER "clang-format"
 #define PACKAGE_LINTER "clang-tidy"
+#define PACKAGE_LANGUAGE_SERVER "clangd"
 
 const char *tool_kind_name(tool_kind kind) {
     switch (kind) {
@@ -48,6 +50,8 @@ const char *tool_kind_name(tool_kind kind) {
         return "formatter";
     case tool_linter:
         return "linter";
+    case tool_language_server:
+        return "language server";
     }
     return "tool";
 }
@@ -58,6 +62,8 @@ const char *tool_kind_package(tool_kind kind) {
         return PACKAGE_FORMATTER;
     case tool_linter:
         return PACKAGE_LINTER;
+    case tool_language_server:
+        return PACKAGE_LANGUAGE_SERVER;
     }
     return PACKAGE_FORMATTER;
 }

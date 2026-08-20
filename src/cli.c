@@ -176,7 +176,7 @@ static const cli_command commands[] = {
      sizeof resolve_options / sizeof resolve_options[0], handle_resolve},
     {"search", "List what the registry publishes, or the versions of one of it", "[name]",
      search_options, sizeof search_options / sizeof search_options[0], handle_search},
-    {"install", "Download and install a toolchain or a tool from the registry", "<name>",
+    {"install", "Download and install a toolchain or a tool from the registry", "<name>[@version]",
      install_options, sizeof install_options / sizeof install_options[0], handle_install},
     {"uninstall", "Remove a toolchain pickup installed", "<toolchain>", uninstall_options,
      sizeof uninstall_options / sizeof uninstall_options[0], handle_uninstall},

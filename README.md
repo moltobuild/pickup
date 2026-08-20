@@ -411,6 +411,7 @@ VERSION  SIZE  TARGET        STATUS
 
 ```sh
 pickup search clang --version 19
+pickup install clang@19.1.6               # same thing, spelled as one token
 pickup install clang                      # the newest offered
 pickup install clang --version 19.1.6
 pickup install clang --dry-run            # resolve it, download nothing

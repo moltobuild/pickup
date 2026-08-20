@@ -4,7 +4,8 @@
 #include <stdbool.h>
 
 typedef struct {
-    const char *name;    /* what the registry publishes it as */
+    const char *name;    /* what the registry publishes it as; may carry its own
+                             "@version", e.g. "clang@22.1.0" */
     const char *version; /* exact or partial; NULL for the newest offered */
     bool dry_run;        /* resolve and report, download nothing */
     bool refresh;        /* ignore the cached catalogue and ask again */

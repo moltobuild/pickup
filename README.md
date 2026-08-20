@@ -82,7 +82,7 @@ pickup doctor              # what stops this machine from building, and what fix
 pickup scan                # re-probe everything and rewrite the cache
 pickup resolve [options]   # the best toolchain for a set of requirements
 pickup search [name]       # what the registry publishes, or one name's versions
-pickup install <name>      # download and install one
+pickup install <name>[@version]      # download and install one
 pickup uninstall <name>    # remove one pickup installed
 pickup default [name]      # show or set the one resolve should prefer
 ```

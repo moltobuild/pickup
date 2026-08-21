@@ -1,13 +1,13 @@
 # Pickup
 
-The toolchain manager of the [Molto](../molto) ecosystem. See [`spec.md`](spec.md)
-for the design; the RFC process it inherits lives in [Molto](../molto/rfcs/).
+The toolchain manager of the [Molto](https://github.com/moltobuild/molto) ecosystem. See [`spec.md`](spec.md)
+for the design; the RFC process it inherits lives in [Molto](https://github.com/moltobuild/molto/rfcs/).
 
 Pickup answers one question truthfully: **which compilers exist on this machine,
 and what can each of them actually do?**
 
-That is what lets a project manifest say *what it needs* instead of *which
-machine it was written on*.
+That is what lets a project manifest say _what it needs_ instead of _which
+machine it was written on_.
 
 ## Install
 
@@ -39,7 +39,7 @@ A compiler that accepts a flag has not necessarily implemented the standard
 behind it. On one ordinary Linux box:
 
 | compiler | accepts `-std=c2x` | compiles `[[nodiscard]]` |
-|----------|--------------------|--------------------------|
+| -------- | ------------------ | ------------------------ |
 | gcc 9    | yes                | **no**                   |
 | gcc 11   | yes                | yes                      |
 | gcc 12   | yes                | yes                      |
@@ -60,7 +60,7 @@ make build        # produces build/pickup
 molto build       # produces build/debug/pickup
 ```
 
-Both work. `Project.toml` describes the build completely, so [molto](../molto)
+Both work. `Project.toml` describes the build completely, so [molto](https://github.com/moltobuild/molto)
 builds pickup exactly as it builds anything else. The Makefile remains because
 the first pickup has to be compiled by something that does not need pickup to
 find a compiler.
@@ -203,7 +203,7 @@ a compiler to rebuild it.
 
 ### What is wrong with this machine
 
-The capability catalog tests the *language*, on purpose: its probes avoid
+The capability catalog tests the _language_, on purpose: its probes avoid
 headers so that a compiler is not failed for the state of the library beside
 it. That leaves a second question, which `doctor` asks — can this compiler
 produce a program that runs?
@@ -232,8 +232,8 @@ Which is worth spelling out for the run above: a missing formatter is a `✗`, s
 that machine makes `pickup doctor` exit 1. In CI, that is the difference between
 a gate and a report.
 
-A report that only lists problems answers *what is broken* and leaves *what
-does this machine have* unanswered, which is the question asked far more often.
+A report that only lists problems answers _what is broken_ and leaves _what
+does this machine have_ unanswered, which is the question asked far more often.
 So the summary lines come first, and appear whether or not anything is wrong.
 
 Nothing is hidden silently: the count at the end says how much was left out,
@@ -478,7 +478,7 @@ verify it. There is no flag to switch this off, because there is no longer a
 case it would serve.
 
 **Nothing is trusted for having unpacked.** A compiler has to compile, link and
-*run* a program before it is adopted; the feature count above is part of that
+_run_ a program before it is adopted; the feature count above is part of that
 answer. A tool has nothing to compile, so what stands in for it is that the
 binary the registry named actually answers. Whatever fails leaves nothing
 installed.
@@ -486,7 +486,7 @@ installed.
 **Nothing published about it is obeyed.** The registry says which flags an
 artifact was built with, and Pickup shows them and then works out its own. Those
 metadata describe the machine that built the artifact; the flag that makes a
-compiler work here names a directory on *this* machine. A Clang that has to be
+compiler work here names a directory on _this_ machine. A Clang that has to be
 pointed at a particular GCC installation, or a GCC that carries a newer
 libstdc++ than the system and cannot run what it links until the loader is told
 where it is, are both discovered by trying — never by reading.
@@ -538,7 +538,6 @@ Pickup reads that key and never writes it. Pointing it somewhere else decides
 which registry to trust, and a command able to change it would be a command able
 to redirect every future install.
 
-
 ### Packing what it installs
 
 The registry serves what someone put in it, and `scripts/pack_toolchain.sh` is
@@ -577,7 +576,6 @@ Before writing the archive it compiles, links and **runs** a program in both C
 and C++ out of the trimmed tree, for the reason `spec.md` gives: counting
 features proves nothing, because the probes avoid headers on purpose and a
 compiler with a broken sysroot passes every one of them.
-
 
 ### Output for machines
 
@@ -720,7 +718,7 @@ skips the question anywhere.
 ### Exit codes
 
 | Code | Meaning                            |
-|------|------------------------------------|
+| ---- | ---------------------------------- |
 | 0    | Success                            |
 | 1    | Operation failed                   |
 | 2    | Invalid usage                      |

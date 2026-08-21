@@ -529,13 +529,16 @@ Commands:
 - `resolve` — the best toolchain for a set of requirements
 - `scan` — rebuild the inventory
 - `search [name]` — what the registry publishes, or one name's versions
-- `install <name>` — add a toolchain or a tool
+- `install <name>[@version]` — add a toolchain or a tool
 - `uninstall <toolchain>` — remove a toolchain Pickup installed
 - `default [toolchain]` — show or set the toolchain `resolve` should prefer
 
 `search` and `install` take `--version`, which may name fewer components than
 the version has: `14` means any 14, `14.2` any 14.2. Without it, `install` takes
-the newest offered — which is never one the registry has withdrawn.
+the newest offered — which is never one the registry has withdrawn. `install`
+also accepts the version folded into the name, `clang@22.1.0`, equivalent to
+`clang --version 22.1.0`; naming it both ways at once is refused rather than
+guessed at.
 
 `uninstall` removes only what Pickup installed. A compiler that was already on
 the machine belongs to its package manager, and a query naming more than one

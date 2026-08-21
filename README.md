@@ -82,7 +82,7 @@ pickup doctor              # what stops this machine from building, and what fix
 pickup scan                # re-probe everything and rewrite the cache
 pickup resolve [options]   # the best toolchain for a set of requirements
 pickup search [name]       # what the registry publishes, or one name's versions
-pickup install <name>      # download and install one
+pickup install <name>[@version]      # download and install one
 pickup uninstall <name>    # remove one pickup installed
 pickup default [name]      # show or set the one resolve should prefer
 ```
@@ -411,6 +411,7 @@ VERSION  SIZE  TARGET        STATUS
 
 ```sh
 pickup search clang --version 19
+pickup install clang@19.1.6               # same thing, spelled as one token
 pickup install clang                      # the newest offered
 pickup install clang --version 19.1.6
 pickup install clang --dry-run            # resolve it, download nothing

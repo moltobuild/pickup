@@ -74,7 +74,9 @@ static const cli_option search_options[] = {
 /* What `pickup install` accepts. */
 static const cli_option install_options[] = {
     {"--version", 'v', cli_opt_value, "<version>",
-     "Version to install, whole or partial (default: the newest offered)", NULL},
+     "Version to install, whole or partial (default: the newest offered); "
+     "same as naming it in <name>, e.g. clang@22.1.0",
+     NULL},
     {"--dry-run", 0, cli_opt_flag, NULL, "Report what would be installed and download nothing",
      NULL},
     {"--refresh", 0, cli_opt_flag, NULL,
@@ -173,7 +175,7 @@ static const cli_command commands[] = {
      sizeof resolve_options / sizeof resolve_options[0], handle_resolve},
     {"search", "List what the registry publishes, or the versions of one of it", "[name]",
      search_options, sizeof search_options / sizeof search_options[0], handle_search},
-    {"install", "Download and install a toolchain or a tool from the registry", "<name>",
+    {"install", "Download and install a toolchain or a tool from the registry", "<name>[@version]",
      install_options, sizeof install_options / sizeof install_options[0], handle_install},
     {"uninstall", "Remove a toolchain pickup installed", "<toolchain>", uninstall_options,
      sizeof uninstall_options / sizeof uninstall_options[0], handle_uninstall},

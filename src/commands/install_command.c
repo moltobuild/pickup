@@ -139,6 +139,26 @@ static int report_toolchain_installed(const install_report *report,
     return exit_ok;
 }
 
+/*
+ * Split "clang@22.1.0" into "clang" and "22.1.0". Returns false when `raw`
+ * carries no '@', which is the common case and not an error.
+ */
+static bool split_versioned_name(const char *raw, char *name, size_t name_size, char *version,
+                                 size_t version_size) {
+    const char *at = strchr(raw, '@');
+    if (at == NULL)
+        return false;
+
+    size_t length = (size_t)(at - raw);
+    if (length >= name_size)
+        length = name_size - 1;
+    memcpy(name, raw, length);
+    name[length] = '\0';
+
+    snprintf(version, version_size, "%s", at + 1);
+    return true;
+}
+
 /* Find the one artifact to install, or report why there is none. */
 static int choose(const install_command_request *request, const registry_entry *entry,
                   const char *target, registry_artifact *out) {
@@ -173,6 +193,22 @@ static int choose(const install_command_request *request, const registry_entry *
 }
 
 int install_command_run(const install_command_request *request) {
+    /* "install clang@22.1.0" is "install clang --version 22.1.0" spelled as
+        one token; naming the version twice is a conflict, not emphasis. */
+    char split_name[REGISTRY_NAME_MAX];
+    char split_version[REGISTRY_VERSION_MAX];
+    install_command_request resolved = *request;
+    if (request->name != NULL && split_versioned_name(request->name, split_name, sizeof split_name,
+                                                      split_version, sizeof split_version)) {
+        if (request->version != NULL && request->version[0] != '\0') {
+            fprintf(stderr, "pickup: '%s' already names a version; --version %s is redundant\n",
+                    request->name, request->version);
+            return exit_usage_error;
+        }
+        resolved.name = split_name;
+        resolved.version = split_version;
+        request = &resolved;
+    }
     if (!registry_name_is_simple(request->name)) {
         fprintf(stderr, "pickup: '%s' is not a name the registry could publish\n",
                 request->name != NULL ? request->name : "");

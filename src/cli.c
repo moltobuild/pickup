@@ -2,6 +2,7 @@
 
 #include <pickup/commands/default_command.h>
 #include <pickup/commands/doctor_command.h>
+#include <pickup/commands/host_command.h>
 #include <pickup/commands/install_command.h>
 #include <pickup/commands/list_command.h>
 #include <pickup/commands/resolve_command.h>
@@ -142,6 +143,8 @@ static int handle_install(const cli_args *args) {
 
 static int handle_tools(const cli_args *args) { return tools_command_run(wants_toml(args)); }
 
+static int handle_host(const cli_args *args) { return host_command_run(wants_toml(args)); }
+
 static int handle_doctor(const cli_args *args) {
     return doctor_command_run(wants_toml(args), cli_args_flag(args, "--all"));
 }
@@ -167,6 +170,8 @@ static const cli_command commands[] = {
     {"show", "Show one toolchain in detail, feature by feature", "<name>", format_option,
      sizeof format_option / sizeof format_option[0], handle_show},
     {"scan", "Probe every compiler again and rewrite the cache", NULL, NULL, 0, handle_scan},
+    {"host", "Report what the registry calls this machine", NULL, format_option,
+     sizeof format_option / sizeof format_option[0], handle_host},
     {"tools", "List the formatter and linter this machine has, and where", NULL, format_option,
      sizeof format_option / sizeof format_option[0], handle_tools},
     {"doctor", "Report what stops this machine from building, and what fixes it", NULL,

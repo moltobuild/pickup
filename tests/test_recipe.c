@@ -208,8 +208,7 @@ static bool fake_build(fake_toolchain *fake, const fake_accepts *accepts) {
 
 /* A compiler the host owns: nothing about it is under a pickup home. */
 static bool fake_setup(fake_toolchain *fake, const fake_accepts *accepts) {
-    snprintf(fake->root, sizeof fake->root, "%s", "/tmp/pickup_recipe_XXXXXX");
-    if (mkdtemp(fake->root) == NULL)
+    if (!moltest_temp_dir("pickup_recipe", fake->root, sizeof fake->root))
         return false;
     if (!fs_format_path(fake->prefix, sizeof fake->prefix, "%s", fake->root))
         return false;
@@ -222,8 +221,7 @@ static bool fake_setup(fake_toolchain *fake, const fake_accepts *accepts) {
    the driver in its bin the way a real one has. */
 static bool fake_setup_installed(fake_toolchain *fake, const fake_accepts *accepts,
                                  home_fixture *home) {
-    snprintf(fake->root, sizeof fake->root, "%s", "/tmp/pickup_recipe_XXXXXX");
-    if (mkdtemp(fake->root) == NULL)
+    if (!moltest_temp_dir("pickup_recipe", fake->root, sizeof fake->root))
         return false;
 
     char home_dir[PICKUP_PATHS_MAX];

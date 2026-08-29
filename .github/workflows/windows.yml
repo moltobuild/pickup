@@ -104,12 +104,18 @@ jobs:
             make
             mingw-w64-x86_64-gcc
 
+      # `CC=gcc` because the bootstrap Makefile reaches for `gcc-12` when nobody
+      # names a compiler, and MSYS2 calls its own `gcc`. The Makefile is right
+      # to pin a version on the machine it was written for — pickup must not
+      # need pickup to find a compiler — so the override belongs here.
       - name: Build
-        run: make build
+        run: make build CC=gcc
 
-      - name: Run the suite
-        run: make test
-
+      # Before the suite, deliberately. A job that stops at the first failure
+      # reports whatever it reached, and "does it find a compiler at all" is
+      # the headline this job exists to answer — worth more, while the port is
+      # in progress, than knowing which of two hundred cases went red.
+      #
       # Not `pickup list` on its own: that exits 0 with an empty table, which is
       # exactly the failure this is here to catch. The assertion is that it
       # named something.
@@ -125,3 +131,6 @@ jobs:
       # compiler and then cannot answer for one is a pickup molto cannot use.
       - name: And it can answer molto's question
         run: ./build/pickup resolve --lang c
+
+      - name: Run the suite
+        run: make test CC=gcc

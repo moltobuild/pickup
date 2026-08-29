@@ -1,0 +1,127 @@
+name: Windows
+
+# Deliberately not part of `ci.yml`.
+#
+# This file measures how far the Windows port has got; `ci.yml` is what has to
+# be green. Both jobs below fail today and are marked `continue-on-error` for
+# that reason — a red gate nobody can fix teaches people to ignore red gates.
+#
+# When they pass, the flag comes off and they move into `ci.yml`. That move is
+# the definition of "supported" in RFC-0017: a platform is not named as
+# supported until the suite proves it, and pickup's own spec says naming one
+# before it is proven is the single thing this project exists not to do.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  # Half one: does the code compile for Windows at all?
+  #
+  # Asked on a Linux runner with a cross compiler, because it needs no Windows
+  # queue and no MSYS2 install — a minute against ten. It catches every missing
+  # declaration and every struct field that differs, which is what stands
+  # between here and a binary.
+  #
+  # Measured on 2026-08-28, before any of this was fixed: 28 errors across
+  # `src/` and 55 across `tests/`, which are nine distinct problems and three.
+  # Eleven of the source sites are one-line substitutions — `realpath` six
+  # times, `lstat` twice, `st_mtim` twice, `mkdir`'s second argument once — and
+  # every remaining one is inside `process_service.c`, where `fork` + `pipe` +
+  # `dup2` + `waitpid` has to become `CreateProcess`. The suite's three are
+  # `setenv`, `unsetenv` and `mkdtemp`.
+  #
+  # What this job cannot say anything about is how the binary behaves. That is
+  # the whole reason half two exists.
+  cross:
+    name: Compiles for Windows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Install the mingw-w64 cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y -o Acquire::Retries=3 gcc-mingw-w64-x86-64
+
+      - name: Compile pickup for Windows
+        run: make build CC=x86_64-w64-mingw32-gcc
+
+      # Built and not run: these are Windows binaries on a Linux runner. Running
+      # them is half two's job. Building them is still worth doing here, because
+      # the suite has POSIX of its own — `setenv`, `unsetenv` and `mkdtemp` — and
+      # a port whose tests cannot be compiled is a port that cannot be proven.
+      - name: Compile its suite for Windows
+        run: make build/pickup_tests CC=x86_64-w64-mingw32-gcc
+
+      - name: And it really is a Windows binary
+        run: file build/pickup* | grep -q 'PE32+ executable'
+
+  # Half two: does the binary do pickup's job?
+  #
+  # It has to be a Windows runner, because the question is about behaviour and
+  # no cross build can answer it.
+  #
+  # The smoke test is the point of this job and it is not ceremony. Pickup
+  # answers "which compilers does this machine have" by walking PATH and
+  # matching names, and on Windows every candidate is `clang.exe` rather than
+  # `clang` — a suffix `scanner_is_candidate_name` does not accept. So a pickup
+  # that compiles will start, run, report zero toolchains and exit 0.
+  #
+  # A job that only built would go green and hand over a binary that finds
+  # nothing. That is worse than a compile error, because it looks like success.
+  windows:
+    name: Works on Windows
+    runs-on: windows-2022
+    timeout-minutes: 25
+    continue-on-error: true
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      # MSYS2 rather than the runner's own MinGW: it brings `make`, which the
+      # bootstrap Makefile needs, and a gcc from the same family the cross job
+      # compiles with, so the two halves disagree about as little as possible.
+      # TODO: pin to an exact tag, the way every other action here is pinned.
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            make
+            mingw-w64-x86_64-gcc
+
+      - name: Build
+        run: make build
+
+      - name: Run the suite
+        run: make test
+
+      # Not `pickup list` on its own: that exits 0 with an empty table, which is
+      # exactly the failure this is here to catch. The assertion is that it
+      # named something.
+      - name: It finds the compiler this machine has
+        run: |
+          ./build/pickup --version
+          ./build/pickup scan
+          ./build/pickup list | tee found.txt
+          grep -qE '^(gcc|clang|cc)' found.txt \
+            || { echo "pickup found no toolchain on a machine that has one"; exit 1; }
+
+      # `resolve` is the question molto actually asks. A pickup that lists a
+      # compiler and then cannot answer for one is a pickup molto cannot use.
+      - name: And it can answer molto's question
+        run: ./build/pickup resolve --lang c

@@ -1,5 +1,7 @@
 #include <pickup/services/fs_service.h>
 
+#include <pickup/services/paths_service.h>
+
 #include <dirent.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -347,5 +349,36 @@ bool fs_executable_name(const char *file, char *out, size_t size) {
         return false;
     memcpy(out, file, bare);
     out[bare] = '\0';
+    return true;
+}
+
+/* What separates one directory from the next in PATH. A colon is part of a
+   drive letter on Windows, so the platforms cannot share one. */
+#ifdef _WIN32
+#define PATH_ENTRY_SEPARATOR ';'
+#else
+#define PATH_ENTRY_SEPARATOR ':'
+#endif
+
+bool fs_walk_path(const char *path_env, bool (*visit)(const char *directory, void *context),
+                  void *context) {
+    if (path_env == NULL)
+        return true;
+
+    for (const char *cursor = path_env; *cursor != '\0';) {
+        const char *separator = strchr(cursor, PATH_ENTRY_SEPARATOR);
+        const size_t length = separator != NULL ? (size_t)(separator - cursor) : strlen(cursor);
+
+        if (length > 0 && length < PICKUP_PATHS_MAX) {
+            char directory[PICKUP_PATHS_MAX];
+            memcpy(directory, cursor, length);
+            directory[length] = '\0';
+            if (!visit(directory, context))
+                return false;
+        }
+        if (separator == NULL)
+            break;
+        cursor = separator + 1;
+    }
     return true;
 }

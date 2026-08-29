@@ -13,9 +13,6 @@
 /* A directory entry's name, which no filesystem lets past 255. */
 #define SCANNER_NAME_SIZE 256
 
-/* Separator between directories in PATH. */
-#define PATH_SEPARATOR ':'
-
 /* Names that make a file worth probing. A prefix match also accepts the
    versioned forms the distributions ship (gcc-12, clang-14). */
 static const char *const candidate_prefixes[] = {
@@ -204,6 +201,12 @@ bool scanner_collect_installed(const char *toolchains_dir, str_list *out) {
     return ok;
 }
 
+/* One directory of PATH, for the walk below. A directory that cannot be read
+   stops nothing; one that runs out of memory stops everything. */
+static bool visit_for_candidates(const char *directory, void *context) {
+    return scan_directory(directory, context);
+}
+
 bool scanner_collect(const char *path_env, str_list *out) {
     if (path_env == NULL)
         return true;
@@ -212,30 +215,7 @@ bool scanner_collect(const char *path_env, str_list *out) {
     str_list_init(&candidates.found);
     str_list_init(&candidates.resolved);
 
-    const char *cursor = path_env;
-    while (*cursor != '\0') {
-        const char *separator = strchr(cursor, PATH_SEPARATOR);
-        size_t length = separator != NULL ? (size_t)(separator - cursor) : strlen(cursor);
-
-        if (length > 0) {
-            char directory[SCANNER_PATH_SIZE];
-            if (length < sizeof directory) {
-                memcpy(directory, cursor, length);
-                directory[length] = '\0';
-                if (!scan_directory(directory, &candidates)) {
-                    str_list_free(&candidates.found);
-                    str_list_free(&candidates.resolved);
-                    return false;
-                }
-            }
-        }
-
-        if (separator == NULL)
-            break;
-        cursor = separator + 1;
-    }
-
-    bool ok = true;
+    bool ok = fs_walk_path(path_env, visit_for_candidates, &candidates);
     for (size_t i = 0; ok && i < str_list_count(&candidates.found); i++)
         ok = str_list_push(out, str_list_get(&candidates.found, i));
 

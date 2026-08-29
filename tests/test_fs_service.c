@@ -93,3 +93,71 @@ MOLTEST(an_executable_name_that_does_not_fit_is_refused) {
     char bare[4];
     EXPECT_FALSE(fs_executable_name("a-very-long-compiler-name", bare, sizeof bare));
 }
+
+/* --- fs_walk_path --- */
+
+typedef struct {
+    char seen[8][PICKUP_PATHS_MAX];
+    size_t count;
+    size_t stop_after; /* 0 means never stop */
+} walk_record;
+
+static bool record_directory(const char *directory, void *context) {
+    walk_record *record = context;
+    if (record->count < 8)
+        snprintf(record->seen[record->count], PICKUP_PATHS_MAX, "%s", directory);
+    record->count++;
+    return record->stop_after == 0 || record->count < record->stop_after;
+}
+
+/*
+ * The separator is the platform's, and this is the case that says why.
+ *
+ * A colon belongs to a drive letter on Windows, so splitting `C:\a;C:\b` on one
+ * yields four fragments that are not directories — which is exactly how pickup
+ * came to report "no compilers found on PATH" on a machine with a compiler.
+ */
+MOLTEST(walking_path_splits_on_what_the_platform_separates_with) {
+    walk_record record = {0};
+#ifdef _WIN32
+    EXPECT_TRUE(fs_walk_path("C:\\one;C:\\two", record_directory, &record));
+    ASSERT_EQ((size_t)2, record.count);
+    EXPECT_STREQ("C:\\one", record.seen[0]);
+    EXPECT_STREQ("C:\\two", record.seen[1]);
+#else
+    EXPECT_TRUE(fs_walk_path("/one:/two", record_directory, &record));
+    ASSERT_EQ((size_t)2, record.count);
+    EXPECT_STREQ("/one", record.seen[0]);
+    EXPECT_STREQ("/two", record.seen[1]);
+#endif
+}
+
+/* An empty entry is not the current directory: PATH says nothing there, and
+   visiting `.` would search wherever the caller happened to be standing. */
+MOLTEST(walking_path_skips_the_gaps) {
+    walk_record record = {0};
+#ifdef _WIN32
+    EXPECT_TRUE(fs_walk_path(";C:\\one;;C:\\two;", record_directory, &record));
+#else
+    EXPECT_TRUE(fs_walk_path(":/one::/two:", record_directory, &record));
+#endif
+    EXPECT_EQ((size_t)2, record.count);
+}
+
+MOLTEST(walking_path_stops_when_the_visitor_says_so) {
+    walk_record record = {.stop_after = 2};
+#ifdef _WIN32
+    EXPECT_FALSE(fs_walk_path("C:\\a;C:\\b;C:\\c", record_directory, &record));
+#else
+    EXPECT_FALSE(fs_walk_path("/a:/b:/c", record_directory, &record));
+#endif
+    EXPECT_EQ((size_t)2, record.count);
+}
+
+/* No PATH is not an error: it is a machine with nothing on it, which the
+   caller reports as finding nothing rather than as failing. */
+MOLTEST(walking_no_path_at_all_visits_nothing) {
+    walk_record record = {0};
+    EXPECT_TRUE(fs_walk_path(NULL, record_directory, &record));
+    EXPECT_EQ((size_t)0, record.count);
+}

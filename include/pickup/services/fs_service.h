@@ -104,4 +104,21 @@
  * answer does not fit. */
 [[nodiscard]] bool fs_executable_name(const char *file, char *out, size_t size);
 
+/* Walk the directories in `path_env` — the value of PATH — calling `visit` for
+ * each one in order. `visit` returns true to carry on and false to stop the
+ * walk; whatever it wanted to report goes in `context`.
+ *
+ * It exists because the separator is the platform's and was spelled twice: a
+ * colon on POSIX, a semicolon on Windows, where a colon belongs to a drive
+ * letter and splitting on it turns `C:\bin;D:\bin` into four things that are
+ * not directories. One loop means one place to be right about that.
+ *
+ * An empty entry is skipped rather than visited as the current directory, and
+ * one too long for `PICKUP_PATHS_MAX` is skipped rather than truncated: half a
+ * directory names a different one.
+ *
+ * False when `visit` stopped the walk, true when every directory was seen. */
+[[nodiscard]] bool fs_walk_path(const char *path_env,
+                                bool (*visit)(const char *directory, void *context), void *context);
+
 #endif /* PICKUP_FS_SERVICE_H */

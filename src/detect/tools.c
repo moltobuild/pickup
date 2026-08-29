@@ -15,9 +15,6 @@
 /* Room for the answer, which is a line or two. */
 #define ANSWER_SIZE 512
 
-/* Separator between directories in PATH. */
-#define PATH_SEPARATOR ':'
-
 /*
  * What Pickup looks for, in order of preference within each kind.
  *
@@ -169,30 +166,24 @@ static bool find_in(const char *directory, const tool_candidate *candidate, tool
     return accept(candidate, path, source, out);
 }
 
+/* What one directory of PATH is being asked, and what it answered. */
+typedef struct {
+    const tool_candidate *candidate;
+    dev_tool *out;
+    bool found;
+} tool_search;
+
+static bool visit_for_tool(const char *directory, void *context) {
+    tool_search *search = context;
+    search->found = find_in(directory, search->candidate, toolchain_source_system, search->out);
+    return !search->found; /* the first answer ends the walk */
+}
+
 /* Walk PATH looking for one candidate. */
 static bool find_on_path(const tool_candidate *candidate, dev_tool *out) {
-    const char *path_env = getenv("PATH");
-    if (path_env == NULL)
-        return false;
-
-    const char *cursor = path_env;
-    while (*cursor != '\0') {
-        const char *separator = strchr(cursor, PATH_SEPARATOR);
-        size_t length = separator != NULL ? (size_t)(separator - cursor) : strlen(cursor);
-
-        if (length > 0 && length < PICKUP_PATHS_MAX) {
-            char directory[PICKUP_PATHS_MAX];
-            memcpy(directory, cursor, length);
-            directory[length] = '\0';
-            if (find_in(directory, candidate, toolchain_source_system, out))
-                return true;
-        }
-
-        if (separator == NULL)
-            break;
-        cursor = separator + 1;
-    }
-    return false;
+    tool_search search = {.candidate = candidate, .out = out, .found = false};
+    (void)fs_walk_path(getenv("PATH"), visit_for_tool, &search);
+    return search.found;
 }
 
 /* And in the bin directory of everything Pickup installed, which is not on

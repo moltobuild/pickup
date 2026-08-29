@@ -9,6 +9,7 @@
 #include <sys/types.h>
 
 #ifdef _WIN32
+#include <ctype.h>
 #include <direct.h>
 #else
 #include <unistd.h>
@@ -314,4 +315,37 @@ bool fs_real_path(const char *path, char *out, size_t size) {
     const int written = snprintf(out, size, "%s", answer);
     free(answer);
     return written >= 0 && (size_t)written < size;
+}
+
+#ifdef _WIN32
+/* Case-insensitively, because a filesystem that does not distinguish `GCC.EXE`
+   from `gcc.exe` will hand back either. */
+static bool ends_with_exe(const char *file, size_t length) {
+    static const char suffix[] = ".exe";
+    const size_t width = sizeof suffix - 1;
+    if (length <= width)
+        return false;
+    const char *tail = file + length - width;
+    for (size_t i = 0; i < width; i++) {
+        if (tolower((unsigned char)tail[i]) != suffix[i])
+            return false;
+    }
+    return true;
+}
+#endif
+
+bool fs_executable_name(const char *file, char *out, size_t size) {
+    const size_t length = strlen(file);
+#ifdef _WIN32
+    if (!ends_with_exe(file, length))
+        return false;
+    const size_t bare = length - (sizeof ".exe" - 1);
+#else
+    const size_t bare = length;
+#endif
+    if (bare >= size)
+        return false;
+    memcpy(out, file, bare);
+    out[bare] = '\0';
+    return true;
 }

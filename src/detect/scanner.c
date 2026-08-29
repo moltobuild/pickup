@@ -10,6 +10,8 @@
 
 /* Size of the buffer used to compose the path of a directory entry. */
 #define SCANNER_PATH_SIZE 4096
+/* A directory entry's name, which no filesystem lets past 255. */
+#define SCANNER_NAME_SIZE 256
 
 /* Separator between directories in PATH. */
 #define PATH_SEPARATOR ':'
@@ -127,7 +129,14 @@ static bool scan_directory(const char *directory, candidate_list *out) {
     bool ok = true;
     const struct dirent *entry;
     while (ok && (entry = readdir(dir)) != NULL) {
-        if (!scanner_is_candidate_name(entry->d_name))
+        /* The name without the platform's executable suffix, and a refusal
+           when the file cannot be run by name at all — which on Windows is the
+           filter `access(X_OK)` below cannot be, since there is no execute bit
+           there for it to read. */
+        char bare[SCANNER_NAME_SIZE];
+        if (!fs_executable_name(entry->d_name, bare, sizeof bare))
+            continue;
+        if (!scanner_is_candidate_name(bare))
             continue;
         char path[SCANNER_PATH_SIZE];
         if (!fs_format_path(path, sizeof path, "%s/%s", directory, entry->d_name))

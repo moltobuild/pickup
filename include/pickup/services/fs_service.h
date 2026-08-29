@@ -90,4 +90,18 @@
  * "use what I gave you" say so themselves; this reports rather than guesses. */
 [[nodiscard]] bool fs_real_path(const char *path, char *out, size_t size);
 
+/* The name a file would be run by, with whatever the platform appends to an
+ * executable taken off.
+ *
+ * On POSIX that is the name itself: any file can carry the execute bit, and
+ * nothing is added to its name to say so. On Windows the suffix *is* the
+ * permission — a file called `gcc` cannot be run and `gcc.exe` can — so `.exe`
+ * is both required here and stripped, which is the filter that `access(X_OK)`
+ * provides on POSIX and cannot provide there, since Windows has no execute bit
+ * for it to read.
+ *
+ * False when the file cannot be run by name on this platform, or when the
+ * answer does not fit. */
+[[nodiscard]] bool fs_executable_name(const char *file, char *out, size_t size);
+
 #endif /* PICKUP_FS_SERVICE_H */

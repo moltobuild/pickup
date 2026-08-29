@@ -7,7 +7,66 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#ifdef _WIN32
+#include <direct.h>
+#else
 #include <unistd.h>
+#endif
+
+/*
+ * The platform, in one block, because every function below this line is one
+ * implementation (RFC-0017). A second `#ifdef` further down would be the first
+ * step towards two versions of this file pretending to be one.
+ */
+
+/* Windows has no mode argument: a directory's permissions are inherited from
+   its parent rather than stated at creation. */
+#ifdef _WIN32
+#define make_one_dir(path) _mkdir(path)
+#else
+#define make_one_dir(path) mkdir((path), 0755)
+#endif
+
+/*
+ * `stat` that does not follow a symlink.
+ *
+ * On Windows it does follow one, because there is no `lstat` and the reparse
+ * points that stand in for symlinks need a different API entirely. The two
+ * callers can live with it: one answers "is this a directory, without being
+ * fooled by a link to one", and the other adds up a tree without walking into
+ * a link that points back at it. Both are about not looping, and Windows
+ * requires a privilege to create the links that would cause the loop.
+ *
+ * Stated here rather than silently: it is a real difference in behaviour, and
+ * the day something creates those links on Windows this is where the answer
+ * has to change.
+ */
+static int stat_no_follow(const char *path, struct stat *out) {
+#ifdef _WIN32
+    return stat(path, out);
+#else
+    return lstat(path, out);
+#endif
+}
+
+/* Nanoseconds in one second, for composing a timestamp. */
+#define NANOS_PER_SECOND 1000000000LL
+
+/* Modification time in nanoseconds.
+ *
+ * Windows keeps whole seconds in `struct stat`, so the answer there is a
+ * second multiplied out rather than a second measured. What depends on this is
+ * freshness: two writes inside one second look simultaneous, and a rebuild
+ * that would have been triggered by nanoseconds is not. It is the honest
+ * ceiling of the interface, not a rounding this code chose. */
+static int64_t stat_mtime_ns(const struct stat *info) {
+#ifdef _WIN32
+    return (int64_t)info->st_mtime * NANOS_PER_SECOND;
+#else
+    return (int64_t)info->st_mtim.tv_sec * NANOS_PER_SECOND + (int64_t)info->st_mtim.tv_nsec;
+#endif
+}
 
 bool fs_path_exists(const char *path) {
     struct stat info;
@@ -15,7 +74,7 @@ bool fs_path_exists(const char *path) {
 }
 
 bool fs_make_dir(const char *path) {
-    if (mkdir(path, 0755) == 0)
+    if (make_one_dir(path) == 0)
         return true;
     /* Treat an already existing directory as success. */
     struct stat info;
@@ -117,7 +176,7 @@ bool fs_is_dir(const char *path) {
 
 bool fs_is_dir_no_follow(const char *path) {
     struct stat info;
-    return lstat(path, &info) == 0 && S_ISDIR(info.st_mode);
+    return stat_no_follow(path, &info) == 0 && S_ISDIR(info.st_mode);
 }
 
 bool fs_format_path(char *out, size_t size, const char *format, ...) {
@@ -176,14 +235,11 @@ bool fs_remove_tree(const char *path) {
     return rmdir(path) == 0 && ok;
 }
 
-/* Nanoseconds in one second, for composing a timestamp. */
-#define NANOS_PER_SECOND 1000000000LL
-
 bool fs_mtime_ns(const char *path, int64_t *out) {
     struct stat info;
     if (stat(path, &info) != 0)
         return false;
-    *out = (int64_t)info.st_mtim.tv_sec * NANOS_PER_SECOND + (int64_t)info.st_mtim.tv_nsec;
+    *out = stat_mtime_ns(&info);
     return true;
 }
 
@@ -202,7 +258,7 @@ bool fs_rename(const char *from, const char *to) { return rename(from, to) == 0;
    or send this walking forever. */
 static bool accumulate_tree(const char *path, long long *total) {
     struct stat info;
-    if (lstat(path, &info) != 0)
+    if (stat_no_follow(path, &info) != 0)
         return false;
 
     if (!S_ISDIR(info.st_mode)) {
@@ -242,4 +298,20 @@ bool fs_source_newer(const char *source, const char *target) {
     if (!fs_mtime_ns(source, &source_ns))
         return true; /* missing source: fail safe and rebuild */
     return source_ns > target_ns;
+}
+
+bool fs_real_path(const char *path, char *out, size_t size) {
+#ifdef _WIN32
+    /* `_fullpath` resolves `.` and `..` and makes the path absolute; it does
+       not follow reparse points, which is the same limitation stat_no_follow
+       records above. */
+    char *answer = _fullpath(NULL, path, 0);
+#else
+    char *answer = realpath(path, NULL);
+#endif
+    if (answer == NULL)
+        return false;
+    const int written = snprintf(out, size, "%s", answer);
+    free(answer);
+    return written >= 0 && (size_t)written < size;
 }

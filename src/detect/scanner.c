@@ -104,7 +104,7 @@ static const char *basename_of(const char *path) {
    `x86_64-linux-gnu-gcc-12`, and both invoke the same compiler. */
 static bool add_unique(candidate_list *list, const char *path) {
     char resolved[PATH_MAX];
-    if (realpath(path, resolved) == NULL)
+    if (!fs_real_path(path, resolved, sizeof resolved))
         return true; /* a broken link is not an error, just not a compiler */
 
     for (size_t i = 0; i < str_list_count(&list->resolved); i++) {

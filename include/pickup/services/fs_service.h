@@ -77,4 +77,17 @@
    so two edits within the same second are still told apart). */
 [[nodiscard]] bool fs_source_newer(const char *source, const char *target);
 
+/* The canonical form of `path`: symlinks followed, `.` and `..` resolved,
+   written into `out`.
+ *
+ * Here rather than at the six places that used to call `realpath` directly,
+ * because `realpath` is POSIX and the callers are not: keeping the platform
+ * inside this service is what lets the rest of the tree stay one
+ * implementation (RFC-0017).
+ *
+ * False when the path cannot be resolved — which for a symlink means a broken
+ * one — or when the answer does not fit. Callers that treat "unresolvable" as
+ * "use what I gave you" say so themselves; this reports rather than guesses. */
+[[nodiscard]] bool fs_real_path(const char *path, char *out, size_t size);
+
 #endif /* PICKUP_FS_SERVICE_H */

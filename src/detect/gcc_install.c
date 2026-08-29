@@ -86,7 +86,7 @@ bool gcc_install_has_libstdcxx(const char *directory) {
    nothing is kept as written: it is still what the driver said. */
 static bool add_install(gcc_install_list *list, const char *path) {
     char resolved[PATH_MAX];
-    const char *recorded = realpath(path, resolved) != NULL ? resolved : path;
+    const char *recorded = fs_real_path(path, resolved, sizeof resolved) ? resolved : path;
 
     for (size_t i = 0; i < list->count; i++) {
         if (strcmp(list->items[i].path, recorded) == 0)
@@ -108,7 +108,7 @@ static bool add_install(gcc_install_list *list, const char *path) {
    happened to spell it. */
 static size_t index_of(const gcc_install_list *list, const char *path) {
     char resolved[PATH_MAX];
-    const char *wanted = realpath(path, resolved) != NULL ? resolved : path;
+    const char *wanted = fs_real_path(path, resolved, sizeof resolved) ? resolved : path;
 
     for (size_t i = 0; i < list->count; i++) {
         if (strcmp(list->items[i].path, wanted) == 0)

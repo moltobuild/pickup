@@ -63,7 +63,7 @@ bool paths_owning_toolchain(const char *path, char *out, size_t out_size) {
        symlink while the compiler path was resolved: /home -> /var/home would
        otherwise make everything installed look like a system compiler. */
     char resolved[PATH_MAX];
-    const char *root = realpath(toolchains, resolved) != NULL ? resolved : toolchains;
+    const char *root = fs_real_path(toolchains, resolved, sizeof resolved) ? resolved : toolchains;
 
     size_t length = strlen(root);
     if (strncmp(path, root, length) != 0 || path[length] != '/')

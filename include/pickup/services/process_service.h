@@ -11,9 +11,19 @@ typedef struct {
     bool completed; /* false if the process could not be started or waited on */
 } process_result;
 
-/* A child still running. */
+/* A child still running.
+ *
+ * What identifies the child is the one thing in this header that a platform
+ * decides: a pid on POSIX, an object handle on Windows, and the two are not
+ * the same size or the same kind of thing. No caller reads the field — they
+ * pass the handle back to `process_poll` and `process_wait` — so the `#ifdef`
+ * stays here and never reaches the code that spawns anything (RFC-0017). */
 typedef struct {
+#ifdef _WIN32
+    void *process; /* HANDLE, opaque so callers need no windows.h */
+#else
     pid_t pid;
+#endif
     bool running;
 } process_handle;
 
@@ -54,5 +64,14 @@ typedef struct {
 
 /* Wait for a started child to finish and report how it went. */
 process_result process_wait(process_handle *handle);
+
+/* Pause for `milliseconds`, between one `process_poll` and the next.
+ *
+ * It belongs beside poll because it exists for poll: a caller watching a child
+ * has to wait before asking again. The two places that do were each spelling
+ * it with `nanosleep`, which mingw declares and does not provide — a call that
+ * compiles cleanly on Windows and then fails at link, which is why syntax
+ * checking alone never found it. */
+void process_pause_ms(unsigned milliseconds);
 
 #endif /* PICKUP_PROCESS_SERVICE_H */

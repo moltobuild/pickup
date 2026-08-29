@@ -130,7 +130,7 @@ bool archive_extract(const char *archive, const char *destination, int strip_com
 #define EXCLUDE_ARG_SIZE 256
 
 /* How often the child is looked in on while it works. */
-#define POLL_INTERVAL_NS 120000000L /* 0.12 s */
+#define POLL_INTERVAL_MS 120
 
 typedef struct {
     const char *argv[ARGV_MAX];
@@ -183,10 +183,7 @@ static bool build_command(tar_command *command, const char *archive, const char 
     return true;
 }
 
-static void wait_a_moment(void) {
-    struct timespec pause = {.tv_sec = 0, .tv_nsec = POLL_INTERVAL_NS};
-    nanosleep(&pause, NULL);
-}
+static void wait_a_moment(void) { process_pause_ms(POLL_INTERVAL_MS); }
 
 /* Show that it is still working, and how much has come out so far.
 

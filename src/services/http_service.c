@@ -19,7 +19,7 @@
 #define ARG_VERSION "--version"
 
 /* How often the growing file is measured while drawing the bar. */
-#define POLL_INTERVAL_NS 100000000L /* 0.1 s */
+#define POLL_INTERVAL_MS 100
 
 const char *http_requirement(void) { return CURL_COMMAND; }
 
@@ -69,10 +69,7 @@ bool http_download(const char *url, const char *dest) {
     return true;
 }
 
-static void wait_a_moment(void) {
-    struct timespec pause = {.tv_sec = 0, .tv_nsec = POLL_INTERVAL_NS};
-    nanosleep(&pause, NULL);
-}
+static void wait_a_moment(void) { process_pause_ms(POLL_INTERVAL_MS); }
 
 /* Draw the bar from the size of the file as it grows, which is why the total
    has to be known in advance: curl is not asked anything. */

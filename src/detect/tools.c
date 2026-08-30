@@ -158,10 +158,16 @@ static bool accept(const tool_candidate *candidate, const char *path, toolchain_
 /* Look for `candidate` inside one directory. */
 static bool find_in(const char *directory, const tool_candidate *candidate, toolchain_source source,
                     dev_tool *out) {
-    char path[PICKUP_PATHS_MAX];
-    if (!fs_format_path(path, sizeof path, "%s/%s", directory, candidate->name))
+    /* The name is what the tool is called; the file is what the directory
+       holds, and on Windows those differ by `.exe`. */
+    char file[PICKUP_NAME_MAX];
+    if (!fs_executable_file(candidate->name, file, sizeof file))
         return false;
-    if (access(path, X_OK) != 0)
+
+    char path[PICKUP_PATHS_MAX];
+    if (!fs_format_path(path, sizeof path, "%s/%s", directory, file))
+        return false;
+    if (!fs_path_exists(path))
         return false;
     return accept(candidate, path, source, out);
 }

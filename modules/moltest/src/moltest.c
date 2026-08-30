@@ -584,8 +584,16 @@ bool moltest_fake_program(const char *path, const char *spec, char *made, size_t
     if (moltest_self == NULL)
         return false;
 
+    /* Not appended twice. A caller may already hold a path the platform made
+       runnable — a temporary program is one — and `foo.exe.exe` is a file
+       nothing will start, beside the empty `foo.exe` the caller meant. */
+    const size_t suffix = sizeof MOLTEST_EXE_SUFFIX - 1;
+    const size_t length = strlen(path);
+    const bool already =
+        suffix > 0 && length >= suffix && strcmp(path + length - suffix, MOLTEST_EXE_SUFFIX) == 0;
+
     char program[MOLTEST_LINE_MAX];
-    if (!moltest_beside(path, MOLTEST_EXE_SUFFIX, program, sizeof program))
+    if (!moltest_beside(path, already ? "" : MOLTEST_EXE_SUFFIX, program, sizeof program))
         return false;
 
     char spec_path[MOLTEST_LINE_MAX];

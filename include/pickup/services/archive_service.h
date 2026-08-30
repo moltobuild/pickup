@@ -29,6 +29,19 @@
    instead of being looked up in a table. Worked out once. */
 [[nodiscard]] bool archive_supports_wildcards(void);
 
+/* True if this tar takes --force-local.
+
+   Without it, GNU tar reads an archive name as `host:path` whenever the part
+   before the first colon holds no slash — which is every absolute path on
+   Windows. `C:\\toolchains\\x.tar.zst` is not a file to that tar, it is a
+   request to reach a machine called `C`, and it answers `Cannot connect to C:
+   resolve failed`. Nothing about the path is wrong; the reading is.
+
+   Settled by asking, like the wildcards question above, because bsdtar has no
+   such option and needs none: it never treats a name as remote. Worked out
+   once. */
+[[nodiscard]] bool archive_supports_force_local(void);
+
 /* True if this tar can open a zstd-compressed archive, which is how the
    registry packs everything it publishes.
 

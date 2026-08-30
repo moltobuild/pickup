@@ -22,6 +22,11 @@
    archive_supports_wildcards. */
 #define ARG_WILDCARDS "--wildcards"
 
+/* Stops GNU tar reading an archive name as `host:path`. Only GNU tar has it,
+   and only GNU tar needs it; whether this one does is settled by asking, in
+   archive_supports_force_local. */
+#define ARG_FORCE_LOCAL "--force-local"
+
 /* Room for the composed --strip-components argument. */
 #define STRIP_ARG_SIZE 32
 
@@ -85,6 +90,21 @@ static const unsigned char empty_tar_zst[] = {
  * fails later, when it tries to hand the archive to a program that is not
  * there. Opening one settles both.
  */
+bool archive_supports_force_local(void) {
+    static bool checked = false;
+    static bool supported = false;
+    if (checked)
+        return supported;
+
+    /* Paired with --version for the same reason --wildcards is: tar parses its
+       options, finds nothing to do, and says whether it recognised the flag. */
+    const char *argv[] = {TAR_COMMAND, ARG_FORCE_LOCAL, ARG_VERSION, NULL};
+    process_result result = process_try(argv, NULL);
+    supported = result.completed && result.exit_code == 0;
+    checked = true;
+    return supported;
+}
+
 bool archive_supports_zstd(void) {
     static bool checked = false;
     static bool supported = false;
@@ -102,8 +122,12 @@ bool archive_supports_zstd(void) {
     /* Written through the same call the rest of the code uses: the probe must
        fail for the same reasons a real extraction would. */
     if (fs_write_bytes(path, empty_tar_zst, sizeof empty_tar_zst)) {
-        const char *argv[] = {TAR_COMMAND, ARG_LIST, path, NULL};
-        process_result result = process_try(argv, NULL);
+        /* The probe reads a temporary file by absolute path, which is where
+           the remote-name reading bites first: without the flag this answers
+           "no zstd" on Windows for a tar that handles it perfectly well. */
+        const char *argv[] = {TAR_COMMAND, ARG_FORCE_LOCAL, ARG_LIST, path, NULL};
+        const char *plain[] = {TAR_COMMAND, ARG_LIST, path, NULL};
+        process_result result = process_try(archive_supports_force_local() ? argv : plain, NULL);
         supported = result.completed && result.exit_code == 0;
     }
 
@@ -118,8 +142,20 @@ bool archive_extract(const char *archive, const char *destination, int strip_com
 
 #define ARG_EXCLUDE_FORMAT "--exclude=%s"
 
-/* Fixed part of the command, plus room for the exclusions and patterns. */
-#define ARGV_FIXED 8
+/*
+ * Fixed part of the command, plus room for the exclusions and patterns.
+ *
+ * Nine are named: tar, --force-local, -xf, the archive, -C, the destination,
+ * --strip-components, --wildcards, and the NULL that ends the list. The tenth
+ * is `push`'s own margin — it stops at `count + 1 < ARGV_MAX`, so an array of
+ * N holds N-1 entries, and the one it refuses at full load is the NULL. An
+ * argv without it is not a shorter command, it is a command whose end the
+ * kernel reads out of whatever follows in memory.
+ *
+ * Worth stating because the worst case is reachable: 24 exclusions and 24
+ * patterns are both inside what `build_command` accepts.
+ */
+#define ARGV_FIXED 10
 #define ARGV_MAX (ARGV_FIXED + 2 * ARCHIVE_MAX_PATTERNS)
 
 /* Composed --exclude= arguments, which have to outlive the argv holding them. */
@@ -151,6 +187,9 @@ static bool build_command(tar_command *command, const char *archive, const char 
     snprintf(command->strip, sizeof command->strip, ARG_STRIP_FORMAT, request->strip_components);
 
     push(command, TAR_COMMAND);
+    /* Before -f, because it governs how the name after it is read. */
+    if (archive_supports_force_local())
+        push(command, ARG_FORCE_LOCAL);
     push(command, ARG_EXTRACT);
     push(command, archive);
     push(command, ARG_DIRECTORY);

@@ -1,6 +1,7 @@
 #include <moltest.h>
 
 #include <pickup/commands/resolve_command.h>
+#include <pickup/services/inventory_service.h>
 #include <pickup/services/paths_service.h>
 #include <pickup/exit_code.h>
 
@@ -73,6 +74,80 @@ MOLTEST(resolve_requires_a_cxx_driver_for_cxx) {
     const resolve_request cxx = { .lang = "c++" };
     int code = resolve_command_run(&cxx, false);
     EXPECT_TRUE(code == exit_ok || code == exit_no_match);
+}
+
+/* Run `resolve` with stderr captured, and hand back what it said. */
+static bool resolve_saying(const resolve_request *request, int *code, char *text, size_t size) {
+    char path[PICKUP_PATHS_MAX];
+    if (!moltest_temp_file("pickup_resolve_say", path, sizeof path))
+        return false;
+    const int fd = open(path, O_WRONLY);
+    if (fd < 0)
+        return false;
+
+    const int saved = dup(STDERR_FILENO);
+    if (saved < 0 || (fflush(stderr), dup2(fd, STDERR_FILENO)) < 0) {
+        (void)close(fd);
+        return false;
+    }
+    *code = resolve_command_run(request, false);
+    fflush(stderr);
+    (void)dup2(saved, STDERR_FILENO);
+    (void)close(saved);
+    (void)close(fd);
+
+    FILE *written = fopen(path, "r");
+    if (written == NULL)
+        return false;
+    const size_t read = fread(text, 1, size - 1, written);
+    text[read] = '\0';
+    (void)fclose(written);
+    (void)remove(path);
+    return true;
+}
+
+/*
+ * A target names the platform the code is for, and a machine has compilers for
+ * exactly one of them. Asking for another is the ordinary way a cross request
+ * fails, and it has to say so: rejected for what the candidate *is* rather than
+ * for something it lacks, which is the same shape as the vendor below.
+ */
+MOLTEST(resolve_says_the_target_when_the_target_is_what_did_not_match) {
+    const resolve_request elsewhere = {.lang = "c", .target = "sparc-unknown-none-elf"};
+    int code = 0;
+    char text[8192] = "";
+    ASSERT_TRUE(resolve_saying(&elsewhere, &code, text, sizeof text));
+
+    EXPECT_EQ(exit_no_match, code);
+    EXPECT_NOT_NULL(strstr(text, "target sparc-unknown-none-elf"));
+    /* And it names what the candidate does emit for, so the reader can see how
+       far off the ask was. */
+    EXPECT_NOT_NULL(strstr(text, "it emits for"));
+    EXPECT_NULL(strstr(text, "missing:\n"));
+}
+
+/* The target this machine's compilers actually emit for is accepted, spelled
+   the way a compiler reports it. Read back from the answer rather than assumed,
+   because the triple differs between distributions. */
+MOLTEST(resolve_accepts_the_target_its_own_compilers_report) {
+    const resolve_request here = {.lang = "c"};
+    int code = 0;
+    char text[8192] = "";
+    ASSERT_TRUE(resolve_saying(&here, &code, text, sizeof text));
+    ASSERT_EQ(exit_ok, code);
+
+    inventory list;
+    ASSERT_TRUE(inventory_load(&list, false));
+    ASSERT_TRUE(list.count > 0);
+
+    char target[PICKUP_TARGET_MAX];
+    snprintf(target, sizeof target, "%s", list.items[0].target);
+    inventory_free(&list);
+
+    /* Whatever it is, something answers for it. */
+    const resolve_request by_triple = {.lang = "c", .target = target};
+    ASSERT_TRUE(resolve_saying(&by_triple, &code, text, sizeof text));
+    EXPECT_EQ(exit_ok, code);
 }
 
 /* The bug this closes: a candidate rejected for its vendor was listed with an

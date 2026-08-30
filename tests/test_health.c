@@ -146,8 +146,8 @@ MOLTEST_FAKE(cc_needs_the_libcxx_flag) {
 MOLTEST(health_reports_no_driver_when_there_is_none) {
     /* An empty cxx_path is the ordinary case of a C compiler with no C++ side,
        and must not read as a compiler that failed. */
-    EXPECT_EQ(health_no_driver, health_probe(NULL, lang_c, NULL, 0));
-    EXPECT_EQ(health_no_driver, health_probe("", lang_c, NULL, 0));
+    EXPECT_EQ(health_no_driver, health_probe(NULL, lang_c, NULL, 0, true));
+    EXPECT_EQ(health_no_driver, health_probe("", lang_c, NULL, 0, true));
 }
 
 MOLTEST(health_reports_no_driver_when_the_binary_cannot_run) {
@@ -155,7 +155,7 @@ MOLTEST(health_reports_no_driver_when_the_binary_cannot_run) {
        whose standard library is incomplete. Reporting the latter would send a
        reader looking for a package that was never the problem. */
     EXPECT_EQ(health_no_driver,
-              health_probe("/nonexistent/pickup/cc", lang_c, NULL, 0));
+              health_probe("/nonexistent/pickup/cc", lang_c, NULL, 0, true));
 }
 
 MOLTEST(health_reports_missing_headers_when_the_include_fails) {
@@ -164,7 +164,7 @@ MOLTEST(health_reports_missing_headers_when_the_include_fails) {
        to be found. */
     ASSERT_TRUE(fake_setup(&fake, "cc_refuses_everything"));
 
-    EXPECT_EQ(health_no_headers, health_probe(fake.driver, lang_cxx, NULL, 0));
+    EXPECT_EQ(health_no_headers, health_probe(fake.driver, lang_cxx, NULL, 0, true));
 
     fake_teardown(&fake);
 }
@@ -175,7 +175,7 @@ MOLTEST(health_reports_no_link_when_only_the_parse_succeeds) {
        the runtime it needs is not. */
     ASSERT_TRUE(fake_setup(&fake, "cc_parses_but_will_not_link"));
 
-    EXPECT_EQ(health_no_link, health_probe(fake.driver, lang_cxx, NULL, 0));
+    EXPECT_EQ(health_no_link, health_probe(fake.driver, lang_cxx, NULL, 0, true));
 
     fake_teardown(&fake);
 }
@@ -187,7 +187,7 @@ MOLTEST(health_reports_no_run_when_the_executable_will_not_start) {
        the compiler would ever notice. */
     ASSERT_TRUE(fake_setup(&fake, "cc_links_something_that_will_not_start"));
 
-    EXPECT_EQ(health_no_run, health_probe(fake.driver, lang_cxx, NULL, 0));
+    EXPECT_EQ(health_no_run, health_probe(fake.driver, lang_cxx, NULL, 0, true));
 
     fake_teardown(&fake);
 }
@@ -196,7 +196,7 @@ MOLTEST(health_reports_ok_only_when_the_program_actually_ran) {
     fake_compiler fake;
     ASSERT_TRUE(fake_setup(&fake, "cc_links_and_runs"));
 
-    EXPECT_EQ(health_ok, health_probe(fake.driver, lang_cxx, NULL, 0));
+    EXPECT_EQ(health_ok, health_probe(fake.driver, lang_cxx, NULL, 0, true));
     EXPECT_TRUE(health_is_usable(health_ok));
 
     fake_teardown(&fake);
@@ -210,9 +210,9 @@ MOLTEST(health_passes_the_flags_it_was_given_to_the_compiler) {
     ASSERT_TRUE(fake_setup(&flagged, "cc_needs_the_libcxx_flag"));
 
     const char *flags[] = { "-stdlib=libc++" };
-    EXPECT_EQ(health_ok, health_probe(flagged.driver, lang_cxx, flags, 1));
+    EXPECT_EQ(health_ok, health_probe(flagged.driver, lang_cxx, flags, 1, true));
     /* And without them the very same compiler is unusable. */
-    EXPECT_EQ(health_no_headers, health_probe(flagged.driver, lang_cxx, NULL, 0));
+    EXPECT_EQ(health_no_headers, health_probe(flagged.driver, lang_cxx, NULL, 0, true));
 
     fake_teardown(&flagged);
 }
@@ -221,7 +221,7 @@ MOLTEST(health_leaves_nothing_behind) {
     fake_compiler fake;
     ASSERT_TRUE(fake_setup(&fake, "cc_links_and_says_where"));
 
-    ASSERT_EQ(health_ok, health_probe(fake.driver, lang_cxx, NULL, 0));
+    ASSERT_EQ(health_ok, health_probe(fake.driver, lang_cxx, NULL, 0, true));
 
     /* The linked program is a temporary, and a probe that littered /tmp on
        every run of every command would be its own kind of bug. */
@@ -255,4 +255,38 @@ MOLTEST(health_describes_every_outcome) {
     EXPECT_TRUE(health_is_usable(health_ok));
     EXPECT_FALSE(health_is_usable(health_no_run));
     EXPECT_FALSE(health_is_usable(health_no_link));
+}
+
+/*
+ * What changes when the program is not for this machine.
+ *
+ * A cross compiler links something this machine cannot start, and a probe that
+ * insisted on running it would call every cross compiler broken. So the caller
+ * says which bar applies, and the same fake — one that links something
+ * unrunnable — is a failure under one and a success under the other.
+ */
+MOLTEST(health_asks_only_that_it_linked_when_the_output_is_not_for_here) {
+    fake_compiler fake;
+    ASSERT_TRUE(fake_setup(&fake, "cc_links_something_that_will_not_start"));
+
+    /* Expected to run here: what it produced does not start, and that is the
+       failure the module exists to catch. */
+    EXPECT_EQ(health_no_run, health_probe(fake.driver, lang_cxx, NULL, 0, true));
+
+    /* Not expected to run here: it linked, which is all that can be asked of a
+       compiler emitting for somewhere else. */
+    EXPECT_EQ(health_ok, health_probe(fake.driver, lang_cxx, NULL, 0, false));
+
+    fake_teardown(&fake);
+}
+
+/* And the relaxation is not a blanket pass: a compiler that cannot link is
+   still broken, whoever the output was for. */
+MOLTEST(health_still_refuses_one_that_cannot_link_for_elsewhere) {
+    fake_compiler fake;
+    ASSERT_TRUE(fake_setup(&fake, "cc_parses_but_will_not_link"));
+
+    EXPECT_EQ(health_no_link, health_probe(fake.driver, lang_cxx, NULL, 0, false));
+
+    fake_teardown(&fake);
 }

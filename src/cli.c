@@ -52,6 +52,8 @@ static const cli_option resolve_options[] = {
     {"--require", 'r', cli_opt_value, "<ids>", "Comma-separated features that must be present",
      NULL},
     {"--vendor", 'v', cli_opt_value, "<name>", "Restrict to one vendor", NULL},
+    {"--target", 't', cli_opt_value, "<triple>",
+     "Platform the code is for; this machine's when absent", NULL},
     {"--stdlib", 0, cli_opt_value, "<libstdc++|libc++>", "C++ standard library the build must use",
      NULL},
     {"--format", 'f', cli_opt_value, "<text|toml>", "Output format", FORMAT_TEXT},
@@ -111,6 +113,7 @@ static int handle_resolve(const cli_args *args) {
         .standard = cli_args_option(args, "--std"),
         .features = cli_args_option(args, "--require"),
         .vendor = cli_args_option(args, "--vendor"),
+        .target = cli_args_option(args, "--target"),
         .stdlib = cli_args_option(args, "--stdlib"),
     };
     return resolve_command_run(&request, wants_toml(args));

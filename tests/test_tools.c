@@ -66,9 +66,24 @@ static bool plant_working(const tools_fixture *fixture, const char *name,
     if (!fs_format_path(path, sizeof path, "%s/%s", fixture->root, name))
         return false;
 
-    char script[512];
-    snprintf(script, sizeof script, "#!/bin/sh\necho '%s'\nexit 0\n", version);
-    return fs_write_file(path, script) && chmod(path, 0700) == 0;
+    /* One `out` per line: the spec is read line by line, so a banner that
+       spans several is several directives rather than one with newlines in
+       it. */
+    char spec[512];
+    size_t at = 0;
+    for (const char *line = version; line != NULL && at < sizeof spec;) {
+        const char *end = strchr(line, '\n');
+        const int width = end != NULL ? (int)(end - line) : (int)strlen(line);
+        const int written = snprintf(spec + at, sizeof spec - at, "out %.*s\n", width, line);
+        if (written < 0 || (size_t)written >= sizeof spec - at)
+            return false;
+        at += (size_t)written;
+        line = end != NULL ? end + 1 : NULL;
+    }
+    if (at + sizeof "exit 0\n" > sizeof spec)
+        return false;
+    snprintf(spec + at, sizeof spec - at, "exit 0\n");
+    return moltest_fake_program(path, spec, NULL, 0);
 }
 
 /* And one that is there and does not work. */
@@ -76,7 +91,7 @@ static bool plant_broken(const tools_fixture *fixture, const char *name) {
     char path[PICKUP_PATHS_MAX];
     if (!fs_format_path(path, sizeof path, "%s/%s", fixture->root, name))
         return false;
-    return fs_write_file(path, "#!/bin/sh\nexit 1\n") && chmod(path, 0700) == 0;
+    return moltest_fake_program(path, "exit 1\n", NULL, 0);
 }
 
 static const dev_tool *of_kind(const dev_tool *found, size_t count, tool_kind kind) {
@@ -187,7 +202,7 @@ MOLTEST(tools_reads_a_version_that_is_not_on_the_first_line) {
     /* clang-tidy opens with a banner and puts the version underneath. Taking
        the first line would report the tool as "LLVM". */
     ASSERT_TRUE(plant_working(&fixture, "clang-tidy",
-                              "LLVM (http://llvm.org/):\\n  LLVM version 22.1.8\\n"
+                              "LLVM (http://llvm.org/):\n  LLVM version 22.1.8\n"
                               "  Optimized build."));
 
     dev_tool found[TOOLS_MAX];

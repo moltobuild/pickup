@@ -26,35 +26,122 @@ typedef struct {
     char driver[PICKUP_PATHS_MAX];
 } fake_compiler;
 
-/* Write `body` as an executable script and return it as a usable driver. */
-static bool fake_setup(fake_compiler *fake, const char *body) {
+/* Plant a program that behaves as `behaviour` says and return it as a driver. */
+static bool fake_setup(fake_compiler *fake, const char *behaviour) {
     if (!moltest_temp_dir("pickup_health_t", fake->root, sizeof fake->root))
         return false;
-    if (!fs_format_path(fake->driver, sizeof fake->driver, "%s/fakecc", fake->root))
+
+    char at[PICKUP_PATHS_MAX];
+    if (!fs_format_path(at, sizeof at, "%s/fakecc", fake->root))
         return false;
-    if (!fs_write_file(fake->driver, body))
-        return false;
-    return chmod(fake->driver, 0700) == 0;
+
+    char spec[128];
+    snprintf(spec, sizeof spec, "behave %s\n", behaviour);
+    return moltest_fake_program(at, spec, fake->driver, sizeof fake->driver);
 }
 
 static void fake_teardown(fake_compiler *fake) {
     (void)fs_remove_tree(fake->root);
 }
 
-/* Reads the program on stdin and reports which step it is being asked for, so
-   each script below only has to say where it gives up. */
-#define FAKE_PROLOGUE                                                          \
-    "#!/bin/sh\n"                                                              \
-    "out=''\n"                                                                 \
-    "syntax=no\n"                                                              \
-    "while [ $# -gt 0 ]; do\n"                                                 \
-    "  case \"$1\" in\n"                                                       \
-    "    -fsyntax-only) syntax=yes ;;\n"                                       \
-    "    -o) shift; out=\"$1\" ;;\n"                                           \
-    "  esac\n"                                                                 \
-    "  shift\n"                                                                \
-    "done\n"                                                                   \
-    "cat > /dev/null\n"
+/*
+ * The compilers these tests stand up.
+ *
+ * Written in C rather than as shell scripts, because a fake has to be a program
+ * the platform can actually start and `#!/bin/sh` is not one on Windows. Each
+ * says only where it gives up; the arguments they read are the ones a real
+ * driver reads.
+ */
+
+/* Whether the driver was asked only to parse, and where it was told to write. */
+static bool asked_only_to_parse(int argc, char **argv) {
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-fsyntax-only") == 0)
+            return true;
+    }
+    return false;
+}
+
+static const char *told_to_write_to(int argc, char **argv) {
+    for (int i = 1; i + 1 < argc; i++) {
+        if (strcmp(argv[i], "-o") == 0)
+            return argv[i + 1];
+    }
+    return NULL;
+}
+
+static bool was_given(int argc, char **argv, const char *flag) {
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], flag) == 0)
+            return true;
+    }
+    return false;
+}
+
+/* Refuses everything, the way a compiler does when <iostream> is nowhere to be
+   found. */
+MOLTEST_FAKE(cc_refuses_everything) {
+    (void)argc;
+    (void)argv;
+    return 1;
+}
+
+/* Parses and will not link: the headers are there and the runtime is not. */
+MOLTEST_FAKE(cc_parses_but_will_not_link) {
+    return asked_only_to_parse(argc, argv) ? 0 : 1;
+}
+
+/* Links, and what it produced cannot be executed. The case that motivated the
+   module: nothing stopping at the compiler's exit status would notice. */
+MOLTEST_FAKE(cc_links_something_that_will_not_start) {
+    if (asked_only_to_parse(argc, argv))
+        return 0;
+    const char *out = told_to_write_to(argc, argv);
+    if (out != NULL)
+        (void)fs_write_file(out, "not an executable\n");
+    return 0;
+}
+
+/* Links something that starts and exits cleanly. */
+MOLTEST_FAKE(cc_links_and_runs) {
+    if (asked_only_to_parse(argc, argv))
+        return 0;
+    const char *out = told_to_write_to(argc, argv);
+    if (out != NULL && !moltest_fake_program(out, "exit 0\n", NULL, 0))
+        return 1;
+    return 0;
+}
+
+/* Links, and leaves a note of where it wrote, beside itself. The note is how a
+   test can ask whether the probe cleaned its temporary up: `/tmp` used to be
+   the meeting point, and `/tmp` is not a place on every platform. */
+MOLTEST_FAKE(cc_links_and_says_where) {
+    if (asked_only_to_parse(argc, argv))
+        return 0;
+    const char *out = told_to_write_to(argc, argv);
+    if (out == NULL)
+        return 1;
+    if (!moltest_fake_program(out, "exit 0\n", NULL, 0))
+        return 1;
+
+    char witness[PICKUP_PATHS_MAX];
+    if (!fs_format_path(witness, sizeof witness, "%s.witness", argv[0]))
+        return 1;
+    return fs_write_file(witness, out) ? 0 : 1;
+}
+
+/* Works only when told which standard library to use: what proves that a
+   candidate's flags reach the compiler. */
+MOLTEST_FAKE(cc_needs_the_libcxx_flag) {
+    if (!was_given(argc, argv, "-stdlib=libc++"))
+        return 1;
+    if (asked_only_to_parse(argc, argv))
+        return 0;
+    const char *out = told_to_write_to(argc, argv);
+    if (out != NULL && !moltest_fake_program(out, "exit 0\n", NULL, 0))
+        return 1;
+    return 0;
+}
 
 MOLTEST(health_reports_no_driver_when_there_is_none) {
     /* An empty cxx_path is the ordinary case of a C compiler with no C++ side,
@@ -75,7 +162,7 @@ MOLTEST(health_reports_missing_headers_when_the_include_fails) {
     fake_compiler fake;
     /* Refuses everything, the way a compiler does when <iostream> is nowhere
        to be found. */
-    ASSERT_TRUE(fake_setup(&fake, FAKE_PROLOGUE "exit 1\n"));
+    ASSERT_TRUE(fake_setup(&fake, "cc_refuses_everything"));
 
     EXPECT_EQ(health_no_headers, health_probe(fake.driver, lang_cxx, NULL, 0));
 
@@ -86,10 +173,7 @@ MOLTEST(health_reports_no_link_when_only_the_parse_succeeds) {
     fake_compiler fake;
     /* Parses and will not link: the standard library's headers are present and
        the runtime it needs is not. */
-    ASSERT_TRUE(fake_setup(&fake,
-        FAKE_PROLOGUE
-        "[ \"$syntax\" = yes ] && exit 0\n"
-        "exit 1\n"));
+    ASSERT_TRUE(fake_setup(&fake, "cc_parses_but_will_not_link"));
 
     EXPECT_EQ(health_no_link, health_probe(fake.driver, lang_cxx, NULL, 0));
 
@@ -101,12 +185,7 @@ MOLTEST(health_reports_no_run_when_the_executable_will_not_start) {
     /* The case that motivated the whole module: the link exits zero, and what
        it produced cannot be executed. Nothing that stops at the exit status of
        the compiler would ever notice. */
-    ASSERT_TRUE(fake_setup(&fake,
-        FAKE_PROLOGUE
-        "[ \"$syntax\" = yes ] && exit 0\n"
-        "echo 'not an executable' > \"$out\"\n"
-        "chmod 600 \"$out\"\n"
-        "exit 0\n"));
+    ASSERT_TRUE(fake_setup(&fake, "cc_links_something_that_will_not_start"));
 
     EXPECT_EQ(health_no_run, health_probe(fake.driver, lang_cxx, NULL, 0));
 
@@ -115,12 +194,7 @@ MOLTEST(health_reports_no_run_when_the_executable_will_not_start) {
 
 MOLTEST(health_reports_ok_only_when_the_program_actually_ran) {
     fake_compiler fake;
-    ASSERT_TRUE(fake_setup(&fake,
-        FAKE_PROLOGUE
-        "[ \"$syntax\" = yes ] && exit 0\n"
-        "printf '#!/bin/sh\\nexit 0\\n' > \"$out\"\n"
-        "chmod 700 \"$out\"\n"
-        "exit 0\n"));
+    ASSERT_TRUE(fake_setup(&fake, "cc_links_and_runs"));
 
     EXPECT_EQ(health_ok, health_probe(fake.driver, lang_cxx, NULL, 0));
     EXPECT_TRUE(health_is_usable(health_ok));
@@ -133,25 +207,7 @@ MOLTEST(health_passes_the_flags_it_was_given_to_the_compiler) {
        claim recipe_discover rests on: a candidate set of flags is proven by
        handing them to the compiler, so they have to arrive. */
     fake_compiler flagged;
-    ASSERT_TRUE(fake_setup(&flagged,
-        "#!/bin/sh\n"
-        "found=no\n"
-        "out=''\n"
-        "syntax=no\n"
-        "while [ $# -gt 0 ]; do\n"
-        "  case \"$1\" in\n"
-        "    -fsyntax-only) syntax=yes ;;\n"
-        "    -stdlib=libc++) found=yes ;;\n"
-        "    -o) shift; out=\"$1\" ;;\n"
-        "  esac\n"
-        "  shift\n"
-        "done\n"
-        "cat > /dev/null\n"
-        "[ \"$found\" = yes ] || exit 1\n"
-        "[ \"$syntax\" = yes ] && exit 0\n"
-        "printf '#!/bin/sh\\nexit 0\\n' > \"$out\"\n"
-        "chmod 700 \"$out\"\n"
-        "exit 0\n"));
+    ASSERT_TRUE(fake_setup(&flagged, "cc_needs_the_libcxx_flag"));
 
     const char *flags[] = { "-stdlib=libc++" };
     EXPECT_EQ(health_ok, health_probe(flagged.driver, lang_cxx, flags, 1));
@@ -163,23 +219,19 @@ MOLTEST(health_passes_the_flags_it_was_given_to_the_compiler) {
 
 MOLTEST(health_leaves_nothing_behind) {
     fake_compiler fake;
-    ASSERT_TRUE(fake_setup(&fake,
-        FAKE_PROLOGUE
-        "[ \"$syntax\" = yes ] && exit 0\n"
-        "printf '#!/bin/sh\\nexit 0\\n' > \"$out\"\n"
-        "chmod 700 \"$out\"\n"
-        "printf '%s' \"$out\" > /tmp/pickup_health_witness\n"
-        "exit 0\n"));
+    ASSERT_TRUE(fake_setup(&fake, "cc_links_and_says_where"));
 
     ASSERT_EQ(health_ok, health_probe(fake.driver, lang_cxx, NULL, 0));
 
     /* The linked program is a temporary, and a probe that littered /tmp on
        every run of every command would be its own kind of bug. */
-    char *witness = fs_read_file("/tmp/pickup_health_witness");
+    char note[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(note, sizeof note, "%s.witness", fake.driver));
+    char *witness = fs_read_file(note);
     ASSERT_TRUE(witness != NULL);
     EXPECT_FALSE(fs_path_exists(witness));
     free(witness);
-    (void)remove("/tmp/pickup_health_witness");
+    (void)remove(note);
 
     fake_teardown(&fake);
 }

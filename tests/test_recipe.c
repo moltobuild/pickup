@@ -110,92 +110,150 @@ static bool make_libstdcxx(fake_toolchain *fake) {
         && make_library(fake->libstdcxx_dir, "libstdc++.so");
 }
 
-/* Write a driver that behaves as `accepts` says. */
-static bool write_driver(const fake_toolchain *fake, const fake_accepts *accepts) {
-    char script[8192];
-    int written = snprintf(script, sizeof script,
-        "#!/bin/sh\n"
-        "out=''\n"
-        "syntax=no\n"
-        "verbose=no\n"
-        "gccinstall=no\n"
-        "libcxx=no\n"
-        "nodefault=no\n"
-        "printname=''\n"
-        "for a in \"$@\"; do\n"
-        "  case \"$a\" in\n"
-        "    -v) verbose=yes ;;\n"
-        "    -fsyntax-only) syntax=yes ;;\n"
-        "    --gcc-install-dir=*) gccinstall=yes ;;\n"
-        "    -stdlib=libc++) libcxx=yes ;;\n"
-        "    --no-default-config) nodefault=yes ;;\n"
-        "    -print-file-name=*) printname=\"${a#-print-file-name=}\" ;;\n"
-        "  esac\n"
-        "done\n"
-        /* Reads the configuration file beside it, the way clang does, unless
-           told not to. This is what makes a configured toolchain look like one
-           that needs no flags. */
-        "if [ \"$nodefault\" = no ] && [ -f \"$0.cfg\" ]; then\n"
-        "  grep -q -- '--gcc-install-dir=' \"$0.cfg\" && gccinstall=yes\n"
-        "  grep -q -- '-stdlib=libc++' \"$0.cfg\" && libcxx=yes\n"
-        "fi\n"
-        /* -o takes its value in the next argument, so it needs a real walk. */
-        "while [ $# -gt 0 ]; do\n"
-        "  [ \"$1\" = '-o' ] && { shift; out=\"$1\"; }\n"
-        "  shift\n"
-        "done\n"
-        /* A driver answers with a full path for a library it has, and echoes
-           the name back for one it does not. */
-        "if [ -n \"$printname\" ]; then\n"
-        "  if [ \"$printname\" = 'libc++.so' ] && [ '%s' = 'yes' ]; then\n"
-        "    echo '%s/libc++.so'\n"
-        "  elif [ \"$printname\" = 'libstdc++.so' ] && [ '%s' = 'yes' ]; then\n"
-        "    echo '%s/libstdc++.so'\n"
-        "  else\n"
-        "    echo \"$printname\"\n"
-        "  fi\n"
-        "  exit 0\n"
-        "fi\n"
-        "if [ \"$verbose\" = yes ]; then\n"
-        "  echo 'Found candidate GCC installation: %s' >&2\n"
-        "  echo 'Selected GCC installation: %s' >&2\n"
-        "  exit 0\n"
-        "fi\n"
-        "src=$(cat)\n"
-        /* Whether this invocation is one the driver is willing to serve. */
-        "ok=no\n"
-        "[ \"$gccinstall\" = yes ] && [ '%s' = yes ] && ok=yes\n"
-        "[ \"$libcxx\" = yes ] && [ '%s' = yes ] && ok=yes\n"
-        "[ \"$gccinstall\" = no ] && [ \"$libcxx\" = no ] && [ '%s' = yes ] && ok=yes\n"
-        /* A program that includes nothing needs no standard library, and a real
-           compiler builds it whatever its libstdc++ situation. Only what
-           reaches for a header depends on the flags. */
-        "case \"$src\" in\n"
-        "  *include*) [ \"$ok\" = yes ] || exit 1 ;;\n"
-        "esac\n"
-        /* A program asking which standard library this is gets answered the
-           way a real one would: by failing to compile against the other. Only
-           -stdlib=libc++ reaches libc++ here, as on a real Linux driver. */
-        "case \"$src\" in\n"
-        "  *_LIBCPP_VERSION*) [ \"$libcxx\" = yes ] || exit 1 ;;\n"
-        "  *__GLIBCXX__*)     [ \"$libcxx\" = no ] || exit 1 ;;\n"
-        "esac\n"
-        "[ \"$syntax\" = yes ] && exit 0\n"
-        "printf '#!/bin/sh\\nexit 0\\n' > \"$out\"\n"
-        "chmod 700 \"$out\"\n"
-        "exit 0\n",
-        accepts->ships_libcxx ? "yes" : "no", fake->libcxx_dir,
-        accepts->ships_libstdcxx ? "yes" : "no", fake->libstdcxx_dir,
-        fake->gcc_dir, fake->gcc_dir,
-        accepts->gcc_install ? "yes" : "no",
-        accepts->libcxx ? "yes" : "no",
-        accepts->bare ? "yes" : "no");
+/*
+ * A driver that behaves as `accepts` says.
+ *
+ * Written in C rather than as a shell script: a fake has to be a program the
+ * platform can start, and `#!/bin/sh` is not one on Windows. What it reads —
+ * its arguments, its configuration file, the source on stdin — is what a real
+ * driver reads, and the five things that vary between fixtures travel in the
+ * spec beside it.
+ */
+static bool argument_given(int argc, char **argv, const char *flag) {
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], flag) == 0)
+            return true;
+    }
+    return false;
+}
 
-    if (written < 0 || (size_t)written >= sizeof script)
+static bool argument_starts(int argc, char **argv, const char *prefix, const char **value) {
+    const size_t width = strlen(prefix);
+    for (int i = 1; i < argc; i++) {
+        if (strncmp(argv[i], prefix, width) == 0) {
+            if (value != NULL)
+                *value = argv[i] + width;
+            return true;
+        }
+    }
+    return false;
+}
+
+static const char *argument_after(int argc, char **argv, const char *flag) {
+    for (int i = 1; i + 1 < argc; i++) {
+        if (strcmp(argv[i], flag) == 0)
+            return argv[i + 1];
+    }
+    return NULL;
+}
+
+static bool setting_is_yes(const char *key) {
+    const char *value = moltest_fake_setting(key);
+    return value != NULL && strcmp(value, "yes") == 0;
+}
+
+/* Reads the configuration file beside it, the way clang does, unless told not
+   to. This is what makes a configured toolchain look like one needing no
+   flags. */
+static bool config_mentions(const char *driver, const char *text) {
+    char path[PICKUP_PATHS_MAX];
+    if (!fs_format_path(path, sizeof path, "%s.cfg", driver))
         return false;
-    if (!fs_write_file(fake->driver, script))
+    char *body = fs_read_file(path);
+    if (body == NULL)
         return false;
-    return chmod(fake->driver, 0700) == 0;
+    const bool found = strstr(body, text) != NULL;
+    free(body);
+    return found;
+}
+
+MOLTEST_FAKE(fake_driver) {
+    const char *printname = NULL;
+    bool gcc_install = argument_starts(argc, argv, "--gcc-install-dir=", NULL);
+    bool libcxx = argument_given(argc, argv, "-stdlib=libc++");
+
+    if (!argument_given(argc, argv, "--no-default-config")) {
+        if (config_mentions(argv[0], "--gcc-install-dir="))
+            gcc_install = true;
+        if (config_mentions(argv[0], "-stdlib=libc++"))
+            libcxx = true;
+    }
+
+    /* A driver answers with a full path for a library it has, and echoes the
+       name back for one it does not. */
+    if (argument_starts(argc, argv, "-print-file-name=", &printname)) {
+        const char *dir = NULL;
+        if (strcmp(printname, "libc++.so") == 0 && setting_is_yes("ships_libcxx"))
+            dir = moltest_fake_setting("libcxx_dir");
+        else if (strcmp(printname, "libstdc++.so") == 0 && setting_is_yes("ships_libstdcxx"))
+            dir = moltest_fake_setting("libstdcxx_dir");
+        if (dir != NULL)
+            printf("%s/%s\n", dir, printname);
+        else
+            printf("%s\n", printname);
+        return 0;
+    }
+
+    if (argument_given(argc, argv, "-v")) {
+        const char *gcc_dir = moltest_fake_setting("gcc_dir");
+        fprintf(stderr, "Found candidate GCC installation: %s\n", gcc_dir != NULL ? gcc_dir : "");
+        fprintf(stderr, "Selected GCC installation: %s\n", gcc_dir != NULL ? gcc_dir : "");
+        return 0;
+    }
+
+    /* Whether this invocation is one the driver is willing to serve. */
+    const bool ok = (gcc_install && setting_is_yes("gcc_install")) ||
+                    (libcxx && setting_is_yes("libcxx")) ||
+                    (!gcc_install && !libcxx && setting_is_yes("bare"));
+
+    /* A program that includes nothing needs no standard library, and a real
+       compiler builds it whatever its libstdc++ situation. Only what reaches
+       for a header depends on the flags. */
+    const char *source = moltest_fake_input();
+    if (strstr(source, "include") != NULL && !ok)
+        return 1;
+
+    /* A program asking which standard library this is gets answered the way a
+       real one would: by failing to compile against the other. */
+    if (strstr(source, "_LIBCPP_VERSION") != NULL && !libcxx)
+        return 1;
+    if (strstr(source, "__GLIBCXX__") != NULL && libcxx)
+        return 1;
+
+    if (argument_given(argc, argv, "-fsyntax-only"))
+        return 0;
+
+    const char *out = argument_after(argc, argv, "-o");
+    if (out != NULL && !moltest_fake_program(out, "exit 0\n", NULL, 0))
+        return 1;
+    return 0;
+}
+
+static bool write_driver(fake_toolchain *fake, const fake_accepts *accepts) {
+    char spec[1024];
+    const int written = snprintf(spec, sizeof spec,
+                                 "set ships_libcxx %s\n"
+                                 "set ships_libstdcxx %s\n"
+                                 "set gcc_install %s\n"
+                                 "set libcxx %s\n"
+                                 "set bare %s\n"
+                                 "set libcxx_dir %s\n"
+                                 "set libstdcxx_dir %s\n"
+                                 "set gcc_dir %s\n"
+                                 "behave fake_driver\n",
+                                 accepts->ships_libcxx ? "yes" : "no",
+                                 accepts->ships_libstdcxx ? "yes" : "no",
+                                 accepts->gcc_install ? "yes" : "no",
+                                 accepts->libcxx ? "yes" : "no", accepts->bare ? "yes" : "no",
+                                 fake->libcxx_dir, fake->libstdcxx_dir, fake->gcc_dir);
+    if (written < 0 || (size_t)written >= sizeof spec)
+        return false;
+
+    /* Where it actually landed is written back: the platform may have added a
+       suffix, and every test below uses this path to run it. */
+    char at[PICKUP_PATHS_MAX];
+    snprintf(at, sizeof at, "%s", fake->driver);
+    return moltest_fake_program(at, spec, fake->driver, sizeof fake->driver);
 }
 
 /* Everything both kinds of fake need, once the prefix and the driver are

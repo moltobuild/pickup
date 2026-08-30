@@ -27,7 +27,7 @@ static void fixture_teardown(archive_fixture *fixture) {
  * It used to be `system("tar -czf ...")`, and that was two bugs in one line.
  * A shell splits on spaces and eats backslashes, so a Windows path arrived at
  * tar in pieces; and tar reads a name whose first colon comes before any slash
- * as `host:path`, so `C:\\Users\\...` was a machine called `C` rather than a
+ * as `host:path`, so `C:\Users\...` was a machine called `C` rather than a
  * file. An argv fixes the first — nothing parses it — and --force-local the
  * second, asked for the way the production code asks.
  */

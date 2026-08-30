@@ -33,7 +33,7 @@
 
    Without it, GNU tar reads an archive name as `host:path` whenever the part
    before the first colon holds no slash — which is every absolute path on
-   Windows. `C:\\toolchains\\x.tar.zst` is not a file to that tar, it is a
+   Windows. `C:\toolchains\x.tar.zst` is not a file to that tar, it is a
    request to reach a machine called `C`, and it answers `Cannot connect to C:
    resolve failed`. Nothing about the path is wrong; the reading is.
 

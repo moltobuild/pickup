@@ -18,6 +18,12 @@ bool paths_home(char *out, size_t out_size) {
         return fs_format_path(out, out_size, "%s", override);
 
     const char *home = getenv("HOME");
+#ifdef _WIN32
+    /* Windows names it differently, and only a shell that brings its own
+       environment — MSYS2, git-bash — sets HOME at all. */
+    if (home == NULL || home[0] == '\0')
+        home = getenv("USERPROFILE");
+#endif
     if (home == NULL || home[0] == '\0')
         return false;
     return fs_format_path(out, out_size, "%s/%s", home, PICKUP_HOME_DIRNAME);

@@ -130,6 +130,24 @@
  * and looking for a file called `g++` on Windows finds nothing at all. */
 [[nodiscard]] bool fs_executable_file(const char *name, char *out, size_t size);
 
+/* A path nothing else is using, in the directory the platform keeps temporary
+ * files — `/tmp` on POSIX and whatever `TEMP` names on Windows, which is why a
+ * caller must not spell either itself. Created empty; removing it is the
+ * caller's. */
+[[nodiscard]] bool fs_temp_file(const char *prefix, char *out, size_t size);
+
+/* The same, ending in whatever suffix a program needs to be run there.
+ *
+ * Both halves matter to the caller that wanted this. A health probe links a
+ * program and then runs it, so it needs somewhere to put it — and `/tmp` is not
+ * somewhere on Windows — and it needs the result to be runnable, which on
+ * Windows is decided by the name.
+ *
+ * The file is created empty, so the name cannot be taken between choosing it
+ * and linking over it. Removing it afterwards is the caller's, however the
+ * probe went. */
+[[nodiscard]] bool fs_temp_program(const char *prefix, char *out, size_t size);
+
 /* Walk the directories in `path_env` — the value of PATH — calling `visit` for
  * each one in order. `visit` returns true to carry on and false to stop the
  * walk; whatever it wanted to report goes in `context`.

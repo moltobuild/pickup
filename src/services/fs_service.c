@@ -420,3 +420,73 @@ bool fs_executable_file(const char *name, char *out, size_t size) {
 #endif
     return written > 0 && (size_t)written < size;
 }
+
+/* Where the platform keeps files nobody intends to keep. */
+static const char *temp_root(void) {
+#ifdef _WIN32
+    const char *base = getenv("TEMP");
+    if (base == NULL)
+        base = getenv("TMP");
+    return base != NULL ? base : ".";
+#else
+    return "/tmp";
+#endif
+}
+
+/* The pattern both temporaries start from, and how long it is. */
+static bool temp_pattern(const char *prefix, char *out, size_t size, size_t *length) {
+    const int written = snprintf(out, size, "%s/%s_XXXXXX", temp_root(), prefix);
+    if (written < 0 || (size_t)written >= size)
+        return false;
+    *length = (size_t)written;
+    return true;
+}
+
+bool fs_temp_file(const char *prefix, char *out, size_t size) {
+    size_t length = 0;
+    if (!temp_pattern(prefix, out, size, &length))
+        return false;
+#ifdef _WIN32
+    if (_mktemp_s(out, length + 1) != 0)
+        return false;
+    FILE *file = fopen(out, "wb");
+    if (file == NULL)
+        return false;
+    (void)fclose(file);
+    return true;
+#else
+    const int fd = mkstemp(out);
+    if (fd < 0)
+        return false;
+    (void)close(fd);
+    return true;
+#endif
+}
+
+bool fs_temp_program(const char *prefix, char *out, size_t size) {
+    size_t written = 0;
+    if (!temp_pattern(prefix, out, size, &written))
+        return false;
+
+#ifdef _WIN32
+    /* `_mktemp_s` picks the name and creates nothing, so the file is made here
+       — and `.exe` goes on after the name is picked, because the pattern it
+       replaces has to be at the end. */
+    if (_mktemp_s(out, written + 1) != 0)
+        return false;
+    if (written + sizeof ".exe" > size)
+        return false;
+    memcpy(out + written, ".exe", sizeof ".exe");
+    FILE *file = fopen(out, "wb");
+    if (file == NULL)
+        return false;
+    (void)fclose(file);
+    return true;
+#else
+    const int fd = mkstemp(out);
+    if (fd < 0)
+        return false;
+    (void)close(fd);
+    return true;
+#endif
+}

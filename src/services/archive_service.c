@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <unistd.h>
 
 /* The extractor Pickup drives.
    -x extract, -f from a file, -C into a directory */
@@ -64,7 +63,6 @@ bool archive_supports_wildcards(void) {
 #define ARG_LIST "-tf"
 
 /* Where the probe archive is written. */
-#define ZSTD_PROBE_TEMPLATE "/tmp/pickup_zstd_XXXXXX"
 
 /*
  * An empty tar, compressed with zstd. Generated with:
@@ -97,11 +95,9 @@ bool archive_supports_zstd(void) {
     if (!archive_available())
         return supported;
 
-    char path[] = ZSTD_PROBE_TEMPLATE;
-    int descriptor = mkstemp(path);
-    if (descriptor < 0)
+    char path[PICKUP_PATHS_MAX];
+    if (!fs_temp_file("pickup_zstd", path, sizeof path))
         return supported;
-    (void)close(descriptor);
 
     /* Written through the same call the rest of the code uses: the probe must
        fail for the same reasons a real extraction would. */

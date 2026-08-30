@@ -222,3 +222,52 @@ MOLTEST(a_name_survives_the_trip_through_a_filename) {
     ASSERT_TRUE(fs_program_name(file, back, sizeof back));
     EXPECT_STREQ("clang++", back);
 }
+
+/* --- fs_temp_file and fs_temp_program --- */
+
+/*
+ * Where a probe puts something it is about to throw away.
+ *
+ * `/tmp` is not a place on Windows, and a health probe that could not find one
+ * reported "this compiler cannot link" — which is how a working gcc came to be
+ * rejected with nothing listed as missing.
+ */
+MOLTEST(a_temporary_file_is_made_where_the_platform_keeps_them) {
+    char first[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_temp_file("pickup_probe", first, sizeof first));
+    EXPECT_TRUE(fs_path_exists(first));
+
+    /* Two calls do not collide: the second is asked for while the first still
+       exists, which is the case that matters to a caller about to write to
+       both. */
+    char second[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_temp_file("pickup_probe", second, sizeof second));
+    EXPECT_STRNE(first, second);
+
+    EXPECT_EQ(0, remove(first));
+    EXPECT_EQ(0, remove(second));
+}
+
+/* A probe links a program here and then runs it, and on Windows what makes a
+   file runnable is its name. */
+MOLTEST(a_temporary_program_is_named_so_it_can_be_run) {
+    char path[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_temp_program("pickup_probe", path, sizeof path));
+    EXPECT_TRUE(fs_path_exists(path));
+
+    const size_t length = strlen(path);
+#ifdef _WIN32
+    ASSERT_TRUE(length > 4);
+    EXPECT_STREQ(".exe", path + length - 4);
+#else
+    /* Nothing is appended: the execute bit says it, not the name. */
+    EXPECT_NULL(strstr(path, ".exe"));
+#endif
+    EXPECT_EQ(0, remove(path));
+}
+
+MOLTEST(a_temporary_path_that_does_not_fit_is_refused) {
+    char tiny[8];
+    EXPECT_FALSE(fs_temp_file("a_rather_long_prefix", tiny, sizeof tiny));
+    EXPECT_FALSE(fs_temp_program("a_rather_long_prefix", tiny, sizeof tiny));
+}

@@ -13,8 +13,7 @@ typedef struct {
 } archive_fixture;
 
 static bool fixture_setup(archive_fixture *fixture) {
-    snprintf(fixture->root, sizeof fixture->root, "%s", "/tmp/pickup_tar_XXXXXX");
-    return mkdtemp(fixture->root) != NULL;
+    return moltest_temp_dir("pickup_tar", fixture->root, sizeof fixture->root);
 }
 
 static void fixture_teardown(archive_fixture *fixture) {
@@ -295,8 +294,8 @@ MOLTEST(archive_extracts_a_zstd_archive_without_a_top_level_directory) {
     if (!archive_available() || !archive_supports_zstd())
         SKIP("tar with zstd is needed to unpack what the registry publishes");
 
-    char root[] = "/tmp/pickup_zstd_extract_XXXXXX";
-    ASSERT_TRUE(mkdtemp(root) != NULL);
+    char root[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(moltest_temp_dir("pickup_zstd_extract", root, sizeof root));
 
     char stage[PICKUP_PATHS_MAX];
     char archive[PICKUP_PATHS_MAX];

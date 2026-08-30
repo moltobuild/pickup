@@ -124,7 +124,7 @@ static bool own_library_dir(const char *compiler, const char *const *names, size
            as bin/../lib/..., and that path ends up written into an executable
            and read back by the loader. */
         char resolved[PATH_MAX];
-        const char *usable = realpath(answer, resolved) != NULL ? resolved : answer;
+        const char *usable = fs_real_path(answer, resolved, sizeof resolved) ? resolved : answer;
         return directory_of(usable, out, out_size);
     }
     return false;
@@ -293,7 +293,7 @@ static bool library_is_inside_the_toolchain(const char *driver, const char *libr
         return false;
 
     char resolved[PATH_MAX];
-    const char *real = realpath(driver, resolved) != NULL ? resolved : driver;
+    const char *real = fs_real_path(driver, resolved, sizeof resolved) ? resolved : driver;
 
     char owner[PICKUP_PATHS_MAX];
     if (!paths_owning_toolchain(real, owner, sizeof owner))

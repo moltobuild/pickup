@@ -1,11 +1,13 @@
 #include <moltest.h>
 
 #include <pickup/commands/resolve_command.h>
+#include <pickup/services/paths_service.h>
 #include <pickup/exit_code.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
 #include <unistd.h>
 
 MOLTEST(resolve_rejects_a_malformed_request) {
@@ -77,8 +79,12 @@ MOLTEST(resolve_requires_a_cxx_driver_for_cxx) {
    empty `missing:`, because the reason was walked out of a feature catalogue
    that cannot hold it. Seven compilers, seven blank lines, and no diagnosis. */
 MOLTEST(resolve_says_the_vendor_when_the_vendor_is_what_did_not_match) {
-    char path[] = "/tmp/pickup_resolve_err_XXXXXX";
-    int fd = mkstemp(path);
+    char path[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(moltest_temp_file("pickup_resolve_err", path, sizeof path));
+
+    /* Opened rather than handed back by the temporary: this one is redirected
+       onto stderr, so it needs a descriptor and not just a name. */
+    const int fd = open(path, O_WRONLY);
     ASSERT_TRUE(fd >= 0);
 
     int saved = dup(STDERR_FILENO);

@@ -100,8 +100,7 @@ static bool write_driver(const char *path, const char *gcc_dir, bool cxx_works,
 }
 
 static bool machine_setup(fake_machine *machine, bool gcc_has_cxx) {
-    snprintf(machine->root, sizeof machine->root, "%s", "/tmp/pickup_diag_XXXXXX");
-    if (mkdtemp(machine->root) == NULL)
+    if (!moltest_temp_dir("pickup_diag", machine->root, sizeof machine->root))
         return false;
     if (!make_gcc_tree(machine, gcc_has_cxx))
         return false;

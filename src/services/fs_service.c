@@ -1,5 +1,7 @@
 #include <pickup/services/fs_service.h>
 
+#include <pickup/services/paths_service.h>
+
 #include <dirent.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -7,7 +9,67 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#ifdef _WIN32
+#include <ctype.h>
+#include <direct.h>
+#else
 #include <unistd.h>
+#endif
+
+/*
+ * The platform, in one block, because every function below this line is one
+ * implementation (RFC-0017). A second `#ifdef` further down would be the first
+ * step towards two versions of this file pretending to be one.
+ */
+
+/* Windows has no mode argument: a directory's permissions are inherited from
+   its parent rather than stated at creation. */
+#ifdef _WIN32
+#define make_one_dir(path) _mkdir(path)
+#else
+#define make_one_dir(path) mkdir((path), 0755)
+#endif
+
+/*
+ * `stat` that does not follow a symlink.
+ *
+ * On Windows it does follow one, because there is no `lstat` and the reparse
+ * points that stand in for symlinks need a different API entirely. The two
+ * callers can live with it: one answers "is this a directory, without being
+ * fooled by a link to one", and the other adds up a tree without walking into
+ * a link that points back at it. Both are about not looping, and Windows
+ * requires a privilege to create the links that would cause the loop.
+ *
+ * Stated here rather than silently: it is a real difference in behaviour, and
+ * the day something creates those links on Windows this is where the answer
+ * has to change.
+ */
+static int stat_no_follow(const char *path, struct stat *out) {
+#ifdef _WIN32
+    return stat(path, out);
+#else
+    return lstat(path, out);
+#endif
+}
+
+/* Nanoseconds in one second, for composing a timestamp. */
+#define NANOS_PER_SECOND 1000000000LL
+
+/* Modification time in nanoseconds.
+ *
+ * Windows keeps whole seconds in `struct stat`, so the answer there is a
+ * second multiplied out rather than a second measured. What depends on this is
+ * freshness: two writes inside one second look simultaneous, and a rebuild
+ * that would have been triggered by nanoseconds is not. It is the honest
+ * ceiling of the interface, not a rounding this code chose. */
+static int64_t stat_mtime_ns(const struct stat *info) {
+#ifdef _WIN32
+    return (int64_t)info->st_mtime * NANOS_PER_SECOND;
+#else
+    return (int64_t)info->st_mtim.tv_sec * NANOS_PER_SECOND + (int64_t)info->st_mtim.tv_nsec;
+#endif
+}
 
 bool fs_path_exists(const char *path) {
     struct stat info;
@@ -15,7 +77,7 @@ bool fs_path_exists(const char *path) {
 }
 
 bool fs_make_dir(const char *path) {
-    if (mkdir(path, 0755) == 0)
+    if (make_one_dir(path) == 0)
         return true;
     /* Treat an already existing directory as success. */
     struct stat info;
@@ -117,7 +179,7 @@ bool fs_is_dir(const char *path) {
 
 bool fs_is_dir_no_follow(const char *path) {
     struct stat info;
-    return lstat(path, &info) == 0 && S_ISDIR(info.st_mode);
+    return stat_no_follow(path, &info) == 0 && S_ISDIR(info.st_mode);
 }
 
 bool fs_format_path(char *out, size_t size, const char *format, ...) {
@@ -176,14 +238,11 @@ bool fs_remove_tree(const char *path) {
     return rmdir(path) == 0 && ok;
 }
 
-/* Nanoseconds in one second, for composing a timestamp. */
-#define NANOS_PER_SECOND 1000000000LL
-
 bool fs_mtime_ns(const char *path, int64_t *out) {
     struct stat info;
     if (stat(path, &info) != 0)
         return false;
-    *out = (int64_t)info.st_mtim.tv_sec * NANOS_PER_SECOND + (int64_t)info.st_mtim.tv_nsec;
+    *out = stat_mtime_ns(&info);
     return true;
 }
 
@@ -202,7 +261,7 @@ bool fs_rename(const char *from, const char *to) { return rename(from, to) == 0;
    or send this walking forever. */
 static bool accumulate_tree(const char *path, long long *total) {
     struct stat info;
-    if (lstat(path, &info) != 0)
+    if (stat_no_follow(path, &info) != 0)
         return false;
 
     if (!S_ISDIR(info.st_mode)) {
@@ -242,4 +301,192 @@ bool fs_source_newer(const char *source, const char *target) {
     if (!fs_mtime_ns(source, &source_ns))
         return true; /* missing source: fail safe and rebuild */
     return source_ns > target_ns;
+}
+
+bool fs_real_path(const char *path, char *out, size_t size) {
+#ifdef _WIN32
+    /* `_fullpath` resolves `.` and `..` and makes the path absolute; it does
+       not follow reparse points, which is the same limitation stat_no_follow
+       records above. */
+    char *answer = _fullpath(NULL, path, 0);
+#else
+    char *answer = realpath(path, NULL);
+#endif
+    if (answer == NULL)
+        return false;
+    const int written = snprintf(out, size, "%s", answer);
+    free(answer);
+    return written >= 0 && (size_t)written < size;
+}
+
+#ifdef _WIN32
+/* Case-insensitively, because a filesystem that does not distinguish `GCC.EXE`
+   from `gcc.exe` will hand back either. */
+static bool ends_with_exe(const char *file, size_t length) {
+    static const char suffix[] = ".exe";
+    const size_t width = sizeof suffix - 1;
+    if (length <= width)
+        return false;
+    const char *tail = file + length - width;
+    for (size_t i = 0; i < width; i++) {
+        if (tolower((unsigned char)tail[i]) != suffix[i])
+            return false;
+    }
+    return true;
+}
+#endif
+
+bool fs_executable_name(const char *file, char *out, size_t size) {
+    const size_t length = strlen(file);
+#ifdef _WIN32
+    if (!ends_with_exe(file, length))
+        return false;
+    const size_t bare = length - (sizeof ".exe" - 1);
+#else
+    const size_t bare = length;
+#endif
+    if (bare >= size)
+        return false;
+    memcpy(out, file, bare);
+    out[bare] = '\0';
+    return true;
+}
+
+/* What separates one directory from the next in PATH. A colon is part of a
+   drive letter on Windows, so the platforms cannot share one. */
+#ifdef _WIN32
+#define PATH_ENTRY_SEPARATOR ';'
+#else
+#define PATH_ENTRY_SEPARATOR ':'
+#endif
+
+bool fs_walk_path(const char *path_env, bool (*visit)(const char *directory, void *context),
+                  void *context) {
+    if (path_env == NULL)
+        return true;
+
+    for (const char *cursor = path_env; *cursor != '\0';) {
+        const char *separator = strchr(cursor, PATH_ENTRY_SEPARATOR);
+        const size_t length = separator != NULL ? (size_t)(separator - cursor) : strlen(cursor);
+
+        if (length > 0 && length < PICKUP_PATHS_MAX) {
+            char directory[PICKUP_PATHS_MAX];
+            memcpy(directory, cursor, length);
+            directory[length] = '\0';
+            if (!visit(directory, context))
+                return false;
+        }
+        if (separator == NULL)
+            break;
+        cursor = separator + 1;
+    }
+    return true;
+}
+
+/* A backslash ends a component on Windows; on POSIX it is an ordinary
+   character that a filename may contain. */
+static bool is_separator(char c) {
+#ifdef _WIN32
+    return c == '/' || c == '\\';
+#else
+    return c == '/';
+#endif
+}
+
+bool fs_program_name(const char *path, char *out, size_t size) {
+    const char *file = path;
+    for (const char *cursor = path; *cursor != '\0'; cursor++) {
+        if (is_separator(*cursor))
+            file = cursor + 1;
+    }
+
+    size_t length = strlen(file);
+#ifdef _WIN32
+    if (ends_with_exe(file, length))
+        length -= sizeof ".exe" - 1;
+#endif
+    if (length >= size)
+        return false;
+    memcpy(out, file, length);
+    out[length] = '\0';
+    return true;
+}
+
+bool fs_executable_file(const char *name, char *out, size_t size) {
+#ifdef _WIN32
+    const int written = snprintf(out, size, "%s.exe", name);
+#else
+    const int written = snprintf(out, size, "%s", name);
+#endif
+    return written > 0 && (size_t)written < size;
+}
+
+/* Where the platform keeps files nobody intends to keep. */
+static const char *temp_root(void) {
+#ifdef _WIN32
+    const char *base = getenv("TEMP");
+    if (base == NULL)
+        base = getenv("TMP");
+    return base != NULL ? base : ".";
+#else
+    return "/tmp";
+#endif
+}
+
+/* The pattern both temporaries start from, and how long it is. */
+static bool temp_pattern(const char *prefix, char *out, size_t size, size_t *length) {
+    const int written = snprintf(out, size, "%s/%s_XXXXXX", temp_root(), prefix);
+    if (written < 0 || (size_t)written >= size)
+        return false;
+    *length = (size_t)written;
+    return true;
+}
+
+bool fs_temp_file(const char *prefix, char *out, size_t size) {
+    size_t length = 0;
+    if (!temp_pattern(prefix, out, size, &length))
+        return false;
+#ifdef _WIN32
+    if (_mktemp_s(out, length + 1) != 0)
+        return false;
+    FILE *file = fopen(out, "wb");
+    if (file == NULL)
+        return false;
+    (void)fclose(file);
+    return true;
+#else
+    const int fd = mkstemp(out);
+    if (fd < 0)
+        return false;
+    (void)close(fd);
+    return true;
+#endif
+}
+
+bool fs_temp_program(const char *prefix, char *out, size_t size) {
+    size_t written = 0;
+    if (!temp_pattern(prefix, out, size, &written))
+        return false;
+
+#ifdef _WIN32
+    /* `_mktemp_s` picks the name and creates nothing, so the file is made here
+       — and `.exe` goes on after the name is picked, because the pattern it
+       replaces has to be at the end. */
+    if (_mktemp_s(out, written + 1) != 0)
+        return false;
+    if (written + sizeof ".exe" > size)
+        return false;
+    memcpy(out + written, ".exe", sizeof ".exe");
+    FILE *file = fopen(out, "wb");
+    if (file == NULL)
+        return false;
+    (void)fclose(file);
+    return true;
+#else
+    const int fd = mkstemp(out);
+    if (fd < 0)
+        return false;
+    (void)close(fd);
+    return true;
+#endif
 }

@@ -34,8 +34,7 @@ typedef struct {
  * code.
  */
 static bool fixture_setup(tools_fixture *fixture) {
-    snprintf(fixture->root, sizeof fixture->root, "%s", "/tmp/pickup_tools_XXXXXX");
-    if (mkdtemp(fixture->root) == NULL)
+    if (!moltest_temp_dir("pickup_tools", fixture->root, sizeof fixture->root))
         return false;
 
     const char *path = getenv("PATH");

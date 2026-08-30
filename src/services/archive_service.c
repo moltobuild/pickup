@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <unistd.h>
 
 /* The extractor Pickup drives.
    -x extract, -f from a file, -C into a directory */
@@ -64,7 +63,6 @@ bool archive_supports_wildcards(void) {
 #define ARG_LIST "-tf"
 
 /* Where the probe archive is written. */
-#define ZSTD_PROBE_TEMPLATE "/tmp/pickup_zstd_XXXXXX"
 
 /*
  * An empty tar, compressed with zstd. Generated with:
@@ -97,11 +95,9 @@ bool archive_supports_zstd(void) {
     if (!archive_available())
         return supported;
 
-    char path[] = ZSTD_PROBE_TEMPLATE;
-    int descriptor = mkstemp(path);
-    if (descriptor < 0)
+    char path[PICKUP_PATHS_MAX];
+    if (!fs_temp_file("pickup_zstd", path, sizeof path))
         return supported;
-    (void)close(descriptor);
 
     /* Written through the same call the rest of the code uses: the probe must
        fail for the same reasons a real extraction would. */
@@ -130,7 +126,7 @@ bool archive_extract(const char *archive, const char *destination, int strip_com
 #define EXCLUDE_ARG_SIZE 256
 
 /* How often the child is looked in on while it works. */
-#define POLL_INTERVAL_NS 120000000L /* 0.12 s */
+#define POLL_INTERVAL_MS 120
 
 typedef struct {
     const char *argv[ARGV_MAX];
@@ -183,10 +179,7 @@ static bool build_command(tar_command *command, const char *archive, const char 
     return true;
 }
 
-static void wait_a_moment(void) {
-    struct timespec pause = {.tv_sec = 0, .tv_nsec = POLL_INTERVAL_NS};
-    nanosleep(&pause, NULL);
-}
+static void wait_a_moment(void) { process_pause_ms(POLL_INTERVAL_MS); }
 
 /* Show that it is still working, and how much has come out so far.
 

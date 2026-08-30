@@ -66,8 +66,9 @@ bool probe_identify(const char *path, toolchain *out) {
     if (!fs_format_path(out->path, sizeof out->path, "%s", path))
         return false;
 
-    const char *slash = strrchr(path, '/');
-    if (!fs_format_path(out->name, sizeof out->name, "%s", slash != NULL ? slash + 1 : path))
+    /* The name it is known by, not the file it is stored in: everything that
+       ranks or transforms a driver reads this. */
+    if (!fs_program_name(path, out->name, sizeof out->name))
         return false;
 
     char answer[ANSWER_SIZE];
@@ -116,14 +117,20 @@ void probe_find_cxx_driver(toolchain *chain) {
     if (!cxx_name_for(chain->name, cxx_name, sizeof cxx_name))
         return;
 
+    /* The name is what `cxx_name_for` transforms; the file is what the
+       filesystem is asked about, and on Windows those differ by `.exe`. */
+    char cxx_file[PICKUP_NAME_MAX];
+    if (!fs_executable_file(cxx_name, cxx_file, sizeof cxx_file))
+        return;
+
     /* Look for the sibling next to the C driver, so a compiler found in one
        directory does not pair with a different installation in another. */
     char candidate[PICKUP_PATH_MAX];
     const char *slash = strrchr(chain->path, '/');
     bool composed = slash != NULL
                         ? fs_format_path(candidate, sizeof candidate, "%.*s/%s",
-                                         (int)(slash - chain->path), chain->path, cxx_name)
-                        : fs_format_path(candidate, sizeof candidate, "%s", cxx_name);
+                                         (int)(slash - chain->path), chain->path, cxx_file)
+                        : fs_format_path(candidate, sizeof candidate, "%s", cxx_file);
     if (!composed || !fs_path_exists(candidate))
         return;
 

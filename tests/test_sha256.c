@@ -1,6 +1,7 @@
 #include <moltest.h>
 
 #include <pickup/services/fs_service.h>
+#include <pickup/services/paths_service.h>
 #include <pickup/util/sha256.h>
 
 #include <stdio.h>
@@ -67,10 +68,8 @@ MOLTEST(sha256_is_unaffected_by_how_the_data_is_split) {
 }
 
 MOLTEST(sha256_hashes_a_file) {
-    char path[] = "/tmp/pickup_sha_XXXXXX";
-    int fd = mkstemp(path);
-    ASSERT_TRUE(fd >= 0);
-    close(fd);
+    char path[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(moltest_temp_file("pickup_sha", path, sizeof path));
     ASSERT_TRUE(fs_write_file(path, "abc"));
 
     char hex[SHA256_HEX_SIZE];
@@ -104,10 +103,8 @@ static void record_progress(long long done, long long total, void *context) {
 }
 
 MOLTEST(sha256_reports_progress_while_it_hashes) {
-    char path[] = "/tmp/pickup_sha_watch_XXXXXX";
-    int fd = mkstemp(path);
-    ASSERT_TRUE(fd >= 0);
-    close(fd);
+    char path[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(moltest_temp_file("pickup_sha_watch", path, sizeof path));
 
     /* Big enough to span several read chunks, so progress has somewhere to
        go. */

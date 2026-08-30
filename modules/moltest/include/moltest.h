@@ -3,6 +3,107 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+/*
+ * What the platform does not provide, provided here once.
+ *
+ * A test framework is where this belongs: the suites that need a temporary
+ * directory or an environment variable need them on every platform, and the
+ * alternative is the same three shims repeated in every file that wants one.
+ */
+#ifdef _WIN32
+#include <direct.h>
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+#ifdef _WIN32
+
+static inline int setenv(const char *name, const char *value, int overwrite) {
+    if (!overwrite && getenv(name) != NULL)
+        return 0;
+    return _putenv_s(name, value);
+}
+
+/* Windows removes a variable by assigning it nothing, which is the same thing
+   said differently rather than an approximation. */
+static inline int unsetenv(const char *name) {
+    return _putenv_s(name, "");
+}
+#endif
+
+/*
+ * A temporary directory of one's own, created and named.
+ *
+ * `prefix` names the test rather than the path: the directory goes wherever
+ * the platform keeps temporary files, and a suite that spelled `/tmp` itself
+ * would be a suite that only runs on one of them. That is not hypothetical —
+ * it is how every one of these was written before, and it is the single
+ * largest reason the suites did not compile for Windows.
+ *
+ * False when the directory could not be made, which a caller should treat as
+ * a failed fixture rather than as a test result.
+ */
+/* A temporary file of one's own, created empty and named.
+ *
+ * The companion of moltest_temp_dir, and here for the same reason: a suite that
+ * spells `/tmp` itself is a suite that only runs on one platform. */
+[[nodiscard]] static inline bool moltest_temp_file(const char *prefix, char *out, size_t size);
+
+[[nodiscard]] static inline bool moltest_temp_dir(const char *prefix, char *out, size_t size) {
+#ifdef _WIN32
+    const char *base = getenv("TEMP");
+    if (base == NULL)
+        base = getenv("TMP");
+    if (base == NULL)
+        base = ".";
+#else
+    const char *base = "/tmp";
+#endif
+    const int written = snprintf(out, size, "%s/%s_XXXXXX", base, prefix);
+    if (written < 0 || (size_t)written >= size)
+        return false;
+#ifdef _WIN32
+    /* `_mktemp_s` only picks the name; the directory is still ours to make. */
+    if (_mktemp_s(out, (size_t)written + 1) != 0)
+        return false;
+    return _mkdir(out) == 0;
+#else
+    return mkdtemp(out) != NULL;
+#endif
+}
+
+static inline bool moltest_temp_file(const char *prefix, char *out, size_t size) {
+#ifdef _WIN32
+    const char *base = getenv("TEMP");
+    if (base == NULL)
+        base = getenv("TMP");
+    if (base == NULL)
+        base = ".";
+#else
+    const char *base = "/tmp";
+#endif
+    const int written = snprintf(out, size, "%s/%s_XXXXXX", base, prefix);
+    if (written < 0 || (size_t)written >= size)
+        return false;
+#ifdef _WIN32
+    if (_mktemp_s(out, (size_t)written + 1) != 0)
+        return false;
+    FILE *file = fopen(out, "wb");
+    if (file == NULL)
+        return false;
+    (void)fclose(file);
+    return true;
+#else
+    const int fd = mkstemp(out);
+    if (fd < 0)
+        return false;
+    (void)close(fd);
+    return true;
+#endif
+}
 
 /*
  * moltest — a small unit-testing framework for C, in the spirit of pytest.

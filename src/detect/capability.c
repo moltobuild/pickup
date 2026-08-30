@@ -14,7 +14,6 @@
 #define LANG_CXX_NAME "c++"
 #define ARG_STDIN "-" /* read the program from standard input */
 #define ARG_OUTPUT "-o"
-#define OUTPUT_DISCARD "/dev/null"
 #define ARG_SYNTAX_ONLY "-fsyntax-only"
 
 /* Size of the buffer holding a composed "-std=<name>" argument. */

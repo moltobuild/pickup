@@ -1,9 +1,11 @@
 #include <pickup/detect/health.h>
+#include <pickup/services/fs_service.h>
+#include <pickup/services/paths_service.h>
 
 #include <pickup/services/process_service.h>
 
+#include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 
 /* Compiler arguments. */
 #define ARG_LANG "-x"
@@ -19,7 +21,6 @@
 
 /* Where the linked program is written before being run. It has to be a real
    file rather than /dev/null: the whole point is to start it afterwards. */
-#define TEMPLATE_PATH "/tmp/pickup_health_XXXXXX"
 
 /* What a process reports when the binary could not be executed. */
 #define EXIT_NOT_RUNNABLE 127
@@ -128,11 +129,9 @@ health_status health_probe(const char *compiler, capability_lang lang, const cha
         break;
     }
 
-    char output[] = TEMPLATE_PATH;
-    int fd = mkstemp(output);
-    if (fd < 0)
+    char output[PICKUP_PATHS_MAX];
+    if (!fs_temp_program("pickup_health", output, sizeof output))
         return health_no_link; /* nowhere to link to; not a claim of success */
-    close(fd);
 
     health_status status = health_ok;
     if (!links(compiler, lang, program, flags, flag_count, output))
@@ -141,7 +140,7 @@ health_status health_probe(const char *compiler, capability_lang lang, const cha
         status = health_no_run;
 
     /* Removed however it went: a probe must not leave anything behind. */
-    (void)unlink(output);
+    (void)remove(output);
     return status;
 }
 

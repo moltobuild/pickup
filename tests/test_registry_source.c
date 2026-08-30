@@ -362,8 +362,7 @@ typedef struct {
 } home_fixture;
 
 static bool home_setup(home_fixture *fixture) {
-    snprintf(fixture->root, sizeof fixture->root, "%s", "/tmp/pickup_registry_XXXXXX");
-    if (mkdtemp(fixture->root) == NULL)
+    if (!moltest_temp_dir("pickup_registry", fixture->root, sizeof fixture->root))
         return false;
 
     const char *home = getenv(PICKUP_HOME_ENV);

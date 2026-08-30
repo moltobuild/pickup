@@ -28,8 +28,7 @@ typedef struct {
 
 /* Write `body` as an executable script and return it as a usable driver. */
 static bool fake_setup(fake_compiler *fake, const char *body) {
-    snprintf(fake->root, sizeof fake->root, "%s", "/tmp/pickup_health_t_XXXXXX");
-    if (mkdtemp(fake->root) == NULL)
+    if (!moltest_temp_dir("pickup_health_t", fake->root, sizeof fake->root))
         return false;
     if (!fs_format_path(fake->driver, sizeof fake->driver, "%s/fakecc", fake->root))
         return false;

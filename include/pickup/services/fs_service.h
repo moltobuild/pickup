@@ -77,4 +77,92 @@
    so two edits within the same second are still told apart). */
 [[nodiscard]] bool fs_source_newer(const char *source, const char *target);
 
+/* The canonical form of `path`: symlinks followed, `.` and `..` resolved,
+   written into `out`.
+ *
+ * Here rather than at the six places that used to call `realpath` directly,
+ * because `realpath` is POSIX and the callers are not: keeping the platform
+ * inside this service is what lets the rest of the tree stay one
+ * implementation (RFC-0017).
+ *
+ * False when the path cannot be resolved — which for a symlink means a broken
+ * one — or when the answer does not fit. Callers that treat "unresolvable" as
+ * "use what I gave you" say so themselves; this reports rather than guesses. */
+[[nodiscard]] bool fs_real_path(const char *path, char *out, size_t size);
+
+/* The name a file would be run by, with whatever the platform appends to an
+ * executable taken off.
+ *
+ * On POSIX that is the name itself: any file can carry the execute bit, and
+ * nothing is added to its name to say so. On Windows the suffix *is* the
+ * permission — a file called `gcc` cannot be run and `gcc.exe` can — so `.exe`
+ * is both required here and stripped, which is the filter that `access(X_OK)`
+ * provides on POSIX and cannot provide there, since Windows has no execute bit
+ * for it to read.
+ *
+ * False when the file cannot be run by name on this platform, or when the
+ * answer does not fit. */
+[[nodiscard]] bool fs_executable_name(const char *file, char *out, size_t size);
+
+/* The name a program is known by: the last component of `path`, without the
+ * suffix the platform appends to an executable.
+ *
+ * A name, not a filename, and the distinction earns its keep: `pickup list`
+ * prints this, the preference between `gcc` and `c++` is decided on it, and the
+ * C++ driver is found by transforming it. A `gcc.exe` matches neither the
+ * preferred names nor the C++ ones, so it ranks as an ordinary C driver that
+ * leads nowhere when `g++` is looked for — which is how a toolchain comes to be
+ * recorded with its C++ side missing and a `c++` chosen to compile C.
+ *
+ * Both separators end a component on Windows and only `/` does on POSIX, where
+ * a backslash is an ordinary character in a filename.
+ *
+ * Unlike `fs_executable_name` this does not require the suffix: a caller may
+ * name a program the platform would resolve to `.exe` by itself, and refusing
+ * it here would refuse a compiler that runs. */
+[[nodiscard]] bool fs_program_name(const char *path, char *out, size_t size);
+
+/* The filename a program of this name is stored in: the name itself on POSIX,
+ * the name plus `.exe` on Windows.
+ *
+ * The inverse of `fs_program_name`, and it exists because a sibling driver is
+ * found by composing a name and then looking for the file — `gcc` gives `g++`,
+ * and looking for a file called `g++` on Windows finds nothing at all. */
+[[nodiscard]] bool fs_executable_file(const char *name, char *out, size_t size);
+
+/* A path nothing else is using, in the directory the platform keeps temporary
+ * files — `/tmp` on POSIX and whatever `TEMP` names on Windows, which is why a
+ * caller must not spell either itself. Created empty; removing it is the
+ * caller's. */
+[[nodiscard]] bool fs_temp_file(const char *prefix, char *out, size_t size);
+
+/* The same, ending in whatever suffix a program needs to be run there.
+ *
+ * Both halves matter to the caller that wanted this. A health probe links a
+ * program and then runs it, so it needs somewhere to put it — and `/tmp` is not
+ * somewhere on Windows — and it needs the result to be runnable, which on
+ * Windows is decided by the name.
+ *
+ * The file is created empty, so the name cannot be taken between choosing it
+ * and linking over it. Removing it afterwards is the caller's, however the
+ * probe went. */
+[[nodiscard]] bool fs_temp_program(const char *prefix, char *out, size_t size);
+
+/* Walk the directories in `path_env` — the value of PATH — calling `visit` for
+ * each one in order. `visit` returns true to carry on and false to stop the
+ * walk; whatever it wanted to report goes in `context`.
+ *
+ * It exists because the separator is the platform's and was spelled twice: a
+ * colon on POSIX, a semicolon on Windows, where a colon belongs to a drive
+ * letter and splitting on it turns `C:\bin;D:\bin` into four things that are
+ * not directories. One loop means one place to be right about that.
+ *
+ * An empty entry is skipped rather than visited as the current directory, and
+ * one too long for `PICKUP_PATHS_MAX` is skipped rather than truncated: half a
+ * directory names a different one.
+ *
+ * False when `visit` stopped the walk, true when every directory was seen. */
+[[nodiscard]] bool fs_walk_path(const char *path_env,
+                                bool (*visit)(const char *directory, void *context), void *context);
+
 #endif /* PICKUP_FS_SERVICE_H */

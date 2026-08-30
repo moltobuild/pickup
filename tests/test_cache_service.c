@@ -21,8 +21,7 @@ typedef struct {
 } cache_fixture;
 
 static bool fixture_setup(cache_fixture *fixture) {
-    snprintf(fixture->root, sizeof fixture->root, "%s", "/tmp/pickup_cache_XXXXXX");
-    if (mkdtemp(fixture->root) == NULL)
+    if (!moltest_temp_dir("pickup_cache", fixture->root, sizeof fixture->root))
         return false;
 
     const char *existing = getenv(PICKUP_HOME_ENV);

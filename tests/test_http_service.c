@@ -13,8 +13,7 @@ typedef struct {
 } http_fixture;
 
 static bool fixture_setup(http_fixture *fixture) {
-    snprintf(fixture->root, sizeof fixture->root, "%s", "/tmp/pickup_http_XXXXXX");
-    return mkdtemp(fixture->root) != NULL;
+    return moltest_temp_dir("pickup_http", fixture->root, sizeof fixture->root);
 }
 
 static void fixture_teardown(http_fixture *fixture) {

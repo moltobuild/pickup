@@ -3,6 +3,7 @@
 #include <pickup/services/archive_service.h>
 #include <pickup/services/fs_service.h>
 #include <pickup/services/paths_service.h>
+#include <pickup/services/process_service.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,6 +21,34 @@ static void fixture_teardown(archive_fixture *fixture) {
     (void)fs_remove_tree(fixture->root);
 }
 
+/*
+ * Pack `member` from `directory` into `archive`, without a shell.
+ *
+ * It used to be `system("tar -czf ...")`, and that was two bugs in one line.
+ * A shell splits on spaces and eats backslashes, so a Windows path arrived at
+ * tar in pieces; and tar reads a name whose first colon comes before any slash
+ * as `host:path`, so `C:\Users\...` was a machine called `C` rather than a
+ * file. An argv fixes the first — nothing parses it — and --force-local the
+ * second, asked for the way the production code asks.
+ */
+static bool pack(const char *directory, const char *member, const char *archive,
+                 const char *compression) {
+    const char *argv[8];
+    size_t count = 0;
+    argv[count++] = "tar";
+    if (archive_supports_force_local())
+        argv[count++] = "--force-local";
+    argv[count++] = "-C";
+    argv[count++] = directory;
+    argv[count++] = compression;
+    argv[count++] = archive;
+    argv[count++] = member;
+    argv[count] = NULL;
+
+    const process_result result = process_try(argv, NULL);
+    return result.completed && result.exit_code == 0;
+}
+
 /* Build an archive shaped like the ones LLVM publishes: everything under one
    top-level directory named after the release. */
 static bool make_archive(const char *root, const char *archive) {
@@ -33,15 +62,24 @@ static bool make_archive(const char *root, const char *archive) {
     if (!fs_write_file(binary, "#!/bin/sh\n"))
         return false;
 
-    char command[1024];
-    snprintf(command, sizeof command, "tar -czf %s -C %s LLVM-1.0.0-Linux-X64", archive, root);
-    return system(command) == 0;
+    return pack(root, "LLVM-1.0.0-Linux-X64", archive, "-czf");
 }
 
 MOLTEST(archive_reports_whether_it_can_extract) {
     bool first = archive_available();
     EXPECT_TRUE(archive_available() == first);
     EXPECT_STREQ("tar", archive_requirement());
+}
+
+MOLTEST(archive_settles_the_force_local_question_by_asking) {
+    if (!archive_available())
+        SKIP("tar is not installed");
+
+    /* Same contract as the wildcards question: asked once, and the answer must
+       not move under a caller who has already composed a command with it. */
+    bool first = archive_supports_force_local();
+    EXPECT_TRUE(archive_supports_force_local() == first);
+    EXPECT_TRUE(archive_supports_force_local() == first);
 }
 
 MOLTEST(archive_settles_the_wildcards_question_by_asking) {
@@ -130,9 +168,7 @@ static bool make_mixed_archive(const char *root, const char *archive) {
             return false;
     }
 
-    char command[1024];
-    snprintf(command, sizeof command, "tar -czf %s -C %s LLVM-1.0.0", archive, root);
-    return system(command) == 0;
+    return pack(root, "LLVM-1.0.0", archive, "-czf");
 }
 
 MOLTEST(archive_extracts_only_what_was_asked_for) {
@@ -240,6 +276,50 @@ MOLTEST(archive_without_patterns_extracts_everything) {
     fixture_teardown(&fixture);
 }
 
+MOLTEST(archive_extracts_at_the_most_it_will_accept) {
+    if (!archive_available())
+        SKIP("tar is not installed");
+
+    archive_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    char archive[256], destination[256];
+    snprintf(archive, sizeof archive, "%s/release.tar.gz", fixture.root);
+    snprintf(destination, sizeof destination, "%s/loaded", fixture.root);
+    ASSERT_TRUE(make_mixed_archive(fixture.root, archive));
+    ASSERT_TRUE(fs_make_dirs(destination));
+
+    /* The most `build_command` accepts, on both axes at once: 24 and 24 is
+       inside the limit, so it is a command Pickup will really compose. Only
+       the first pattern selects anything; the rest are there to fill the argv.
+
+       What this guards is the end of that argv. `push` stops one short of the
+       array, and the entry it refuses at full load is the terminating NULL —
+       leaving execve to read the end of the list out of whatever follows in
+       memory. Nothing about the composed command looks wrong, and the failure
+       has no relationship to the option that overflowed it. */
+    const char *patterns[ARCHIVE_MAX_PATTERNS];
+    const char *excludes[ARCHIVE_MAX_PATTERNS];
+    patterns[0] = "*/bin/clang";
+    for (size_t i = 1; i < ARCHIVE_MAX_PATTERNS; i++)
+        patterns[i] = "*/nothing/matches/this";
+    for (size_t i = 0; i < ARCHIVE_MAX_PATTERNS; i++)
+        excludes[i] = "*never-here*";
+
+    const archive_request request = {
+        .patterns = patterns, .pattern_count = ARCHIVE_MAX_PATTERNS,
+        .excludes = excludes, .exclude_count = ARCHIVE_MAX_PATTERNS,
+        .strip_components = 1,
+    };
+    ASSERT_TRUE(archive_extract_selected(archive, destination, &request));
+
+    char path[512];
+    snprintf(path, sizeof path, "%s/bin/clang", destination);
+    EXPECT_TRUE(fs_path_exists(path));
+
+    fixture_teardown(&fixture);
+}
+
 MOLTEST(archive_refuses_more_patterns_than_it_can_hold) {
     const char *many[ARCHIVE_MAX_PATTERNS + 1];
     for (size_t i = 0; i < ARCHIVE_MAX_PATTERNS + 1; i++)
@@ -309,10 +389,9 @@ MOLTEST(archive_extracts_a_zstd_archive_without_a_top_level_directory) {
 
     ASSERT_TRUE(fs_format_path(archive, sizeof archive, "%s/thing.tar.zst", root));
 
-    char command[PICKUP_PATHS_MAX * 2];
-    ASSERT_TRUE(fs_format_path(command, sizeof command,
-                               "tar -C %s/stage -caf %s .", root, archive));
-    ASSERT_EQ(0, system(command));
+    char staged[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(staged, sizeof staged, "%s/stage", root));
+    ASSERT_TRUE(pack(staged, ".", archive, "-caf"));
 
     /* No leading component to strip: the registry publishes archives whose bin
        and lib are already at the top. */

@@ -382,3 +382,41 @@ bool fs_walk_path(const char *path_env, bool (*visit)(const char *directory, voi
     }
     return true;
 }
+
+/* A backslash ends a component on Windows; on POSIX it is an ordinary
+   character that a filename may contain. */
+static bool is_separator(char c) {
+#ifdef _WIN32
+    return c == '/' || c == '\\';
+#else
+    return c == '/';
+#endif
+}
+
+bool fs_program_name(const char *path, char *out, size_t size) {
+    const char *file = path;
+    for (const char *cursor = path; *cursor != '\0'; cursor++) {
+        if (is_separator(*cursor))
+            file = cursor + 1;
+    }
+
+    size_t length = strlen(file);
+#ifdef _WIN32
+    if (ends_with_exe(file, length))
+        length -= sizeof ".exe" - 1;
+#endif
+    if (length >= size)
+        return false;
+    memcpy(out, file, length);
+    out[length] = '\0';
+    return true;
+}
+
+bool fs_executable_file(const char *name, char *out, size_t size) {
+#ifdef _WIN32
+    const int written = snprintf(out, size, "%s.exe", name);
+#else
+    const int written = snprintf(out, size, "%s", name);
+#endif
+    return written > 0 && (size_t)written < size;
+}

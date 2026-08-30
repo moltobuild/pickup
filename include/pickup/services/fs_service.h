@@ -104,6 +104,32 @@
  * answer does not fit. */
 [[nodiscard]] bool fs_executable_name(const char *file, char *out, size_t size);
 
+/* The name a program is known by: the last component of `path`, without the
+ * suffix the platform appends to an executable.
+ *
+ * A name, not a filename, and the distinction earns its keep: `pickup list`
+ * prints this, the preference between `gcc` and `c++` is decided on it, and the
+ * C++ driver is found by transforming it. A `gcc.exe` matches neither the
+ * preferred names nor the C++ ones, so it ranks as an ordinary C driver that
+ * leads nowhere when `g++` is looked for — which is how a toolchain comes to be
+ * recorded with its C++ side missing and a `c++` chosen to compile C.
+ *
+ * Both separators end a component on Windows and only `/` does on POSIX, where
+ * a backslash is an ordinary character in a filename.
+ *
+ * Unlike `fs_executable_name` this does not require the suffix: a caller may
+ * name a program the platform would resolve to `.exe` by itself, and refusing
+ * it here would refuse a compiler that runs. */
+[[nodiscard]] bool fs_program_name(const char *path, char *out, size_t size);
+
+/* The filename a program of this name is stored in: the name itself on POSIX,
+ * the name plus `.exe` on Windows.
+ *
+ * The inverse of `fs_program_name`, and it exists because a sibling driver is
+ * found by composing a name and then looking for the file — `gcc` gives `g++`,
+ * and looking for a file called `g++` on Windows finds nothing at all. */
+[[nodiscard]] bool fs_executable_file(const char *name, char *out, size_t size);
+
 /* Walk the directories in `path_env` — the value of PATH — calling `visit` for
  * each one in order. `visit` returns true to carry on and false to stop the
  * walk; whatever it wanted to report goes in `context`.

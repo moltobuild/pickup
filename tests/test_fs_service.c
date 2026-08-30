@@ -161,3 +161,64 @@ MOLTEST(walking_no_path_at_all_visits_nothing) {
     EXPECT_TRUE(fs_walk_path(NULL, record_directory, &record));
     EXPECT_EQ((size_t)0, record.count);
 }
+
+/* --- fs_program_name and fs_executable_file --- */
+
+/*
+ * The name a compiler is known by, against the file it is stored in.
+ *
+ * Everything that ranks or transforms a driver reads the name: `gcc` is
+ * preferred over `c++`, and the C++ driver is found by turning `gcc` into
+ * `g++`. A name still carrying `.exe` matches neither list, which is how a
+ * toolchain came to be recorded with a `c++` chosen to compile C.
+ */
+MOLTEST(a_program_name_is_the_last_component_without_the_platforms_suffix) {
+    char name[64];
+
+    ASSERT_TRUE(fs_program_name("/usr/bin/gcc", name, sizeof name));
+    EXPECT_STREQ("gcc", name);
+
+    ASSERT_TRUE(fs_program_name("gcc", name, sizeof name));
+    EXPECT_STREQ("gcc", name);
+
+#ifdef _WIN32
+    ASSERT_TRUE(fs_program_name("C:\\msys64\\mingw64\\bin\\gcc.exe", name, sizeof name));
+    EXPECT_STREQ("gcc", name);
+
+    /* The scanner composes with a forward slash, so a real path arrives with
+       both kinds in it. */
+    ASSERT_TRUE(fs_program_name("C:\\mingw64\\bin/c++.exe", name, sizeof name));
+    EXPECT_STREQ("c++", name);
+#else
+    /* Nothing is stripped, and a backslash is an ordinary character here: a
+       POSIX file called `weird\\gcc.exe` is called exactly that. */
+    ASSERT_TRUE(fs_program_name("/usr/bin/gcc.exe", name, sizeof name));
+    EXPECT_STREQ("gcc.exe", name);
+#endif
+}
+
+MOLTEST(a_program_name_that_does_not_fit_is_refused) {
+    char name[4];
+    EXPECT_FALSE(fs_program_name("/usr/bin/a-long-compiler-name", name, sizeof name));
+}
+
+MOLTEST(an_executable_file_carries_what_the_platform_appends) {
+    char file[64];
+    ASSERT_TRUE(fs_executable_file("g++", file, sizeof file));
+#ifdef _WIN32
+    EXPECT_STREQ("g++.exe", file);
+#else
+    EXPECT_STREQ("g++", file);
+#endif
+}
+
+/* The two are inverses, which is the property the C++ driver lookup relies on:
+   a name is turned into a file, the file is found, and the file is read back
+   as the name it stands for. */
+MOLTEST(a_name_survives_the_trip_through_a_filename) {
+    char file[64];
+    char back[64];
+    ASSERT_TRUE(fs_executable_file("clang++", file, sizeof file));
+    ASSERT_TRUE(fs_program_name(file, back, sizeof back));
+    EXPECT_STREQ("clang++", back);
+}

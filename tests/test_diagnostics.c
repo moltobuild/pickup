@@ -56,47 +56,80 @@ static bool make_gcc_tree(fake_machine *machine, bool with_cxx) {
  * which is exactly what a Clang standing on a GCC without libstdc++ does.
  * Under -v it names the installation it selected, the way a real driver does.
  */
-static bool write_driver(const char *path, const char *gcc_dir, bool cxx_works,
-                         bool report_gcc) {
-    char script[4096];
-    int written = snprintf(script, sizeof script,
-        "#!/bin/sh\n"
-        "lang=c\n"
-        "syntax=no\n"
-        "verbose=no\n"
-        "out=''\n"
-        "prev=''\n"
-        "for a in \"$@\"; do\n"
-        "  case \"$prev\" in\n"
-        "    -x) lang=\"$a\" ;;\n"
-        "    -o) out=\"$a\" ;;\n"
-        "  esac\n"
-        "  case \"$a\" in\n"
-        "    -v) verbose=yes ;;\n"
-        "    -fsyntax-only) syntax=yes ;;\n"
-        "    -print-file-name=*) echo \"${a#-print-file-name=}\"; exit 0 ;;\n"
-        "    -dumpmachine) echo 'x86_64-linux-gnu'; exit 0 ;;\n"
-        "  esac\n"
-        "  prev=\"$a\"\n"
-        "done\n"
-        "if [ \"$verbose\" = yes ]; then\n"
-        "  [ '%s' = yes ] && echo 'Selected GCC installation: %s' >&2\n"
-        "  exit 0\n"
-        "fi\n"
-        "cat > /dev/null\n"
-        "[ \"$lang\" = 'c++' ] && [ '%s' != yes ] && exit 1\n"
-        "[ \"$syntax\" = yes ] && exit 0\n"
-        "printf '#!/bin/sh\\nexit 0\\n' > \"$out\"\n"
-        "chmod 700 \"$out\"\n"
-        "exit 0\n",
-        report_gcc ? "yes" : "no", gcc_dir,
-        cxx_works ? "yes" : "no");
+static bool has_argument(int argc, char **argv, const char *flag) {
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], flag) == 0)
+            return true;
+    }
+    return false;
+}
 
-    if (written < 0 || (size_t)written >= sizeof script)
+static const char *value_after(int argc, char **argv, const char *flag) {
+    for (int i = 1; i + 1 < argc; i++) {
+        if (strcmp(argv[i], flag) == 0)
+            return argv[i + 1];
+    }
+    return NULL;
+}
+
+static const char *value_of(int argc, char **argv, const char *prefix) {
+    const size_t width = strlen(prefix);
+    for (int i = 1; i < argc; i++) {
+        if (strncmp(argv[i], prefix, width) == 0)
+            return argv[i] + width;
+    }
+    return NULL;
+}
+
+static bool says_yes(const char *key) {
+    const char *value = moltest_fake_setting(key);
+    return value != NULL && strcmp(value, "yes") == 0;
+}
+
+/* A driver written in C rather than as a shell script, because a fake has to be
+   a program the platform can start. What varies between fixtures — whether the
+   C++ side works, whether it reports a GCC — travels in the spec. */
+MOLTEST_FAKE(diagnostics_driver) {
+    const char *asked = value_of(argc, argv, "-print-file-name=");
+    if (asked != NULL) {
+        printf("%s\n", asked);
+        return 0;
+    }
+    if (has_argument(argc, argv, "-dumpmachine")) {
+        printf("x86_64-linux-gnu\n");
+        return 0;
+    }
+    if (has_argument(argc, argv, "-v")) {
+        if (says_yes("report_gcc")) {
+            const char *dir = moltest_fake_setting("gcc_dir");
+            fprintf(stderr, "Selected GCC installation: %s\n", dir != NULL ? dir : "");
+        }
+        return 0;
+    }
+
+    const char *language = value_after(argc, argv, "-x");
+    if (language != NULL && strcmp(language, "c++") == 0 && !says_yes("cxx_works"))
+        return 1;
+    if (has_argument(argc, argv, "-fsyntax-only"))
+        return 0;
+
+    const char *out = value_after(argc, argv, "-o");
+    if (out != NULL && !moltest_fake_program(out, "exit 0\n", NULL, 0))
+        return 1;
+    return 0;
+}
+
+static bool write_driver(const char *path, const char *gcc_dir, bool cxx_works, bool report_gcc) {
+    char spec[512];
+    const int written = snprintf(spec, sizeof spec,
+                                 "set cxx_works %s\n"
+                                 "set report_gcc %s\n"
+                                 "set gcc_dir %s\n"
+                                 "behave diagnostics_driver\n",
+                                 cxx_works ? "yes" : "no", report_gcc ? "yes" : "no", gcc_dir);
+    if (written < 0 || (size_t)written >= sizeof spec)
         return false;
-    if (!fs_write_file(path, script))
-        return false;
-    return chmod(path, 0700) == 0;
+    return moltest_fake_program(path, spec, NULL, 0);
 }
 
 static bool machine_setup(fake_machine *machine, bool gcc_has_cxx) {

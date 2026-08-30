@@ -86,9 +86,11 @@ static bool make_toolchain(install_fixture *fixture, registry_artifact *artifact
 
     char driver[512];
     snprintf(driver, sizeof driver, "%s/clang", bin);
-    if (!fs_write_file(driver, "#!/bin/sh\nexec /usr/bin/gcc-12 \"$@\"\n"))
-        return false;
-    if (chmod(driver, 0755) != 0)
+    /* A compiler that really compiles: what is installed here is probed
+       afterwards, so imitating one would not be enough. Whichever gcc the
+       platform has, rather than a pinned one — the test needs a working
+       driver, not a particular version. */
+    if (!moltest_fake_program(driver, "exec gcc\n", NULL, 0))
         return false;
 
     char archive[256], stage[256];
@@ -279,8 +281,7 @@ MOLTEST(install_puts_a_tool_where_nothing_resolves_against_it) {
 
     char binary[512];
     snprintf(binary, sizeof binary, "%s/clang-format", bin);
-    ASSERT_TRUE(fs_write_file(binary, "#!/bin/sh\necho 'clang-format version 1.0.0'\n"));
-    ASSERT_EQ(0, chmod(binary, 0755));
+    ASSERT_TRUE(moltest_fake_program(binary, "out clang-format version 1.0.0\nexit 0\n", NULL, 0));
 
     char archive[256], stage[256];
     snprintf(archive, sizeof archive, "%s/cf.tar.zst", fixture.root);
@@ -320,8 +321,7 @@ MOLTEST(install_rejects_a_tool_whose_binary_says_nothing) {
        adopted for having unpacked. */
     char other[512];
     snprintf(other, sizeof other, "%s/something-else", bin);
-    ASSERT_TRUE(fs_write_file(other, "#!/bin/sh\nexit 0\n"));
-    ASSERT_EQ(0, chmod(other, 0755));
+    ASSERT_TRUE(moltest_fake_program(other, "exit 0\n", NULL, 0));
 
     char archive[256], stage[256];
     snprintf(archive, sizeof archive, "%s/cf.tar.zst", fixture.root);

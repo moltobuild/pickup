@@ -146,6 +146,47 @@ void moltest_register(const char *name, const char *file, moltest_fn fn,
     }                                                                          \
     static void moltest_case_##test_name(void)
 
+/*
+ * Define a behaviour a fabricated program can be given, and register it before
+ * main() runs.
+ *
+ * The `out`/`exit` directives cover a fake that prints a version and leaves. A
+ * fake standing in for a compiler does not: it reads its arguments, and what it
+ * does depends on them. Rather than grow the spec into a small shell, the
+ * behaviour is written in C beside the tests that rely on it, and the spec
+ * names it — `behave <name>`.
+ *
+ * The body receives `argc` and `argv` as the fake was started with, and returns
+ * the status to exit with.
+ */
+#define MOLTEST_FAKE(fake_name)                                                \
+    static int moltest_fake_body_##fake_name(int argc, char **argv);           \
+    __attribute__((constructor))                                               \
+    static void moltest_register_fake_##fake_name(void) {                      \
+        moltest_register_fake(#fake_name, moltest_fake_body_##fake_name);      \
+    }                                                                          \
+    static int moltest_fake_body_##fake_name(int argc, char **argv)
+
+/* What a registered behaviour looks like. */
+typedef int (*moltest_fake_fn)(int argc, char **argv);
+
+void moltest_register_fake(const char *name, moltest_fake_fn body);
+
+/* What a `set` line in this program's spec said, or NULL.
+ *
+ * A behaviour receives only the arguments it was started with, and a fake
+ * compiler needs more than that — which library it ships, which flags it will
+ * serve. Those are configuration, not arguments, so they travel in the spec
+ * and are read back here. Only meaningful inside a MOLTEST_FAKE body. */
+[[nodiscard]] const char *moltest_fake_setting(const char *key);
+
+/* What this program was fed on stdin, NUL-terminated and never NULL.
+ *
+ * A compiler decides by the source it was handed — a program that includes
+ * nothing needs no standard library — so a fake standing in for one has to be
+ * able to read it. Only meaningful inside a MOLTEST_FAKE body. */
+[[nodiscard]] const char *moltest_fake_input(void);
+
 /* Define a test that is reported as skipped without running. */
 #define MOLTEST_SKIP(test_name, reason)                                        \
     static void moltest_case_##test_name(void);                                \
@@ -301,5 +342,40 @@ void moltest_set_reporter(const moltest_reporter *reporter);
    Recognised arguments: -k <substring>, -v, --list, --color=auto|always|never,
    -h/--help. */
 [[nodiscard]] int moltest_run(int argc, char **argv);
+
+/*
+ * Fabricate a program that behaves as `spec` says.
+ *
+ * A suite that needs a fake compiler used to write `#!/bin/sh` into a file and
+ * call chmod. That is not a program on Windows — there is no shebang for the
+ * process API to honour — so the fake was a file nothing could run, and forty
+ * tests went down with it.
+ *
+ * What is planted instead is a **copy of the running test binary**, with the
+ * spec written beside it. Started, it reads that spec, does as it says and
+ * exits before a single test is registered. No compiler is needed at test time
+ * and there is one mechanism on both platforms, so a fake behaves the same way
+ * wherever the suite runs.
+ *
+ * `spec` is one directive per line:
+ *
+ *     out <text>    print to stdout, with a newline
+ *     err <text>    print to stderr, with a newline
+ *     exit <n>      leave with this status (default 0)
+ *     link          honour `-o <path>` by putting a runnable program there
+ *     set <k> <v>   a setting the behaviour can read back
+ *     behave <name> hand over to a behaviour defined with MOLTEST_FAKE
+ *     exec <program> become that program, arguments and streams intact
+ *
+ * `link` is what lets a fake stand in for a compiler: a health probe links a
+ * program and then runs it, so the output has to be something the platform can
+ * start. What lands there is another copy of this binary, told to exit 0.
+ *
+ * The platform's executable suffix is appended, because on Windows the suffix
+ * is what makes a file runnable. `made`, when not NULL, receives the path the
+ * program actually landed at.
+ */
+[[nodiscard]] bool moltest_fake_program(const char *path, const char *spec, char *made,
+                                        size_t size);
 
 #endif /* MOLTEST_H */

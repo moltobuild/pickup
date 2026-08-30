@@ -10,6 +10,14 @@ typedef struct {
     const char *standard; /* e.g. "c2x"; NULL means no standard requirement */
     const char *features; /* comma-separated feature ids; NULL means none */
     const char *vendor;   /* restrict to one vendor; NULL means any */
+    /* The platform the code is for, as the triple a compiler reports or as the
+       tag pickup names a cross toolchain by — `x86_64-w64-mingw32` or `w64`.
+       NULL means this machine's own.
+
+       Naming one also lowers the bar a candidate is judged against: a toolchain
+       emitting for somewhere else links a program that cannot start here, so
+       what is asked of it is that it linked. */
+    const char *target;
     /* "libstdc++" or "libc++"; NULL takes whichever the toolchain works with.
 
        Only worth naming when the project has an ABI constraint Pickup cannot

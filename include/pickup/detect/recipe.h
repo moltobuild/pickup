@@ -92,7 +92,7 @@ typedef struct {
    working libc++ recipe further down the list, and a caller with an ABI
    constraint wants that one rather than a refusal. */
 [[nodiscard]] link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang,
-                                              cxx_stdlib wanted);
+                                              cxx_stdlib wanted, bool must_run);
 
 /* The name published for a standard library: "libstdc++", "libc++", "". */
 [[nodiscard]] const char *recipe_stdlib_name(cxx_stdlib stdlib);

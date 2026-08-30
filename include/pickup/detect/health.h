@@ -51,9 +51,15 @@ typedef struct {
 
    The flags are what makes this reusable: recipe_discover proves a candidate
    set of flags by running exactly this, so the recipe it publishes is one that
-   was watched producing a program that ran. */
+   was watched producing a program that ran.
+
+   `must_run` is what a caller says about the platform rather than about the
+   compiler. A toolchain that emits for somewhere else links a program this
+   machine cannot start, and reporting that as `health_no_run` would call a
+   working cross compiler broken. With it false the bar is that it linked. */
 [[nodiscard]] health_status health_probe(const char *compiler, capability_lang lang,
-                                         const char *const *flags, size_t flag_count);
+                                         const char *const *flags, size_t flag_count,
+                                         bool must_run);
 
 /* The same for both languages of a toolchain, with no flags: what the compiler
    does when invoked the way a person would invoke it. */

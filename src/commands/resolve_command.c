@@ -80,9 +80,25 @@ static const char *driver_for(const toolchain *chain, capability_lang lang) {
    you be invoked in this mode?", which is about the flag. `--require` asks
    "does this actually work?", which is about the implementation. Conflating
    them is what makes a tool recommend a compiler that then fails to build. */
+/* True when `chain` emits for the platform `wanted` names.
+ *
+ * Two spellings are accepted because two are in front of the reader: the triple
+ * a compiler reports itself as, and the tag pickup already names a cross
+ * toolchain by — `pickup list` shows `gcc@16.2.0-w64`, so `w64` is what a
+ * person will type. */
+static bool emits_for(const toolchain *chain, const char *wanted) {
+    if (strcmp(chain->target, wanted) == 0)
+        return true;
+    char tag[PICKUP_TARGET_MAX];
+    toolchain_target_tag(chain->target, tag, sizeof tag);
+    return tag[0] != '\0' && strcmp(tag, wanted) == 0;
+}
+
 static bool satisfies(const toolchain *chain, const resolve_request *request, capability_lang lang,
                       capability_set required) {
     if (request->vendor != NULL && chain->vendor != toolchain_vendor_parse(request->vendor))
+        return false;
+    if (request->target != NULL && !emits_for(chain, request->target))
         return false;
     /* A C++ request needs a C++ driver, not merely a compiler that can parse
        C++: without one there is nothing to invoke. */
@@ -115,6 +131,12 @@ static void print_missing(const toolchain *chain, const resolve_request *request
        what did not match. */
     if (request->vendor != NULL && chain->vendor != toolchain_vendor_parse(request->vendor)) {
         fprintf(stderr, " vendor %s\n", request->vendor);
+        return;
+    }
+    /* Like the vendor, a fact about the candidate rather than something it
+       lacks, so no walk of the feature catalogue can name it. */
+    if (request->target != NULL && !emits_for(chain, request->target)) {
+        fprintf(stderr, " target %s (it emits for %s)\n", request->target, chain->target);
         return;
     }
     if (lang == lang_cxx && chain->cxx_path[0] == '\0') {
@@ -223,7 +245,11 @@ static const toolchain *select_buildable(const inventory *list, const resolve_re
            than filtering its answer: the recipe it would prefer may use the
            other one while a working recipe for this one exists further down
            its candidate list. */
-        link_recipe recipe = recipe_discover_for(&list->items[best], lang, wanted);
+        /* A toolchain asked to emit for elsewhere is judged on whether it
+           linked: what it produced does not start on this machine, and calling
+           that a failure would reject every cross compiler there is. */
+        link_recipe recipe =
+            recipe_discover_for(&list->items[best], lang, wanted, request->target == NULL);
         if (!recipe.usable)
             continue;
 

@@ -826,7 +826,7 @@ MOLTEST(recipe_names_the_library_a_caller_asked_for) {
     ASSERT_TRUE(fake_setup_installed(&fake, &accepts, &home));
 
     toolchain chain = chain_of(&fake);
-    link_recipe recipe = recipe_discover_for(&chain, lang_cxx, stdlib_libstdcxx);
+    link_recipe recipe = recipe_discover_for(&chain, lang_cxx, stdlib_libstdcxx, true);
 
     ASSERT_TRUE(recipe.usable);
     EXPECT_EQ(stdlib_libstdcxx, recipe.stdlib);

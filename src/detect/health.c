@@ -115,7 +115,7 @@ static bool runs(const char *path) {
 }
 
 health_status health_probe(const char *compiler, capability_lang lang, const char *const *flags,
-                           size_t flag_count) {
+                           size_t flag_count, bool must_run) {
     if (compiler == NULL || compiler[0] == '\0')
         return health_no_driver;
 
@@ -136,7 +136,7 @@ health_status health_probe(const char *compiler, capability_lang lang, const cha
     health_status status = health_ok;
     if (!links(compiler, lang, program, flags, flag_count, output))
         status = health_no_link;
-    else if (!runs(output))
+    else if (must_run && !runs(output))
         status = health_no_run;
 
     /* Removed however it went: a probe must not leave anything behind. */
@@ -146,12 +146,12 @@ health_status health_probe(const char *compiler, capability_lang lang, const cha
 
 toolchain_health health_check(const toolchain *chain) {
     toolchain_health health = {
-        .c = health_probe(chain->path, lang_c, NULL, 0),
+        .c = health_probe(chain->path, lang_c, NULL, 0, true),
         .cxx = health_no_driver,
     };
     /* Probed with the C++ driver: the C one cannot link a C++ program, so
        asking it would report a failure that belongs to nobody. */
     if (chain->cxx_path[0] != '\0')
-        health.cxx = health_probe(chain->cxx_path, lang_cxx, NULL, 0);
+        health.cxx = health_probe(chain->cxx_path, lang_cxx, NULL, 0, true);
     return health;
 }

@@ -535,7 +535,7 @@ bool recipe_align_gcc(const link_recipe *cxx, const char *driver, link_recipe *c
     size_t probe_count = probe_flags(takes_no_default_config(driver), wanted, count, candidate,
                                      sizeof candidate / sizeof candidate[0]);
 
-    if (health_probe(driver, lang_c, candidate, probe_count) != health_ok)
+    if (health_probe(driver, lang_c, candidate, probe_count, true) != health_ok)
         return false;
 
     (void)fs_format_path(c->compile_flags[c->compile_count++], RECIPE_FLAG_MAX, "%s", flag);
@@ -618,7 +618,7 @@ bool recipe_refresh_config(const char *driver, const link_recipe *recipe) {
 }
 
 link_recipe recipe_discover(const toolchain *chain, capability_lang lang) {
-    return recipe_discover_for(chain, lang, stdlib_unknown);
+    return recipe_discover_for(chain, lang, stdlib_unknown, true);
 }
 
 /* True if the recipe already says which standard library to use. */
@@ -650,7 +650,7 @@ static bool names_a_stdlib(const link_recipe *recipe) {
  * not how this module decides things.
  */
 static void name_the_stdlib(const char *driver, capability_lang lang, cxx_stdlib wanted,
-                            bool ignore_config, link_recipe *recipe) {
+                            bool ignore_config, bool must_run, link_recipe *recipe) {
     if (wanted == stdlib_unknown || lang != lang_cxx || names_a_stdlib(recipe))
         return;
     if (recipe->compile_count >= RECIPE_MAX_FLAGS || recipe->link_count >= RECIPE_MAX_FLAGS)
@@ -669,7 +669,9 @@ static void name_the_stdlib(const char *driver, capability_lang lang, cxx_stdlib
     const char *probe[RECIPE_MAX_FLAGS + 2];
     size_t probe_count =
         probe_flags(ignore_config, wanted_flags, count, probe, sizeof probe / sizeof probe[0]);
-    if (health_probe(driver, lang, probe, probe_count) != health_ok)
+    /* Under the same bar the winning candidate was judged by, or this would
+       measure it differently from the measurement it is restating. */
+    if (health_probe(driver, lang, probe, probe_count, must_run) != health_ok)
         return;
 
     (void)fs_format_path(recipe->compile_flags[recipe->compile_count++], RECIPE_FLAG_MAX, "%s",
@@ -677,7 +679,8 @@ static void name_the_stdlib(const char *driver, capability_lang lang, cxx_stdlib
     (void)fs_format_path(recipe->link_flags[recipe->link_count++], RECIPE_FLAG_MAX, "%s", flag);
 }
 
-link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang, cxx_stdlib wanted) {
+link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang, cxx_stdlib wanted,
+                                bool must_run) {
     link_recipe recipe = {0};
 
     const char *driver = lang == lang_c ? chain->path : chain->cxx_path;
@@ -698,7 +701,7 @@ link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang, cx
         size_t probe_count = probe_flags(ignore_config, candidates[i].flags, candidates[i].count,
                                          probe, sizeof probe / sizeof probe[0]);
 
-        if (health_probe(driver, lang, probe, probe_count) != health_ok)
+        if (health_probe(driver, lang, probe, probe_count, must_run) != health_ok)
             continue;
 
         /* Which library it ended up using is read back from the compiler, not
@@ -715,7 +718,7 @@ link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang, cx
             continue;
 
         publish(&candidates[i], &storage, stdlib, &recipe);
-        name_the_stdlib(driver, lang, wanted, ignore_config, &recipe);
+        name_the_stdlib(driver, lang, wanted, ignore_config, must_run, &recipe);
         return recipe;
     }
     return recipe;

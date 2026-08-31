@@ -18,7 +18,15 @@ license = "Apache-2.0"
 [target]
 std = "c2x"
 requires = ["attr_nodiscard"]
-defines = ["_DEFAULT_SOURCE"]
+# __USE_MINGW_ANSI_STDIO: mingw's default printf comes from msvcrt, which does
+# not know `%z`. Pickup prints a size with it in nine files, and each one would
+# come out as the literal letters on Windows. The macro asks mingw for its own
+# conforming implementation, and it has to be set before <stdio.h> — which a
+# define does and a #define in one file cannot. Nothing on Linux reads it.
+#
+# Here and not only in the Makefile because the Makefile is the bootstrap:
+# `molto build` reads this file, and molto builds pickup for Windows today.
+defines = ["_DEFAULT_SOURCE", "__USE_MINGW_ANSI_STDIO=1"]
 include = ["include"]
 flags = ["-Wall", "-Wextra", "-Wpedantic"]
 

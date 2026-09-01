@@ -82,6 +82,12 @@ typedef struct {
     char vendor[REGISTRY_NAME_MAX];
     char triple[REGISTRY_NAME_MAX];
     char binary[REGISTRY_BINARY_MAX];
+    /* Where the C driver sits inside the prefix, when the recipe named it.
+       Obeyed, unlike the rest of this block: it is a fact about the archive's
+       own layout, not a claim about the machine installing it -- the same
+       reason `binary` above is obeyed for a tool. Verified either way, because
+       nothing is adopted for having unpacked. */
+    char c_driver[REGISTRY_BINARY_MAX];
     char provides[REGISTRY_FEATURES_MAX][REGISTRY_FEATURE_MAX];
     size_t provides_count;
 

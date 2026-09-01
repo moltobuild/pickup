@@ -223,7 +223,22 @@ static bool identify_by_scanning(const char *bin, toolchain *out) {
  * `clang`, another only under its target triple as `x86_64-conda-linux-gnu-gcc`.
  * Neither is assumed.
  */
-static bool identify_in_prefix(const char *prefix, toolchain *out) {
+static bool identify_in_prefix(const char *prefix, const char *published, toolchain *out) {
+    /* What the recipe named, before anything this file would guess. A cross
+       prefix carries a driver under each of these names and only one of them
+       emits for the published target: llvm-mingw's `bin/clang` builds for the
+       host and its `bin/x86_64-w64-mingw32-clang` for Windows, so a search by
+       convention finds the host one and every later step describes a compiler
+       nobody published. Tried rather than trusted -- probe_identify still asks
+       the binary what it is, and a recipe naming something absent falls through
+       to the search below. */
+    if (published != NULL && published[0] != '\0') {
+        char path[PICKUP_PATHS_MAX];
+        if (fs_format_path(path, sizeof path, "%s/%s", prefix, published) && fs_path_exists(path) &&
+            probe_identify(path, out))
+            return true;
+    }
+
     char bin[PICKUP_PATHS_MAX];
     if (!fs_format_path(bin, sizeof bin, "%s/%s", prefix, PREFIX_BIN))
         return false;
@@ -304,9 +319,9 @@ static bool adopt_tool(const char *partial, const char *tools, const registry_ar
  * longer exists. Failure here is not failure of the install: what was installed
  * still works for anything that reads the recipe from `resolve`.
  */
-static void configure_installed(install_report *report) {
+static void configure_installed(install_report *report, const char *published) {
     toolchain chain;
-    if (!identify_in_prefix(report->directory, &chain))
+    if (!identify_in_prefix(report->directory, published, &chain))
         return;
     probe_find_cxx_driver(&chain);
     /* Recorded where it now lives, so the report names paths that exist. */
@@ -339,6 +354,31 @@ static void configure_installed(install_report *report) {
 /* --- proving it --- */
 
 /*
+ * The operating system this pickup runs on, spelled the way a target triple
+ * spells it.
+ *
+ * A guess about somebody else's naming, and treated as one: a host with no name
+ * here claims nothing, and every toolchain is then held to the stricter test
+ * rather than the looser one.
+ */
+#if defined(_WIN32)
+#define HOST_OS_IN_TRIPLE "windows"
+#elif defined(__APPLE__)
+#define HOST_OS_IN_TRIPLE "darwin"
+#elif defined(__linux__)
+#define HOST_OS_IN_TRIPLE "linux"
+#else
+#define HOST_OS_IN_TRIPLE ""
+#endif
+
+/* True if what this toolchain emits is not for this machine. Read off the
+   triple the compiler itself answered with, so it describes the toolchain that
+   arrived rather than the name the artifact was published under. */
+static bool emits_for_elsewhere(const toolchain *chain) {
+    return HOST_OS_IN_TRIPLE[0] != '\0' && strstr(chain->target, HOST_OS_IN_TRIPLE) == NULL;
+}
+
+/*
  * The test that decides whether what was unpacked is a toolchain at all.
  *
  * Counting features is not enough, and finding that out is what this is for:
@@ -351,15 +391,23 @@ static void configure_installed(install_report *report) {
  * same as being broken: a compiler carrying its own newer standard library
  * links against it and then cannot start until the loader is told where it is.
  * What matters is that some configuration works, not that the default one does.
+ *
+ * "Run something" is the one part a cross toolchain cannot do. What it builds
+ * is for another machine, so it links and never starts here, and requiring the
+ * program to run rejects every cross compiler there is. `resolve` settled this
+ * already -- a toolchain asked to emit for elsewhere is judged on whether it
+ * linked -- and installing has to answer it the same way, or the two disagree
+ * about what a working toolchain is.
  */
-static bool proves_it_compiles(const char *prefix, install_report *report) {
-    if (!identify_in_prefix(prefix, &report->installed))
+static bool proves_it_compiles(const char *prefix, const char *published, install_report *report) {
+    if (!identify_in_prefix(prefix, published, &report->installed))
         return false;
 
     report->features_proven = count_proven_features(&report->installed);
     probe_find_cxx_driver(&report->installed);
 
-    link_recipe c = recipe_discover(&report->installed, lang_c);
+    const bool must_run = !emits_for_elsewhere(&report->installed);
+    link_recipe c = recipe_discover_for(&report->installed, lang_c, stdlib_unknown, must_run);
     if (report->features_proven == 0 || !c.usable)
         return false;
 
@@ -368,7 +416,8 @@ static bool proves_it_compiles(const char *prefix, install_report *report) {
        is half a toolchain — and half is the state this check exists to stop
        being reported as success. */
     if (report->installed.cxx_path[0] != '\0') {
-        link_recipe cxx = recipe_discover(&report->installed, lang_cxx);
+        link_recipe cxx =
+            recipe_discover_for(&report->installed, lang_cxx, stdlib_unknown, must_run);
         if (!cxx.usable)
             return false;
     }
@@ -452,7 +501,7 @@ install_report install_run(const install_request *request) {
 
     /* Proved before it is adopted, so a reinstall that turns out to be broken
        leaves the working one that was already there untouched. */
-    if (!proves_it_compiles(partial, &report)) {
+    if (!proves_it_compiles(partial, request->artifact->c_driver, &report)) {
         (void)fs_remove_tree(partial);
         return report_of(install_not_a_toolchain);
     }
@@ -467,6 +516,6 @@ install_report install_run(const install_request *request) {
        discovered under `.partial` would name a directory that stops existing
        the moment the rename finishes. The cost is discovering the recipe twice,
        and it is not a saving worth making. */
-    configure_installed(&report);
+    configure_installed(&report, request->artifact->c_driver);
     return report;
 }

@@ -143,13 +143,25 @@ static void print_missing(const toolchain *chain, const resolve_request *request
         fprintf(stderr, " a C++ driver\n");
         return;
     }
+    bool named = false;
     if (request->standard != NULL &&
-        !capability_accepts_standard(driver_for(chain, lang), lang, request->standard))
+        !capability_accepts_standard(driver_for(chain, lang), lang, request->standard)) {
         fprintf(stderr, " -std=%s", request->standard);
-    for (size_t i = 0; i < count; i++) {
-        if (capability_set_has(required, i) && !capability_set_has(proven, i))
-            fprintf(stderr, " %s", catalog[i].id);
+        named = true;
     }
+    for (size_t i = 0; i < count; i++) {
+        if (capability_set_has(required, i) && !capability_set_has(proven, i)) {
+            fprintf(stderr, " %s", catalog[i].id);
+            named = true;
+        }
+    }
+    /* Nothing above applied, so this candidate met every requirement that can
+       be named and was still passed over — which leaves one gate, the last
+       one: no set of flags made it compile and link. A bare `missing:` sends
+       the reader hunting for a requirement that was met all along, and
+       RFC-0011's discipline is that a failure says what failed. */
+    if (!named)
+        fprintf(stderr, " a set of flags that builds anything");
     fprintf(stderr, "\n");
 }
 

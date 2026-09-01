@@ -181,6 +181,7 @@ static void read_metadata(json_value artifact, registry_artifact *out) {
     json_value toolchain = json_get(metadata, "toolchain");
     copy_optional(json_get(toolchain, "vendor"), out->vendor, sizeof out->vendor);
     copy_optional(json_get(toolchain, "triple"), out->triple, sizeof out->triple);
+    copy_optional(json_get(toolchain, "c_driver"), out->c_driver, sizeof out->c_driver);
 
     copy_optional(json_get(json_get(metadata, "tool"), "binary"), out->binary, sizeof out->binary);
 }

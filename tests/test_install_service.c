@@ -365,3 +365,86 @@ MOLTEST(install_status_messages_cover_every_outcome) {
     EXPECT_FALSE(install_succeeded(install_hash_mismatch));
     EXPECT_FALSE(install_succeeded(install_yanked));
 }
+
+/*
+ * An archive holding two drivers: one under a name the search prefers, and the
+ * real one under its target triple. llvm-mingw is exactly this shape -- its
+ * `bin/clang` emits for the host and only `bin/x86_64-w64-mingw32-clang` emits
+ * for Windows -- so picking by convention picks the wrong one.
+ */
+static bool make_cross_toolchain(install_fixture *fixture, registry_artifact *artifact) {
+    char bin[256];
+    snprintf(bin, sizeof bin, "%s/stage/bin", fixture->root);
+    if (!fs_make_dirs(bin))
+        return false;
+
+    char driver[512];
+    snprintf(driver, sizeof driver, "%s/cc", bin);
+    if (!moltest_fake_program(driver, "exec gcc\n", NULL, 0))
+        return false;
+    snprintf(driver, sizeof driver, "%s/x86_64-w64-mingw32-gcc", bin);
+    if (!moltest_fake_program(driver, "exec gcc\n", NULL, 0))
+        return false;
+
+    char archive[256], stage[256];
+    snprintf(archive, sizeof archive, "%s/cross.tar.zst", fixture->root);
+    snprintf(stage, sizeof stage, "%s/stage", fixture->root);
+    if (!pack(stage, archive))
+        return false;
+    if (!describe(archive, "llvm-mingw", "1.0.0", registry_kind_toolchain, artifact))
+        return false;
+
+    /* What the recipe published, and what the prefix should be identified
+       through. */
+    snprintf(artifact->c_driver, sizeof artifact->c_driver, "%s", "bin/x86_64-w64-mingw32-gcc");
+    return true;
+}
+
+/*
+ * The driver a recipe names wins over the one the search would have preferred.
+ *
+ * Identifying a cross prefix by convention finds the host driver sitting beside
+ * the real one, and everything downstream then describes the wrong compiler:
+ * the installed directory is named after a target the toolchain does not emit
+ * for, and the report names a driver the publisher did not mean.
+ */
+MOLTEST(install_identifies_a_toolchain_through_the_driver_its_recipe_names) {
+    if (!tools_present())
+        SKIP("curl, tar with zstd and gcc-12 are needed for an end to end install");
+
+    install_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    registry_artifact artifact;
+    ASSERT_TRUE(make_cross_toolchain(&fixture, &artifact));
+
+    const install_request request = { .artifact = &artifact };
+    install_report report = install_run(&request);
+
+    ASSERT_EQ(install_ok, report.status);
+    EXPECT_STREQ("x86_64-w64-mingw32-gcc", report.installed.name);
+
+    fixture_teardown(&fixture);
+}
+
+/* And a recipe that names nothing is still served by the search: the field is
+   a hint the publisher may leave out, not a new requirement. */
+MOLTEST(install_falls_back_to_the_search_when_a_recipe_names_no_driver) {
+    if (!tools_present())
+        SKIP("curl, tar with zstd and gcc-12 are needed for an end to end install");
+
+    install_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    registry_artifact artifact;
+    ASSERT_TRUE(make_cross_toolchain(&fixture, &artifact));
+    artifact.c_driver[0] = '\0';
+
+    const install_request request = { .artifact = &artifact };
+    install_report report = install_run(&request);
+
+    ASSERT_EQ(install_ok, report.status);
+    EXPECT_STREQ("cc", report.installed.name);
+
+    fixture_teardown(&fixture);
+}

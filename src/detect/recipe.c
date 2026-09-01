@@ -163,7 +163,12 @@ static void add_flag(candidate *entry, const char *flag) {
    because that mode never gets as far as rejecting the option. The same trap
    this project exists to point out — a compiler accepting a flag is not a
    compiler that implements it — and the same answer: hand it a program and
-   see whether it builds. */
+   see whether it builds.
+
+   What this answers is whether the driver *understands* the flag, and that is
+   all it can answer: a driver may understand it and still need its config to
+   link, which is a different question and belongs where the candidates are
+   tried. See discover_with. */
 static bool takes_no_default_config(const char *driver) {
     const char *argv[] = {driver, FLAG_NO_DEFAULT_CONFIG, "-x", "c", "-fsyntax-only", "-", NULL};
     process_result result = process_try(argv, "int main(void){return 0;}\n");
@@ -679,6 +684,10 @@ static void name_the_stdlib(const char *driver, capability_lang lang, cxx_stdlib
     (void)fs_format_path(recipe->link_flags[recipe->link_count++], RECIPE_FLAG_MAX, "%s", flag);
 }
 
+static bool discover_with(const char *driver, capability_lang lang, cxx_stdlib wanted,
+                          bool must_run, bool ignore_config, const candidate *candidates,
+                          size_t count, candidate_storage *storage, link_recipe *recipe);
+
 link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang, cxx_stdlib wanted,
                                 bool must_run) {
     link_recipe recipe = {0};
@@ -691,11 +700,38 @@ link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang, cx
     candidate candidates[RECIPE_MAX_FLAGS];
     size_t count = build_candidates(lang, driver, &storage, candidates, RECIPE_MAX_FLAGS);
 
-    /* Settled once: every probe below has to be run the same way, or the
-       candidate that wins would have been judged under different conditions
-       from the ones it was measured in. */
-    bool ignore_config = takes_no_default_config(driver);
+    /*
+     * Twice at most, and the second pass is the point.
+     *
+     * Ignoring the driver's config file is what makes the answer describe the
+     * toolchain rather than the state someone left it in, so it is tried
+     * first and it is what the recipe should say wherever it works. But a
+     * config is not always somebody's leftovers: llvm-mingw ships one
+     * carrying `-rtlib=compiler-rt` and `-unwindlib=libunwind`, and a driver
+     * told to ignore that reaches for `-lgcc` and `-lgcc_eh`, which the
+     * toolchain does not have. It parses C either way — which is why asking
+     * with `-fsyntax-only` said yes — and links only one of them.
+     *
+     * A toolchain that builds nothing is the worst answer available, and it
+     * was the answer being given. So when the first pass finds no candidate at
+     * all, the config stops being treated as noise and the whole search runs
+     * again with it honoured. Nothing that already worked changes: the second
+     * pass only ever runs where the first one came back empty.
+     */
+    for (bool ignore_config = takes_no_default_config(driver);; ignore_config = false) {
+        if (discover_with(driver, lang, wanted, must_run, ignore_config, candidates, count,
+                          &storage, &recipe))
+            return recipe;
+        if (!ignore_config)
+            return recipe;
+    }
+}
 
+/* One pass over the candidates, with the driver's own configuration either
+   ignored or honoured. True when one of them produced a usable recipe. */
+static bool discover_with(const char *driver, capability_lang lang, cxx_stdlib wanted,
+                          bool must_run, bool ignore_config, const candidate *candidates,
+                          size_t count, candidate_storage *storage, link_recipe *recipe) {
     for (size_t i = 0; i < count; i++) {
         const char *probe[RECIPE_MAX_FLAGS + 2];
         size_t probe_count = probe_flags(ignore_config, candidates[i].flags, candidates[i].count,
@@ -717,9 +753,9 @@ link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang, cx
         if (wanted != stdlib_unknown && stdlib != wanted)
             continue;
 
-        publish(&candidates[i], &storage, stdlib, &recipe);
-        name_the_stdlib(driver, lang, wanted, ignore_config, must_run, &recipe);
-        return recipe;
+        publish(&candidates[i], storage, stdlib, recipe);
+        name_the_stdlib(driver, lang, wanted, ignore_config, must_run, recipe);
+        return true;
     }
-    return recipe;
+    return false;
 }

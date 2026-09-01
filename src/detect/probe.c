@@ -91,15 +91,52 @@ bool probe_identify(const char *path, toolchain *out) {
     return true;
 }
 
+/* The C driver spellings, and the C++ driver each one leads to. `c++` is
+   deliberately absent: it is already the C++ side and has no C counterpart, so
+   a toolchain identified through it has no C++ driver to find. */
+static const struct {
+    const char *c;
+    const char *cxx;
+} driver_spellings[] = {
+    {"gcc", "g++"},
+    {"clang", "clang++"},
+    {"cc", "c++"},
+};
+#define DRIVER_SPELLING_COUNT (sizeof driver_spellings / sizeof driver_spellings[0])
+
+/*
+ * Where `spelling` sits inside `name` as a whole component: at the front, or
+ * directly after a dash.
+ *
+ * A cross toolchain puts the target triple in front of the driver and nothing
+ * else identifies it -- llvm-mingw ships `x86_64-w64-mingw32-gcc`, conda ships
+ * `x86_64-conda-linux-gnu-gcc`, and install_service already says so where it
+ * looks for one. Anchoring the match at the front of the name finds neither.
+ *
+ * Requiring a whole component is what makes the search safe: it is the rule
+ * that stops `cc` from matching the tail of `gcc`.
+ */
+static const char *spelling_in(const char *name, const char *spelling) {
+    const size_t length = strlen(spelling);
+    for (const char *at = name; (at = strstr(at, spelling)) != NULL; at += length) {
+        if (at == name || at[-1] == '-')
+            return at;
+    }
+    return NULL;
+}
+
 /* The C++ driver name that goes with a C driver, following each vendor's
-   convention: gcc-12 -> g++-12, clang-14 -> clang++-14. */
+   convention and carrying any target prefix across untouched:
+   gcc-12 -> g++-12, clang-14 -> clang++-14,
+   x86_64-w64-mingw32-gcc -> x86_64-w64-mingw32-g++. */
 static bool cxx_name_for(const char *c_name, char *out, size_t out_size) {
-    if (strncmp(c_name, "gcc", 3) == 0)
-        return fs_format_path(out, out_size, "g++%s", c_name + 3);
-    if (strncmp(c_name, "clang", 5) == 0)
-        return fs_format_path(out, out_size, "clang++%s", c_name + 5);
-    if (strcmp(c_name, "cc") == 0)
-        return fs_format_path(out, out_size, "%s", "c++");
+    for (size_t i = 0; i < DRIVER_SPELLING_COUNT; i++) {
+        const char *at = spelling_in(c_name, driver_spellings[i].c);
+        if (at == NULL)
+            continue;
+        return fs_format_path(out, out_size, "%.*s%s%s", (int)(at - c_name), c_name,
+                              driver_spellings[i].cxx, at + strlen(driver_spellings[i].c));
+    }
     return false;
 }
 

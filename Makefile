@@ -17,6 +17,11 @@ STD    ?= c2x
 VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' Project.toml | head -1)
 
 CFLAGS ?= -std=$(STD) -D_DEFAULT_SOURCE -Wall -Wextra -Wpedantic -Iinclude
+# Every object depends on Project.toml (see the compile rule below), because
+# this define is the one input to a build that no source file mentions. Without
+# it, releasing edits the manifest, nothing looks out of date, and the binary
+# keeps answering with the version it was first compiled at -- which is how
+# 0.7.1 shipped a `pickup -V` that said 0.7.0.
 CFLAGS += -DMOLTO_PKG_VERSION='"$(VERSION)"'
 
 # For a caller that wants to add to the build rather than replace it: -Werror,
@@ -61,7 +66,7 @@ $(BIN): $(LIB_OBJ) $(MAIN_OBJ)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-$(BUILD_DIR)/%.o: %.c
+$(BUILD_DIR)/%.o: %.c Project.toml
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
 

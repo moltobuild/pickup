@@ -234,8 +234,8 @@ static bool identify_in_prefix(const char *prefix, const char *published, toolch
        to the search below. */
     if (published != NULL && published[0] != '\0') {
         char path[PICKUP_PATHS_MAX];
-        if (fs_format_path(path, sizeof path, "%s/%s", prefix, published) &&
-            fs_path_exists(path) && probe_identify(path, out))
+        if (fs_format_path(path, sizeof path, "%s/%s", prefix, published) && fs_path_exists(path) &&
+            probe_identify(path, out))
             return true;
     }
 
@@ -399,8 +399,7 @@ static bool emits_for_elsewhere(const toolchain *chain) {
  * linked -- and installing has to answer it the same way, or the two disagree
  * about what a working toolchain is.
  */
-static bool proves_it_compiles(const char *prefix, const char *published,
-                               install_report *report) {
+static bool proves_it_compiles(const char *prefix, const char *published, install_report *report) {
     if (!identify_in_prefix(prefix, published, &report->installed))
         return false;
 

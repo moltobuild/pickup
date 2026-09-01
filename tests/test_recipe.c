@@ -863,3 +863,62 @@ MOLTEST(recipe_says_nothing_extra_when_no_library_was_asked_for) {
 
     fake_teardown(&fake);
 }
+
+/*
+ * A driver whose configuration file is not decoration.
+ *
+ * llvm-mingw puts `-rtlib=compiler-rt`, `-unwindlib=libunwind` and
+ * `-fuse-ld=lld` in a config beside the driver, because without them clang
+ * falls back to `-lgcc -lgcc_eh` and that toolchain ships neither. So it parses
+ * C perfectly well with its config ignored and fails at the link -- which is
+ * exactly the layer `-fsyntax-only` cannot see.
+ */
+MOLTEST_FAKE(fake_config_dependent_driver) {
+    const bool ignoring = argument_given(argc, argv, "--no-default-config");
+
+    if (argument_given(argc, argv, "-fsyntax-only"))
+        return 0;
+
+    const char *out = argument_after(argc, argv, "-o");
+    if (out == NULL)
+        return 0;
+    if (ignoring) {
+        fprintf(stderr, "lld: error: unable to find library -lgcc\n");
+        return 1;
+    }
+    return moltest_fake_program(out, "exit 0\n", NULL, 0) ? 0 : 1;
+}
+
+/*
+ * Whether a driver's configuration can be ignored is a question about linking,
+ * and it used to be asked with `-fsyntax-only`.
+ *
+ * The probe passed, `--no-default-config` went into every candidate after it,
+ * and the link then reached for libraries the config would have replaced. The
+ * toolchain was reported as building nothing at all -- and because the failure
+ * happened past `satisfies`, `resolve` printed `missing:` with nothing behind
+ * it.
+ */
+MOLTEST(recipe_keeps_the_configuration_a_driver_needs_to_link) {
+    char root[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(moltest_temp_dir("pickup_cfg_driver", root, sizeof root));
+
+    char wanted[PICKUP_PATHS_MAX];
+    char driver[PICKUP_PATHS_MAX];
+    snprintf(wanted, sizeof wanted, "%s/x86_64-w64-mingw32-clang", root);
+    ASSERT_TRUE(moltest_fake_program(wanted, "behave fake_config_dependent_driver\n", driver,
+                                     sizeof driver));
+
+    toolchain chain = {0};
+    chain.vendor = vendor_clang;
+    snprintf(chain.name, sizeof chain.name, "x86_64-w64-mingw32-clang");
+    snprintf(chain.path, sizeof chain.path, "%s", driver);
+
+    const link_recipe recipe = recipe_discover(&chain, lang_c);
+    EXPECT_TRUE(recipe.usable);
+
+    /* And the flag that broke it is not in the answer, because a recipe is
+       what makes this toolchain build. */
+    for (size_t i = 0; i < recipe.compile_count; i++)
+        EXPECT_STRNE("--no-default-config", recipe.compile_flags[i]);
+}

@@ -180,3 +180,77 @@ MOLTEST(inventory_finds_a_toolchain_by_the_forms_a_person_types) {
 
     inventory_free(&list);
 }
+
+/*
+ * A cross toolchain names its drivers after the target triple and nothing
+ * else: llvm-mingw ships `x86_64-w64-mingw32-gcc`, conda ships
+ * `x86_64-conda-linux-gnu-gcc`, and install_service's own comment says as
+ * much. The C++ driver beside it is the same name with the last component
+ * transformed, so a match anchored at the start of the name finds nothing and
+ * records the toolchain as having no C++ at all.
+ */
+MOLTEST(probe_pairs_a_prefixed_driver_with_its_cxx_sibling) {
+    char root[PICKUP_PATH_MAX];
+    ASSERT_TRUE(moltest_temp_dir("pickup_prefixed", root, sizeof root));
+
+    char wanted[PICKUP_PATH_MAX];
+    char c_driver[PICKUP_PATH_MAX];
+    char cxx_driver[PICKUP_PATH_MAX];
+    snprintf(wanted, sizeof wanted, "%s/x86_64-w64-mingw32-gcc", root);
+    ASSERT_TRUE(moltest_fake_program(wanted, "exit 0\n", c_driver, sizeof c_driver));
+    snprintf(wanted, sizeof wanted, "%s/x86_64-w64-mingw32-g++", root);
+    ASSERT_TRUE(moltest_fake_program(wanted, "exit 0\n", cxx_driver, sizeof cxx_driver));
+
+    /* The name is the driver's name, without whatever suffix the filesystem
+       needed: a name is not a filename. */
+    toolchain chain = {0};
+    snprintf(chain.name, sizeof chain.name, "x86_64-w64-mingw32-gcc");
+    snprintf(chain.path, sizeof chain.path, "%s", c_driver);
+
+    probe_find_cxx_driver(&chain);
+    EXPECT_STREQ(cxx_driver, chain.cxx_path);
+}
+
+/* The same for the clang spelling, which transforms differently: `clang` grows
+   a `++` where `gcc` becomes `g++`. */
+MOLTEST(probe_pairs_a_prefixed_clang_with_its_cxx_sibling) {
+    char root[PICKUP_PATH_MAX];
+    ASSERT_TRUE(moltest_temp_dir("pickup_prefixed_clang", root, sizeof root));
+
+    char wanted[PICKUP_PATH_MAX];
+    char c_driver[PICKUP_PATH_MAX];
+    char cxx_driver[PICKUP_PATH_MAX];
+    snprintf(wanted, sizeof wanted, "%s/x86_64-w64-mingw32-clang", root);
+    ASSERT_TRUE(moltest_fake_program(wanted, "exit 0\n", c_driver, sizeof c_driver));
+    snprintf(wanted, sizeof wanted, "%s/x86_64-w64-mingw32-clang++", root);
+    ASSERT_TRUE(moltest_fake_program(wanted, "exit 0\n", cxx_driver, sizeof cxx_driver));
+
+    toolchain chain = {0};
+    snprintf(chain.name, sizeof chain.name, "x86_64-w64-mingw32-clang");
+    snprintf(chain.path, sizeof chain.path, "%s", c_driver);
+
+    probe_find_cxx_driver(&chain);
+    EXPECT_STREQ(cxx_driver, chain.cxx_path);
+}
+
+/* And a bare name still pairs the way it always did: the prefix is optional,
+   not required. */
+MOLTEST(probe_still_pairs_a_versioned_driver_with_no_prefix) {
+    char root[PICKUP_PATH_MAX];
+    ASSERT_TRUE(moltest_temp_dir("pickup_versioned", root, sizeof root));
+
+    char wanted[PICKUP_PATH_MAX];
+    char c_driver[PICKUP_PATH_MAX];
+    char cxx_driver[PICKUP_PATH_MAX];
+    snprintf(wanted, sizeof wanted, "%s/gcc-12", root);
+    ASSERT_TRUE(moltest_fake_program(wanted, "exit 0\n", c_driver, sizeof c_driver));
+    snprintf(wanted, sizeof wanted, "%s/g++-12", root);
+    ASSERT_TRUE(moltest_fake_program(wanted, "exit 0\n", cxx_driver, sizeof cxx_driver));
+
+    toolchain chain = {0};
+    snprintf(chain.name, sizeof chain.name, "gcc-12");
+    snprintf(chain.path, sizeof chain.path, "%s", c_driver);
+
+    probe_find_cxx_driver(&chain);
+    EXPECT_STREQ(cxx_driver, chain.cxx_path);
+}

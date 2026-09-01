@@ -7,7 +7,7 @@
 
 [package]
 name = "pickup"
-version = "0.7.1"
+version = "0.7.8"
 description = "The toolchain manager of the Molto ecosystem"
 repository = "https://github.com/moltobuild/pickup"
 # The key states a licence; LICENSE and NOTICE at the root grant it. Apache-2.0

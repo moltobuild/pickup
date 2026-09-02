@@ -9,8 +9,26 @@ on:
 permissions:
   contents: write
 
+# The toolchain that produces the Windows binary, pinned by version and by
+# digest — and served by the registry pickup itself installs from, which makes
+# this the one place where the project builds its own release with the supply
+# chain it asks everyone else to use.
+#
+# Fetched with curl rather than with the pickup being released. `install` is
+# pickup's largest command and the release must not depend on it: a regression
+# there would mean the version that fixes it could not be published either.
+# The circularity is not elegance, it is a trap.
+#
+# apt's `gcc-mingw-w64-x86-64` was the alternative and is the wrong one: it
+# links against msvcrt, whose `printf` does not know `%z`, and it is several
+# major versions behind. This is UCRT and LLVM 23.
+env:
+  MINGW_VERSION: "23.1.0"
+  MINGW_SHA256: "a6a7812ee736f25345fec3842224b4c12cc795751ea2117f684f8ad59dc7022f"
+
 jobs:
-  release:
+  build:
+    name: Build what gets published
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -21,7 +39,7 @@ jobs:
       - name: Install GCC 12
         run: |
           sudo apt-get update
-          sudo apt-get install -y -o Acquire::Retries=3 gcc-12 g++-12
+          sudo apt-get install -y -o Acquire::Retries=3 gcc-12 g++-12 zstd
 
       # The tag and the manifest are two claims about the same number, and a
       # binary whose version disagrees with the tag it was published under is
@@ -39,7 +57,7 @@ jobs:
       # dynamic build needs GLIBC_2.34 and rules out Debian 11, Ubuntu 20.04
       # and RHEL 8 — the machines most likely to want a newer compiler than
       # they ship, which is the whole reason pickup exists.
-      - name: Build the static binary
+      - name: Build the static Linux binary
         run: |
           make build LDFLAGS="-static"
           file build/pickup
@@ -55,19 +73,51 @@ jobs:
           "$pickup" list
           "$pickup" resolve --lang c --format toml
 
-      - name: Name it, hash it, and describe it
+      - name: Fetch the Windows toolchain
+        run: |
+          url=https://registry.moltobuild.dev/v1/toolchains/llvm-mingw/${MINGW_VERSION}/linux-x86_64/download
+          curl -fsSL --retry 3 -o llvm-mingw.tar.zst "$url"
+          echo "${MINGW_SHA256}  llvm-mingw.tar.zst" | sha256sum --check --strict
+          mkdir -p toolchain
+          tar --zstd -xf llvm-mingw.tar.zst -C toolchain
+
+      # A separate BUILD_DIR, because the objects above are ELF and these are
+      # PE and they share every path. Make compares timestamps, not targets,
+      # and one tree would hand the linker a mixture of the two.
+      - name: Cross-compile the static Windows binary
+        run: |
+          driver="$PWD/toolchain/bin/x86_64-w64-mingw32-clang"
+          test -x "$driver"
+          make build BUILD_DIR=build-windows CC="$driver" LDFLAGS="-static"
+          file build-windows/pickup.exe
+          file build-windows/pickup.exe | grep -q 'PE32+ executable'
+
+      # UCRT ships with Windows 10 and later, so a binary that imports only it
+      # and KERNEL32 needs nothing unpacked beside it. Anything else in this
+      # list — `libwinpthread-1.dll`, `libgcc_s_seh-1.dll`, `libc++.dll` — is a
+      # file the download would have to carry and does not, which makes it a
+      # binary that runs here and not on the machine it was published for.
+      - name: And it needs nothing beside it
+        run: |
+          strings build-windows/pickup.exe \
+            | grep -oiE '[A-Za-z0-9_-]+\.dll' | sort -u | tee imports
+          ! grep -viE '^(api-ms-win-crt-[a-z0-9-]+\.dll|KERNEL32\.dll)$' imports
+
+      - name: Name them, hash them, and describe them
         run: |
           mkdir -p dist
-          name="pickup-${VERSION}-x86_64-linux"
-          cp build/pickup "dist/$name"
+          cp build/pickup "dist/pickup-${VERSION}-x86_64-linux"
+          cp build-windows/pickup.exe "dist/pickup-${VERSION}-x86_64-windows.exe"
           cd dist
-          sha256sum "$name" > SHA256SUMS
+          sha256sum pickup-* > SHA256SUMS
           cat SHA256SUMS
 
       - name: Write the release notes
         run: |
           cat > dist/NOTES.md <<NOTES
-          Static x86-64 Linux binary. No glibc requirement, nothing to unpack.
+          ### Linux
+
+          Static x86-64 binary. No glibc requirement, nothing to unpack.
 
           \`\`\`sh
           base=https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}
@@ -88,16 +138,110 @@ jobs:
           Everything installs under \`~/.pickup\`, no root. Needs \`curl\`, \`tar\` and
           \`zstd\` on the PATH to install anything; \`pickup doctor\` says so when one
           is missing.
+
+          ### Windows
+
+          \`pickup-${VERSION}-x86_64-windows.exe\`, x86-64, Windows 10 or later.
+          Statically linked against UCRT: there is nothing to put beside it.
+
+          **Windows is not a supported platform yet, and this binary does not
+          claim it is.** RFC-0017 sets four bars for that word and the fourth —
+          the full suite green on a Windows runner — is not met. What is
+          measured to work, in CI, on a Windows runner, and asserted against
+          this exact binary before it is published:
+
+          - \`scan\` and \`list\` find the compiler the machine has
+          - \`resolve --lang c\`, which is the question molto actually asks
+
+          What is not proven there: **\`install\`**. Windows ships \`curl.exe\` and
+          \`tar.exe\` but no \`zstd\`, and the archives are zstd — so unpacking has
+          nothing to unpack with until one is on the PATH. Use \`pickup\` on
+          Windows to find and answer for a compiler that is already installed;
+          for fetching one, the supported path is still Linux.
+
+          The state of the port is the Windows badge on the README.
           NOTES
           cat dist/NOTES.md
+
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: dist
+          path: dist/
+          retention-days: 1
+
+  # A cross build says the binary is well-formed. It cannot say the binary does
+  # pickup's job, and this port is the reason that sentence is in both
+  # repositories: it compiled, it linked, it started, and it reported zero
+  # toolchains on a machine with a compiler — because every candidate is
+  # `gcc.exe` and `PATH` splits on `;`. Nothing before this job can see that.
+  windows:
+    name: The Windows binary does pickup's job
+    needs: build
+    runs-on: windows-2022
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: dist
+
+      # MSYS2 is here for the compiler it brings, not for the shell: nothing in
+      # this job builds pickup, it runs the binary the last one produced. The
+      # compiler is the subject — a pickup that finds nothing on a machine with
+      # a gcc on it is the failure this job exists to catch.
+      - uses: msys2/setup-msys2@v2.32.0
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc
+
+      - name: The download is the file that was hashed
+        run: sha256sum --check --ignore-missing SHA256SUMS
+
+      # Not `list` on its own: that exits 0 with an empty table, which is
+      # exactly the failure this is here to catch. The assertion is that it
+      # named something.
+      - name: It finds the compiler this machine has
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          pickup="$PWD/pickup-${version}-x86_64-windows.exe"
+          chmod +x "$pickup"
+          test "$("$pickup" --version)" = "pickup ${version}"
+          "$pickup" scan
+          "$pickup" list | tee found.txt
+          grep -qE '^(gcc|clang|cc)' found.txt \
+            || { echo "pickup found no toolchain on a machine that has one"; exit 1; }
+
+      # `resolve` is the question molto actually asks. A pickup that lists a
+      # compiler and then cannot answer for one is a pickup molto cannot use.
+      - name: And it can answer molto's question
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          "$PWD/pickup-${version}-x86_64-windows.exe" resolve --lang c
+
+  publish:
+    name: Publish
+    needs: [build, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: dist
+          path: dist
 
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          version=${GITHUB_REF_NAME#v}
           gh release create "${GITHUB_REF_NAME}" \
-            --title "pickup ${VERSION}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "pickup ${version}" \
             --notes-file dist/NOTES.md \
             --generate-notes \
-            "dist/pickup-${VERSION}-x86_64-linux" \
+            "dist/pickup-${version}-x86_64-linux" \
+            "dist/pickup-${version}-x86_64-windows.exe" \
             dist/SHA256SUMS

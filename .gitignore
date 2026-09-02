@@ -17,3 +17,11 @@ graphify-out/
 # What the windows workflow counts the port with
 tally.count
 suite.log
+
+# The cross build's output, kept apart from /build/ because those objects are
+# ELF and these are PE and Make compares timestamps, not targets
+/build-windows/
+
+# What the release workflow unpacks to cross-compile with
+/toolchain/
+*.tar.zst

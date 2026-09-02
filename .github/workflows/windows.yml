@@ -1,24 +1,24 @@
 name: Windows
 
-# Deliberately not part of `ci.yml`.
+# A gate, as of 2026-09-02, and it was not one for most of its life.
 #
-# This file measures how far the Windows port has got; `ci.yml` is what has to
-# be green. It is not a gate. Nothing requires it, and a pull request merges
-# with it red — which is the whole reason it can afford to be red.
+# It began as a progress report: both jobs failed, both were excused with
+# `continue-on-error`, and nothing required them. That flag came off the jobs
+# when a green badge over thirty failing cases turned out to be worse than no
+# badge, then off the suite step when the suite stopped failing. There is
+# nothing left to excuse.
 #
-# The flag no longer sits on the jobs, and that is not tidying. A job marked
-# `continue-on-error` reports success whatever happens inside it, so this
-# workflow's badge was green over a tree where thirty cases fail — and a green
-# badge that means nothing is worse than no badge, because someone believes it.
-# The flag stays on the one step that is still being watched, which is what
-# lets it measure rather than stop, and `Where the port stands` ends the job
-# the way the port really is.
+# RFC-0017 spells this moment as "it moves into `ci.yml`", and what that move
+# means is that Windows has to be green to merge — which is now true, and is
+# what the branch protection says. It stays its own file so the badge does:
+# `ci.yml` runs on ubuntu and answers for Linux, this one runs on
+# windows-2022 and answers for Windows, and a red badge names the platform
+# without anyone opening a run. One workflow holding both would report a
+# failure and make you go and look to find out which half.
 #
-# When that step passes, the flag comes off and both jobs move into `ci.yml`.
-# That move is the definition of "supported" in RFC-0017: a platform is not
-# named as supported until the suite proves it, and pickup's own spec says
-# naming one before it is proven is the single thing this project exists not
-# to do.
+# What is still not true is "supported": RFC-0017 asks four things and this is
+# one. `install` is the one that is missing — the archives are zstd, and
+# Windows ships `curl.exe` and `tar.exe` but no zstd.
 
 on:
   push:
@@ -138,54 +138,8 @@ jobs:
       - name: And it can answer molto's question
         run: ./build/pickup resolve --lang c
 
-      # Watched, not gated, while the port is in progress — and the distinction
-      # is deliberate. Around forty of the failures are one thing: seven test
-      # files fabricate a fake compiler by writing `#!/bin/sh` and calling
-      # chmod, and Windows has no shebang for CreateProcess to honour. That is
-      # the harness being unable to make a program, not pickup being unable to
-      # do its job, and `resolve` passing against a real gcc two steps above is
-      # the evidence.
-      #
-      # Reported rather than skipped: skipping edits forty tests to hide them,
-      # while this leaves every failure printed and counted, so the tally is a
-      # number to watch move. The steps above stay hard gates, so a regression
-      # in building, finding a compiler or resolving still turns this red.
-      #
-      # The flag comes off when the fakes are real programs. That, and the
-      # job-level one, is what RFC-0017 means by supported.
-      - name: Run the suite (watched, not yet a gate)
-        continue-on-error: true
-        run: |
-          set +e
-          make test CC=gcc 2>&1 | tee suite.log
-          status=${PIPESTATUS[0]}
-          failed=$(sed -n 's/.*[^0-9]\([0-9][0-9]*\) failed.*/\1/p' suite.log | tail -1)
-          if [ -n "$failed" ] && [ "$failed" -gt 0 ]; then
-            echo "$failed" >> tally.count
-            echo "### The suite on Windows" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "$failed tests still fail." >> "$GITHUB_STEP_SUMMARY"
-          elif [ $status -ne 0 ]; then
-            # It failed without reporting a tally: the binary did not run, or
-            # it died partway. Counted as one so the verdict cannot read that
-            # as nothing wrong.
-            echo 1 >> tally.count
-          else
-            # A green suite reports nothing to count, and the verdict below
-            # cannot tell that apart from a suite that never ran. So it says
-            # zero out loud.
-            echo 0 >> tally.count
-          fi
-          exit $status
-
-      # The job ends the way the port stands. This step and the flag above come
-      # off together, when the count reaches zero.
-      - name: Where the port stands
-        run: |
-          if [ ! -f tally.count ]; then
-            echo "the suite reported no tally, which is its own kind of red"
-            exit 1
-          fi
-          total=$(awk '{ sum += $1 } END { print sum + 0 }' tally.count)
-          echo "$total between here and a supported platform"
-          test "$total" -eq 0
+      # Every case, and a failure here fails the job. It was excused for as
+      # long as it was failing, and counting what failed was the whole point
+      # of the tally that used to follow it. There is nothing left to count.
+      - name: Run the suite
+        run: make test CC=gcc

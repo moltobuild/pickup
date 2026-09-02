@@ -1,34 +1,33 @@
 # Pickup
 
-[![CI](https://github.com/moltobuild/pickup/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/moltobuild/pickup/actions/workflows/ci.yml)
-[![Linux](https://github.com/moltobuild/pickup/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/moltobuild/pickup/actions/workflows/release.yml)
+[![Linux](https://github.com/moltobuild/pickup/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/moltobuild/pickup/actions/workflows/ci.yml)
 [![Windows](https://github.com/moltobuild/pickup/actions/workflows/windows.yml/badge.svg?branch=master)](https://github.com/moltobuild/pickup/actions/workflows/windows.yml)
+[![Release](https://github.com/moltobuild/pickup/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/moltobuild/pickup/actions/workflows/release.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 The toolchain manager of the [Molto](https://github.com/moltobuild/molto) ecosystem. See [`spec.md`](spec.md)
 for the design; the RFC process it inherits lives in [Molto](https://github.com/moltobuild/molto/rfcs/).
 
-**CI** is the gate: the suite, `-Werror` under two compilers, molto building
-pickup and running its suite, the style check, a static binary, and the
-sanitizers. It has to be green.
+**Linux** and **Windows** are both gates, and both have to be green. Linux runs
+the suite, `-Werror` under two compilers, molto building pickup and running its
+suite, the style check, a static binary, and the sanitizers. Windows builds,
+finds the compiler the machine has, answers `resolve`, and runs every case.
 
-**Linux** is what a tag runs, and the only badge here that says something
-about a published artifact: the static Linux binary is built, exercised on this
-platform, hashed and released. It also carries the Windows `.exe` — built,
-proved on a Windows runner, and published beside it — so a Windows binary that
-does not run turns this red too. Filtered to `event=push`, so a rehearsal (the
-workflow can be asked for on demand, without a tag) never reads as the state of
-a release.
-
-**Windows** reports how far the port has got (RFC-0017), and it is green:
-pickup compiles, links, finds the compiler the machine has, answers `resolve`,
-and **its whole suite passes on a Windows runner**. It was red until it wasn't,
-which is the point of putting a badge on a thing nobody is required to fix.
+Windows was a progress report until 2026-09-02 and was red on purpose for all
+of it. RFC-0017 spells the moment it stops being one as "it moves into
+`ci.yml`"; it stays its own file so that the badge does, because a red that
+names its platform saves opening the run to find out which half fell over.
 
 Green is not the same as supported. RFC-0017 asks for four things and this is
 one of them; the one that is missing is `install` — the archives are zstd and
 Windows ships `curl.exe` and `tar.exe` but no zstd, so a toolchain can be found
 and answered for there but not yet fetched.
+
+**Release** is what a tag runs: the static Linux binary, the cross-compiled
+Windows one, the sums that cover both, and each of them exercised on the
+platform it is for before any of it is published. Filtered to `event=push`, so
+a rehearsal — the workflow can be asked for on demand, without a tag — never
+reads as the state of a release.
 
 Pickup answers one question truthfully: **which compilers exist on this machine,
 and what can each of them actually do?**

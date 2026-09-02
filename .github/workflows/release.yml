@@ -1,4 +1,4 @@
-name: Linux
+name: Release
 
 # A tag is what publishes. Nothing here runs on a branch, so a release is
 # always something someone decided to make rather than something a merge did.

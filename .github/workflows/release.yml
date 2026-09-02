@@ -51,9 +51,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y -o Acquire::Retries=3 gcc-12 g++-12 zstd
 
-      # The tag and the manifest are two claims about the same number, and a
-      # binary whose version disagrees with the tag it was published under is
-      # the one failure nobody notices until much later.
       # The manifest is the single source of the number, and every job below
       # reads it from here rather than from the ref — a rehearsal has a branch
       # name where a release has a tag, and the filenames must not care which.

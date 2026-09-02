@@ -119,7 +119,14 @@ MOLTEST_FAKE(diagnostics_driver) {
     return 0;
 }
 
-static bool write_driver(const char *path, const char *gcc_dir, bool cxx_works, bool report_gcc) {
+/* `path` is where the driver is wanted and, on the way out, where it landed:
+   the platform may have added a suffix, and everything after this probes the
+   file by the name it holds. Keeping the name it was asked for gives an
+   inventory pointing at nothing, and a health probe that answers "cannot
+   compile, link and run a C program" about a compiler that is simply not
+   there. RFC-0017 records this as "a name is not a filename". */
+static bool write_driver(char *path, size_t size, const char *gcc_dir, bool cxx_works,
+                         bool report_gcc) {
     char spec[512];
     const int written = snprintf(spec, sizeof spec,
                                  "set cxx_works %s\n"
@@ -129,7 +136,10 @@ static bool write_driver(const char *path, const char *gcc_dir, bool cxx_works, 
                                  cxx_works ? "yes" : "no", report_gcc ? "yes" : "no", gcc_dir);
     if (written < 0 || (size_t)written >= sizeof spec)
         return false;
-    return moltest_fake_program(path, spec, NULL, 0);
+
+    char at[PICKUP_PATHS_MAX];
+    snprintf(at, sizeof at, "%s", path);
+    return moltest_fake_program(at, spec, path, size);
 }
 
 static bool machine_setup(fake_machine *machine, bool gcc_has_cxx) {
@@ -152,8 +162,8 @@ static bool machine_setup(fake_machine *machine, bool gcc_has_cxx) {
         return false;
 
     /* The Clang builds C++ only where the installation it selects is whole. */
-    return write_driver(machine->clang, machine->gcc_dir, gcc_has_cxx, true)
-        && write_driver(machine->gcc, machine->gcc_dir, false, false);
+    return write_driver(machine->clang, sizeof machine->clang, machine->gcc_dir, gcc_has_cxx, true)
+        && write_driver(machine->gcc, sizeof machine->gcc, machine->gcc_dir, false, false);
 }
 
 static void machine_teardown(fake_machine *machine) {
@@ -319,7 +329,7 @@ MOLTEST(diagnostics_finds_nothing_wrong_with_a_whole_installation) {
     ASSERT_TRUE(report != NULL);
     ASSERT_TRUE(diagnostics_examine(&list, distro_debian, report));
 
-    /* A machine that builds is a machine with nothing to report-> An empty
+    /* A machine that builds is a machine with nothing to report. An empty
        report is the result, not a failure to produce one. */
     EXPECT_EQ(0, (int)report->count);
     EXPECT_FALSE(diagnostics_has_errors(report));

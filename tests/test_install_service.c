@@ -4,6 +4,7 @@
 #include <pickup/services/fs_service.h>
 #include <pickup/services/http_service.h>
 #include <pickup/services/install_service.h>
+#include <pickup/services/process_service.h>
 #include <pickup/util/sha256.h>
 
 #include <stdio.h>
@@ -53,10 +54,31 @@ static bool tools_present(void) {
  * Pack `stage` the way the registry packs everything: zstd, and with bin and
  * lib already at the top rather than under a directory named after the release.
  */
+/*
+ * Pack everything under `stage` into `archive`, without a shell.
+ *
+ * The same two bugs test_archive_service.c records, in one line here too: a
+ * shell splits on spaces and eats backslashes, so a Windows path reached tar
+ * in pieces; and tar reads a name whose first colon comes before any slash as
+ * `host:path`, so `D:\a\...` was a machine called `D`. An argv fixes the
+ * first — nothing parses it — and --force-local the second, asked for the way
+ * the production code asks.
+ */
 static bool pack(const char *stage, const char *archive) {
-    char command[1024];
-    snprintf(command, sizeof command, "tar -C %s -caf %s .", stage, archive);
-    return system(command) == 0;
+    const char *argv[8];
+    size_t count = 0;
+    argv[count++] = "tar";
+    if (archive_supports_force_local())
+        argv[count++] = "--force-local";
+    argv[count++] = "-C";
+    argv[count++] = stage;
+    argv[count++] = "-caf";
+    argv[count++] = archive;
+    argv[count++] = ".";
+    argv[count] = NULL;
+
+    const process_result result = process_try(argv, NULL);
+    return result.completed && result.exit_code == 0;
 }
 
 /* Describe an archive the way the registry describes it. */
@@ -218,8 +240,9 @@ MOLTEST(install_refuses_a_packing_it_cannot_open) {
              "file:///nowhere");
 
     /* How a blob is packed is something the registry states, and this build
-       opens one packing. Refused on the statement, before anything is fetched
-       and without inferring anything from the URL. */
+       opens two packings, of which gzip is not one. Refused on the statement,
+       before anything is fetched and without inferring anything from the
+       URL. */
     const install_request request = { .artifact = &artifact };
     install_report report = install_run(&request);
     EXPECT_EQ(install_unsupported_format, report.status);
@@ -227,6 +250,28 @@ MOLTEST(install_refuses_a_packing_it_cannot_open) {
     char downloads[PICKUP_PATHS_MAX];
     ASSERT_TRUE(paths_downloads(downloads, sizeof downloads));
     EXPECT_FALSE(fs_path_exists(downloads));
+
+    fixture_teardown(&fixture);
+}
+
+MOLTEST(install_opens_xz_without_asking_for_zstd) {
+    install_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    registry_artifact artifact = { 0 };
+    snprintf(artifact.name, sizeof artifact.name, "%s", "clang");
+    snprintf(artifact.version, sizeof artifact.version, "%s", "1.0.0");
+    snprintf(artifact.format, sizeof artifact.format, "%s", REGISTRY_FORMAT_TAR_XZ);
+    snprintf(artifact.download_url, sizeof artifact.download_url, "%s", "file:///nowhere");
+
+    /* An artifact packed for a host whose tar has no zstd must not be turned
+       away for lacking zstd. The URL is nowhere, so the download is what fails
+       — and that it got as far as the download is the assertion: the format
+       check let it through. */
+    const install_request request = { .artifact = &artifact };
+    install_report report = install_run(&request);
+    EXPECT_TRUE(report.status != install_unsupported_format);
+    EXPECT_TRUE(report.status != install_no_zstd);
 
     fixture_teardown(&fixture);
 }
@@ -279,18 +324,27 @@ MOLTEST(install_puts_a_tool_where_nothing_resolves_against_it) {
     snprintf(bin, sizeof bin, "%s/stage/bin", fixture.root);
     ASSERT_TRUE(fs_make_dirs(bin));
 
+    /* Where it landed, not where it was asked for: the platform decides the
+       filename, and a recipe published for this platform names the file that
+       is actually in the archive. Declaring `bin/clang-format` over a
+       `bin/clang-format.exe` is a recipe for another platform, and install is
+       right to answer that nothing is there. */
     char binary[512];
     snprintf(binary, sizeof binary, "%s/clang-format", bin);
-    ASSERT_TRUE(moltest_fake_program(binary, "out clang-format version 1.0.0\nexit 0\n", NULL, 0));
+    ASSERT_TRUE(moltest_fake_program(binary, "out clang-format version 1.0.0\nexit 0\n", binary,
+                                     sizeof binary));
 
     char archive[256], stage[256];
     snprintf(archive, sizeof archive, "%s/cf.tar.zst", fixture.root);
     snprintf(stage, sizeof stage, "%s/stage", fixture.root);
     ASSERT_TRUE(pack(stage, archive));
 
+    const char *slash = strrchr(binary, '/');
+    ASSERT_TRUE(slash != NULL);
+
     registry_artifact artifact;
     ASSERT_TRUE(describe(archive, "clang-format", "1.0.0", registry_kind_tool, &artifact));
-    snprintf(artifact.binary, sizeof artifact.binary, "%s", "bin/clang-format");
+    snprintf(artifact.binary, sizeof artifact.binary, "bin/%s", slash + 1);
 
     const install_request request = { .artifact = &artifact };
     install_report report = install_run(&request);

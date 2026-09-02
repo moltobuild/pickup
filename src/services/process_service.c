@@ -173,6 +173,25 @@ static bool launch(const char *const argv[], HANDLE in, HANDLE out, HANDLE err,
     return CreateProcessA(NULL, command, NULL, NULL, TRUE, 0, NULL, NULL, &startup, info) != 0;
 }
 
+/* What POSIX says when a command cannot be started, said on Windows.
+
+   There is no fork/exec split here: `CreateProcess` fails as one act, so the
+   parent learns of a missing program directly where POSIX learns of it from a
+   child that already existed and exited 127. Reporting that as "did not
+   complete" would make the same missing compiler two different answers
+   depending on the platform, and every caller would have to know which — which
+   is the platform knowledge RFC-0017 keeps inside this file. So the shape POSIX
+   produces is the shape this returns: it ran, and it was not runnable.
+
+   Anything else — no memory, no handles, a broken image — really is a failure
+   to run the request at all, and stays one. */
+static process_result not_runnable_or_failed(DWORD why) {
+    if (why == ERROR_FILE_NOT_FOUND || why == ERROR_PATH_NOT_FOUND || why == ERROR_BAD_EXE_FORMAT ||
+        why == ERROR_ACCESS_DENIED)
+        return (process_result){.exit_code = EXIT_COMMAND_NOT_RUNNABLE, .completed = true};
+    return failed_result();
+}
+
 static process_result platform_run(const char *const argv[], const char *input, capture_kind what,
                                    char *out, size_t out_size) {
     HANDLE stdin_read = NULL, stdin_write = NULL;
@@ -192,6 +211,9 @@ static process_result platform_run(const char *const argv[], const char *input, 
 
     PROCESS_INFORMATION info = {0};
     const bool started = launch(argv, stdin_read, child_out, child_err, &info);
+    /* Read here and not where it is used: every CloseHandle below sets a last
+       error of its own, and one of them would answer for the launch. */
+    const DWORD why = started ? ERROR_SUCCESS : GetLastError();
 
     /* The child owns its ends now; holding them here would keep the pipe open
        against ourselves. */
@@ -202,7 +224,7 @@ static process_result platform_run(const char *const argv[], const char *input, 
     if (!started) {
         close_handle(stdin_write);
         close_handle(capture_read);
-        return failed_result();
+        return not_runnable_or_failed(why);
     }
     close_handle(info.hThread);
 

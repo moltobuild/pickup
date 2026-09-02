@@ -434,11 +434,17 @@ static install_status check_environment(const registry_artifact *artifact) {
         return install_no_extractor;
     /* Compared rather than inferred from the URL: how a blob is packed is
        something the registry states, and a name is not a statement. */
-    if (strcmp(artifact->format, REGISTRY_FORMAT_TAR_ZST) != 0)
-        return install_unsupported_format;
-    if (!archive_supports_zstd())
-        return install_no_zstd;
-    return install_ok;
+    if (strcmp(artifact->format, REGISTRY_FORMAT_TAR_ZST) == 0)
+        return archive_supports_zstd() ? install_ok : install_no_zstd;
+
+    /* No matching question for xz: every tar that is worth calling one opens
+       it, including the one Windows ships — which is the whole reason an
+       artifact is ever packed that way. Asking anyway would mean inventing a
+       probe for a capability nothing lacks. */
+    if (strcmp(artifact->format, REGISTRY_FORMAT_TAR_XZ) == 0)
+        return install_ok;
+
+    return install_unsupported_format;
 }
 
 install_report install_run(const install_request *request) {

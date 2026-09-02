@@ -40,6 +40,24 @@
 set -euo pipefail
 
 readonly ZSTD_LEVEL=19
+readonly XZ_LEVEL=9
+
+# How a host's artifact is packed.
+#
+# zstd for a Linux host: it decompresses several times faster, and every Linux
+# that can install anything can install zstd.
+#
+# xz for a Windows host, because the tar Windows ships opens gzip, bzip2, xz
+# and lzma and *not* zstd — and there is no stock zstd there to install beside
+# it, which makes the choice of packing the difference between a toolchain that
+# can be fetched and one that cannot. It also compresses smaller. The unpack is
+# slower and it happens once.
+packing_for() {
+    case "$1" in
+    windows-*) printf 'tar.xz\n' ;;
+    *) printf 'tar.zst\n' ;;
+    esac
+}
 readonly C_STANDARDS="c89 c99 c11 c17 c2x c23 c2y"
 readonly CXX_STANDARDS="c++11 c++14 c++17 c++20 c++23 c++26"
 
@@ -58,7 +76,7 @@ note() {
 
 require_tools() {
     local tool
-    for tool in tar zstd file sha256sum; do
+    for tool in tar zstd xz file sha256sum; do
         command -v "$tool" >/dev/null || die "$tool is needed and not on the PATH"
     done
     tar --help 2>/dev/null | grep -q zstd || die "this tar cannot open zstd archives"
@@ -337,14 +355,20 @@ main() {
     verify_stage "$stage" "$c_driver" "$cxx_driver" "$stage/$runtime"
 
     # bin/ has to sit at the root: pickup extracts with --strip-components=0.
-    local archive="$outdir/$name-$version-$host.tar.zst"
-    tar -C "$stage" -c -I "zstd -$ZSTD_LEVEL -T0" -f "$archive" .
+    local packing
+    packing=$(packing_for "$host")
+    local archive="$outdir/$name-$version-$host.$packing"
+    case "$packing" in
+    tar.xz) tar -C "$stage" -c -I "xz -$XZ_LEVEL -T0" -f "$archive" . ;;
+    *) tar -C "$stage" -c -I "zstd -$ZSTD_LEVEL -T0" -f "$archive" . ;;
+    esac
     write_recipe "$outdir/recipe-$host.toml" "$name" "$version" "$host" "$triple" \
         "$stage" "$c_driver" "$cxx_driver" "$runtime"
 
     printf '%s\n' "$archive"
     printf 'sha256: %s\n' "$(sha256sum "$archive" | cut -d' ' -f1)"
     printf 'bytes:  %s\n' "$(stat -c %s "$archive")"
+    printf 'format: %s\n' "$packing"
     printf 'recipe: %s/recipe-%s.toml\n' "$outdir" "$host"
 }
 

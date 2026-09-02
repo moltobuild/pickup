@@ -118,7 +118,7 @@ bool cache_load(const str_list *candidates, inventory *out) {
     if (!cache_path(path, sizeof path))
         return false;
 
-    FILE *file = fopen(path, "r");
+    FILE *file = fopen(path, "rb");
     if (file == NULL)
         return false;
 
@@ -136,7 +136,7 @@ bool cache_load(const str_list *candidates, inventory *out) {
               catalog_mark == capability_catalog_fingerprint();
 
     while (ok && fgets(line, sizeof line, file) != NULL) {
-        line[strcspn(line, "\n")] = '\0';
+        line[strcspn(line, "\r\n")] = '\0';
         if (line[0] == '\0')
             continue;
         toolchain chain;
@@ -169,7 +169,7 @@ bool cache_store(const str_list *candidates, const inventory *list) {
             return false;
     }
 
-    FILE *file = fopen(path, "w");
+    FILE *file = fopen(path, "wb");
     if (file == NULL)
         return false;
 

@@ -114,9 +114,11 @@ static bool own_library_dir(const char *compiler, const char *const *names, size
         if (!result.completed || result.exit_code != 0)
             continue;
 
-        char *newline = strchr(answer, '\n');
-        if (newline != NULL)
-            *newline = '\0';
+        /* `\r\n` as readily as `\n`: this is a line another program wrote,
+           and on Windows that is what another program writes. Cutting at the
+           `\n` alone leaves the `\r` on the end of a path, and a path with a
+           `\r` on it is a path that does not exist. */
+        answer[strcspn(answer, "\r\n")] = '\0';
         if (strchr(answer, '/') == NULL || !fs_path_exists(answer))
             continue;
 

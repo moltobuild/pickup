@@ -1,7 +1,21 @@
 # Pickup
 
+[![CI](https://github.com/moltobuild/pickup/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/moltobuild/pickup/actions/workflows/ci.yml)
+[![Windows](https://github.com/moltobuild/pickup/actions/workflows/windows.yml/badge.svg?branch=master)](https://github.com/moltobuild/pickup/actions/workflows/windows.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 The toolchain manager of the [Molto](https://github.com/moltobuild/molto) ecosystem. See [`spec.md`](spec.md)
 for the design; the RFC process it inherits lives in [Molto](https://github.com/moltobuild/molto/rfcs/).
+
+**CI** is the gate: the suite, `-Werror` under two compilers, molto building
+pickup and running its suite, the style check, a static binary, and the
+sanitizers. It has to be green.
+
+**Windows** is not a gate, and it is red on purpose. It reports how far the
+Windows port has got (RFC-0017): pickup compiles, links, finds the compiler the
+machine has and answers `resolve` there, and thirty of its cases still fail. It
+turns green when the suite does, and that is the point of putting it here — a
+platform is not supported until something says so, and this is the something.
 
 Pickup answers one question truthfully: **which compilers exist on this machine,
 and what can each of them actually do?**
@@ -16,12 +30,17 @@ A static x86-64 Linux binary is attached to every
 requirement, which matters here more than most: the machines that most want a
 newer compiler are the ones with an older libc.
 
+The version is read out of `SHA256SUMS` rather than written here, because a
+version written here is a version that goes stale — this block named 0.3.3 for
+four releases, and every line of it 404'd.
+
 ```sh
 base=https://github.com/moltobuild/pickup/releases/latest/download
 curl -fsSLO $base/SHA256SUMS
-curl -fsSLO $base/pickup-0.3.3-x86_64-linux
+name=$(awk '/x86_64-linux$/ { print $2 }' SHA256SUMS)
+curl -fsSLO "$base/$name"
 sha256sum --check --ignore-missing SHA256SUMS
-sudo install pickup-0.3.3-x86_64-linux /usr/local/bin/pickup
+sudo install "$name" /usr/local/bin/pickup
 ```
 
 ```sh

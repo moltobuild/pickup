@@ -13,3 +13,7 @@
 # The compilation database every build writes (derived, never edited by hand)
 /compile_commands.json
 graphify-out/
+
+# What the windows workflow counts the port with
+tally.count
+suite.log

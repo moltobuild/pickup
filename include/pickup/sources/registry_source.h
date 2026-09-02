@@ -43,9 +43,18 @@
 #define REGISTRY_FEATURE_MAX 32
 #define REGISTRY_EMAIL_MAX 255 /* 254 is the longest address, plus the NUL */
 
-/* The one packing this build knows how to open. Published by the registry as
-   `format`, and compared rather than guessed. */
+/* The packings this build knows how to open. Published by the registry as
+   `format`, and compared rather than guessed.
+
+   Two, because one of them is not openable everywhere. zstd compresses better
+   and decompresses faster and is what the registry serves by default — but the
+   `tar.exe` Windows ships opens gzip, bzip2, xz and lzma and *not* zstd, and
+   there is no zstd on a stock Windows to install alongside it. So an artifact
+   built for a Windows host is packed `tar.xz`, which that tar opens, which also
+   compresses smaller than zstd at the cost of a slower unpack — a trade worth
+   making once at install time. */
 #define REGISTRY_FORMAT_TAR_ZST "tar.zst"
+#define REGISTRY_FORMAT_TAR_XZ "tar.xz"
 
 /* Where artifacts come from, in falling order of precedence: the environment,
    the configuration file, this. */

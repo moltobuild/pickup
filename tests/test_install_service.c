@@ -240,8 +240,9 @@ MOLTEST(install_refuses_a_packing_it_cannot_open) {
              "file:///nowhere");
 
     /* How a blob is packed is something the registry states, and this build
-       opens one packing. Refused on the statement, before anything is fetched
-       and without inferring anything from the URL. */
+       opens two packings, of which gzip is not one. Refused on the statement,
+       before anything is fetched and without inferring anything from the
+       URL. */
     const install_request request = { .artifact = &artifact };
     install_report report = install_run(&request);
     EXPECT_EQ(install_unsupported_format, report.status);
@@ -249,6 +250,28 @@ MOLTEST(install_refuses_a_packing_it_cannot_open) {
     char downloads[PICKUP_PATHS_MAX];
     ASSERT_TRUE(paths_downloads(downloads, sizeof downloads));
     EXPECT_FALSE(fs_path_exists(downloads));
+
+    fixture_teardown(&fixture);
+}
+
+MOLTEST(install_opens_xz_without_asking_for_zstd) {
+    install_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    registry_artifact artifact = { 0 };
+    snprintf(artifact.name, sizeof artifact.name, "%s", "clang");
+    snprintf(artifact.version, sizeof artifact.version, "%s", "1.0.0");
+    snprintf(artifact.format, sizeof artifact.format, "%s", REGISTRY_FORMAT_TAR_XZ);
+    snprintf(artifact.download_url, sizeof artifact.download_url, "%s", "file:///nowhere");
+
+    /* An artifact packed for a host whose tar has no zstd must not be turned
+       away for lacking zstd. The URL is nowhere, so the download is what fails
+       — and that it got as far as the download is the assertion: the format
+       check let it through. */
+    const install_request request = { .artifact = &artifact };
+    install_report report = install_run(&request);
+    EXPECT_TRUE(report.status != install_unsupported_format);
+    EXPECT_TRUE(report.status != install_no_zstd);
 
     fixture_teardown(&fixture);
 }

@@ -295,11 +295,15 @@ accepted_standards() {
 
 write_recipe() {
     local out="$1" name="$2" version="$3" host="$4" triple="$5" stage="$6"
-    local c_driver="$7" cxx_driver="$8" runtime="$9"
+    local c_driver="$7" cxx_driver="$8" runtime="${9}" packing="${10}"
 
     {
         printf 'schema = 1\nform = "binary"\nkind = "toolchain"\n'
-        printf 'name = "%s"\nversion = "%s"\ntarget = "%s"\n\n' "$name" "$version" "$host"
+        printf 'name = "%s"\nversion = "%s"\ntarget = "%s"\n' "$name" "$version" "$host"
+        # Declared, not left to the registry to assume. Everything published
+        # before this was zstd and the registry's default said so; a toolchain
+        # that runs on Windows is the first one that default is wrong about.
+        printf 'format = "%s"\n\n' "$packing"
         printf '[toolchain]\nvendor = "clang"\ntriple = "%s"\n' "$triple"
         printf 'c_driver = "%s"\ncxx_driver = "%s"\n\n' "$c_driver" "$cxx_driver"
         printf '[toolchain.c]\nstd = [%s]\ncompile_flags = []\nlink_flags = []\n' \
@@ -363,7 +367,7 @@ main() {
     *) tar -C "$stage" -c -I "zstd -$ZSTD_LEVEL -T0" -f "$archive" . ;;
     esac
     write_recipe "$outdir/recipe-$host.toml" "$name" "$version" "$host" "$triple" \
-        "$stage" "$c_driver" "$cxx_driver" "$runtime"
+        "$stage" "$c_driver" "$cxx_driver" "$runtime" "$packing"
 
     printf '%s\n' "$archive"
     printf 'sha256: %s\n' "$(sha256sum "$archive" | cut -d' ' -f1)"

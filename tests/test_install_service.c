@@ -4,6 +4,7 @@
 #include <pickup/services/fs_service.h>
 #include <pickup/services/http_service.h>
 #include <pickup/services/install_service.h>
+#include <pickup/services/process_service.h>
 #include <pickup/util/sha256.h>
 
 #include <stdio.h>
@@ -53,10 +54,31 @@ static bool tools_present(void) {
  * Pack `stage` the way the registry packs everything: zstd, and with bin and
  * lib already at the top rather than under a directory named after the release.
  */
+/*
+ * Pack everything under `stage` into `archive`, without a shell.
+ *
+ * The same two bugs test_archive_service.c records, in one line here too: a
+ * shell splits on spaces and eats backslashes, so a Windows path reached tar
+ * in pieces; and tar reads a name whose first colon comes before any slash as
+ * `host:path`, so `D:\a\...` was a machine called `D`. An argv fixes the
+ * first — nothing parses it — and --force-local the second, asked for the way
+ * the production code asks.
+ */
 static bool pack(const char *stage, const char *archive) {
-    char command[1024];
-    snprintf(command, sizeof command, "tar -C %s -caf %s .", stage, archive);
-    return system(command) == 0;
+    const char *argv[8];
+    size_t count = 0;
+    argv[count++] = "tar";
+    if (archive_supports_force_local())
+        argv[count++] = "--force-local";
+    argv[count++] = "-C";
+    argv[count++] = stage;
+    argv[count++] = "-caf";
+    argv[count++] = archive;
+    argv[count++] = ".";
+    argv[count] = NULL;
+
+    const process_result result = process_try(argv, NULL);
+    return result.completed && result.exit_code == 0;
 }
 
 /* Describe an archive the way the registry describes it. */

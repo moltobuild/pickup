@@ -87,7 +87,13 @@ bool fs_make_dir(const char *path) {
 }
 
 bool fs_write_file(const char *path, const char *content) {
-    FILE *file = fopen(path, "w");
+    /* Binary, because text mode on Windows turns every `\n` into `\r\n` on the
+       way out while `fs_read_file` opens "rb" and reads them back verbatim.
+       Write, read, write, and a file grows a `\r` per line per round trip.
+       Nothing here wants a platform's idea of a line: a config file pickup
+       writes has to be the same bytes wherever it was written, which is the
+       same argument RFC-0017 makes about the separator. */
+    FILE *file = fopen(path, "wb");
     if (file == NULL)
         return false;
     size_t length = strlen(content);
@@ -305,9 +311,16 @@ bool fs_source_newer(const char *source, const char *target) {
 
 bool fs_real_path(const char *path, char *out, size_t size) {
 #ifdef _WIN32
-    /* `_fullpath` resolves `.` and `..` and makes the path absolute; it does
-       not follow reparse points, which is the same limitation stat_no_follow
-       records above. */
+    /* `_fullpath` is lexical where `realpath` is not: it resolves `.` and `..`
+       and makes the path absolute without ever asking the filesystem, and so
+       answers just as happily for a path that is not there. Callers read a
+       true here as "this exists and here is its real name", which is what
+       `realpath` means, so the check is what makes the two the same function.
+
+       It does not follow reparse points, which is the same limitation
+       stat_no_follow records above. */
+    if (!fs_path_exists(path))
+        return false;
     char *answer = _fullpath(NULL, path, 0);
 #else
     char *answer = realpath(path, NULL);
@@ -316,7 +329,23 @@ bool fs_real_path(const char *path, char *out, size_t size) {
         return false;
     const int written = snprintf(out, size, "%s", answer);
     free(answer);
-    return written >= 0 && (size_t)written < size;
+    if (written < 0 || (size_t)written >= size)
+        return false;
+
+#ifdef _WIN32
+    /* And back to `/`. RFC-0017 makes it the internal separator everywhere and
+       has nothing convert it; `_fullpath` is one of the few places the platform
+       converts anyway, and it hands back `\`. Every caller that takes a path
+       apart looks for `/` — `directory_of` in recipe.c is one, and a `\` there
+       made an installed toolchain's own libc++ invisible, which cost fifteen
+       tests that never mentioned a separator. Normalising here keeps the rule
+       true at the one place the platform breaks it. */
+    for (char *at = out; *at != '\0'; at++) {
+        if (*at == '\\')
+            *at = '/';
+    }
+#endif
+    return true;
 }
 
 #ifdef _WIN32

@@ -1,7 +1,7 @@
 # Pickup
 
 [![CI](https://github.com/moltobuild/pickup/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/moltobuild/pickup/actions/workflows/ci.yml)
-[![Release](https://github.com/moltobuild/pickup/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/moltobuild/pickup/actions/workflows/release.yml)
+[![Linux](https://github.com/moltobuild/pickup/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/moltobuild/pickup/actions/workflows/release.yml)
 [![Windows](https://github.com/moltobuild/pickup/actions/workflows/windows.yml/badge.svg?branch=master)](https://github.com/moltobuild/pickup/actions/workflows/windows.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
@@ -12,11 +12,13 @@ for the design; the RFC process it inherits lives in [Molto](https://github.com/
 pickup and running its suite, the style check, a static binary, and the
 sanitizers. It has to be green.
 
-**Release** is what a tag runs: the static Linux binary, the cross-compiled
-Windows one, the sums that cover both, and each of them exercised on the
-platform it is for before any of it is published. Filtered to `event=push`, so
-a rehearsal — the workflow can be asked for on demand, without a tag — never
-reads as the state of a release.
+**Linux** is what a tag runs, and the only badge here that says something
+about a published artifact: the static Linux binary is built, exercised on this
+platform, hashed and released. It also carries the Windows `.exe` — built,
+proved on a Windows runner, and published beside it — so a Windows binary that
+does not run turns this red too. Filtered to `event=push`, so a rehearsal (the
+workflow can be asked for on demand, without a tag) never reads as the state of
+a release.
 
 **Windows** is not a gate, and it is red on purpose. It reports how far the
 Windows port has got (RFC-0017): pickup compiles, links, finds the compiler the

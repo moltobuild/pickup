@@ -136,7 +136,7 @@ bool cache_load(const str_list *candidates, inventory *out) {
               catalog_mark == capability_catalog_fingerprint();
 
     while (ok && fgets(line, sizeof line, file) != NULL) {
-        line[strcspn(line, "\n")] = '\0';
+        line[strcspn(line, "\r\n")] = '\0';
         if (line[0] == '\0')
             continue;
         toolchain chain;

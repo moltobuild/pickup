@@ -198,6 +198,24 @@ bool fs_format_path(char *out, size_t size, const char *format, ...) {
     return written >= 0 && (size_t)written < size;
 }
 
+/* Where the first component that can actually be made begins.
+
+   A leading `/` is the root and is already there. On Windows the root is a
+   volume — `C:` — and asking to create it fails, which made this function
+   unable to take an absolute Windows path at all. It went unnoticed because
+   such a path used to arrive with backslashes in it, so the loop below found
+   no `/` to split on before the last component and never tried. */
+static size_t first_creatable(const char *path) {
+    size_t at = 0;
+#ifdef _WIN32
+    if (path[0] != '\0' && path[1] == ':')
+        at = 2;
+#endif
+    while (path[at] == '/')
+        at++;
+    return at;
+}
+
 bool fs_make_dirs(const char *path) {
     char buffer[4096];
     size_t length = strlen(path);
@@ -205,7 +223,7 @@ bool fs_make_dirs(const char *path) {
         return false;
     memcpy(buffer, path, length + 1);
     /* Create each intermediate component in turn. */
-    for (size_t i = 1; i < length; i++) {
+    for (size_t i = first_creatable(path) + 1; i < length; i++) {
         if (buffer[i] != '/')
             continue;
         buffer[i] = '\0';

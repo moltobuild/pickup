@@ -50,6 +50,18 @@ static inline int unsetenv(const char *name) {
  *
  * The companion of moltest_temp_dir, and here for the same reason: a suite that
  * spells `/tmp` itself is a suite that only runs on one platform. */
+/* `/` throughout, whatever the platform spells it. `TEMP` on Windows arrives
+   with backslashes, and a fixture that hands one out is a fixture whose paths
+   do not compare equal to the ones the code under test produces — which shows
+   up as a test failing about a library nobody can find rather than about a
+   separator. Win32 takes `/` in any case. */
+static inline void moltest_one_separator(char *path) {
+    for (char *at = path; *at != '\0'; at++) {
+        if (*at == '\\')
+            *at = '/';
+    }
+}
+
 [[nodiscard]] static inline bool moltest_temp_file(const char *prefix, char *out, size_t size);
 
 [[nodiscard]] static inline bool moltest_temp_dir(const char *prefix, char *out, size_t size) {
@@ -69,7 +81,10 @@ static inline int unsetenv(const char *name) {
     /* `_mktemp_s` only picks the name; the directory is still ours to make. */
     if (_mktemp_s(out, (size_t)written + 1) != 0)
         return false;
-    return _mkdir(out) == 0;
+    if (_mkdir(out) != 0)
+        return false;
+    moltest_one_separator(out);
+    return true;
 #else
     return mkdtemp(out) != NULL;
 #endif
@@ -91,6 +106,7 @@ static inline bool moltest_temp_file(const char *prefix, char *out, size_t size)
 #ifdef _WIN32
     if (_mktemp_s(out, (size_t)written + 1) != 0)
         return false;
+    moltest_one_separator(out);
     FILE *file = fopen(out, "wb");
     if (file == NULL)
         return false;

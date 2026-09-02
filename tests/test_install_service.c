@@ -301,18 +301,27 @@ MOLTEST(install_puts_a_tool_where_nothing_resolves_against_it) {
     snprintf(bin, sizeof bin, "%s/stage/bin", fixture.root);
     ASSERT_TRUE(fs_make_dirs(bin));
 
+    /* Where it landed, not where it was asked for: the platform decides the
+       filename, and a recipe published for this platform names the file that
+       is actually in the archive. Declaring `bin/clang-format` over a
+       `bin/clang-format.exe` is a recipe for another platform, and install is
+       right to answer that nothing is there. */
     char binary[512];
     snprintf(binary, sizeof binary, "%s/clang-format", bin);
-    ASSERT_TRUE(moltest_fake_program(binary, "out clang-format version 1.0.0\nexit 0\n", NULL, 0));
+    ASSERT_TRUE(moltest_fake_program(binary, "out clang-format version 1.0.0\nexit 0\n", binary,
+                                     sizeof binary));
 
     char archive[256], stage[256];
     snprintf(archive, sizeof archive, "%s/cf.tar.zst", fixture.root);
     snprintf(stage, sizeof stage, "%s/stage", fixture.root);
     ASSERT_TRUE(pack(stage, archive));
 
+    const char *slash = strrchr(binary, '/');
+    ASSERT_TRUE(slash != NULL);
+
     registry_artifact artifact;
     ASSERT_TRUE(describe(archive, "clang-format", "1.0.0", registry_kind_tool, &artifact));
-    snprintf(artifact.binary, sizeof artifact.binary, "%s", "bin/clang-format");
+    snprintf(artifact.binary, sizeof artifact.binary, "bin/%s", slash + 1);
 
     const install_request request = { .artifact = &artifact };
     install_report report = install_run(&request);

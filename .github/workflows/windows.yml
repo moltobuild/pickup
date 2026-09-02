@@ -170,6 +170,11 @@ jobs:
             # it died partway. Counted as one so the verdict cannot read that
             # as nothing wrong.
             echo 1 >> tally.count
+          else
+            # A green suite reports nothing to count, and the verdict below
+            # cannot tell that apart from a suite that never ran. So it says
+            # zero out loud.
+            echo 0 >> tally.count
           fi
           exit $status
 

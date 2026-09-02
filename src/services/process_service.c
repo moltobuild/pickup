@@ -186,8 +186,8 @@ static bool launch(const char *const argv[], HANDLE in, HANDLE out, HANDLE err,
    Anything else — no memory, no handles, a broken image — really is a failure
    to run the request at all, and stays one. */
 static process_result not_runnable_or_failed(DWORD why) {
-    if (why == ERROR_FILE_NOT_FOUND || why == ERROR_PATH_NOT_FOUND
-        || why == ERROR_BAD_EXE_FORMAT || why == ERROR_ACCESS_DENIED)
+    if (why == ERROR_FILE_NOT_FOUND || why == ERROR_PATH_NOT_FOUND || why == ERROR_BAD_EXE_FORMAT ||
+        why == ERROR_ACCESS_DENIED)
         return (process_result){.exit_code = EXIT_COMMAND_NOT_RUNNABLE, .completed = true};
     return failed_result();
 }

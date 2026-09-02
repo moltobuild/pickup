@@ -194,24 +194,26 @@ MOLTEST(diagnostics_reports_one_cause_rather_than_every_symptom) {
     ASSERT_TRUE(add_chain(&list, "gcc-12", machine.gcc, "", vendor_gcc, 12));
 
     inventory_settle(&list);
-    diagnostics_report report = { 0 };
-    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
+    diagnostics_report *report = calloc(1, sizeof *report);
+    ASSERT_TRUE(report != NULL);
+    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, report));
 
     /* One finding, and it is about the GCC installation rather than about
        either compiler that suffers from it. */
-    ASSERT_EQ(1, (int)report.count);
-    EXPECT_STREQ("gcc 12", report.items[0].subject);
-    EXPECT_STREQ(machine.gcc_dir, report.items[0].location);
-    EXPECT_EQ(finding_error, report.items[0].severity);
+    ASSERT_EQ(1, (int)report->count);
+    EXPECT_STREQ("gcc 12", report->items[0].subject);
+    EXPECT_STREQ(machine.gcc_dir, report->items[0].location);
+    EXPECT_EQ(finding_error, report->items[0].severity);
 
     /* Both compilers appear, as symptoms of it. */
-    ASSERT_EQ(2, (int)report.items[0].symptom_count);
-    EXPECT_TRUE(strstr(report.items[0].symptoms[0], "clang") != NULL);
-    EXPECT_TRUE(strstr(report.items[0].symptoms[0], "<iostream>") != NULL);
-    EXPECT_TRUE(strstr(report.items[0].symptoms[1], "gcc@12") != NULL);
+    ASSERT_EQ(2, (int)report->items[0].symptom_count);
+    EXPECT_TRUE(strstr(report->items[0].symptoms[0], "clang") != NULL);
+    EXPECT_TRUE(strstr(report->items[0].symptoms[0], "<iostream>") != NULL);
+    EXPECT_TRUE(strstr(report->items[0].symptoms[1], "gcc@12") != NULL);
 
     inventory_free(&list);
     machine_teardown(&machine);
+    free(report);
 }
 
 MOLTEST(diagnostics_blames_only_the_compilers_of_the_broken_installation) {
@@ -230,13 +232,14 @@ MOLTEST(diagnostics_blames_only_the_compilers_of_the_broken_installation) {
                           vendor_gcc, 12));
 
     inventory_settle(&list);
-    diagnostics_report report = { 0 };
-    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
+    diagnostics_report *report = calloc(1, sizeof *report);
+    ASSERT_TRUE(report != NULL);
+    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, report));
 
     const finding *installation = NULL;
-    for (size_t i = 0; i < report.count && installation == NULL; i++) {
-        if (strcmp(report.items[i].subject, "gcc 12") == 0)
-            installation = &report.items[i];
+    for (size_t i = 0; i < report->count && installation == NULL; i++) {
+        if (strcmp(report->items[i].subject, "gcc 12") == 0)
+            installation = &report->items[i];
     }
     ASSERT_TRUE(installation != NULL);
 
@@ -249,6 +252,7 @@ MOLTEST(diagnostics_blames_only_the_compilers_of_the_broken_installation) {
 
     inventory_free(&list);
     machine_teardown(&machine);
+    free(report);
 }
 
 MOLTEST(diagnostics_names_the_package_of_the_distribution_it_is_on) {
@@ -260,20 +264,22 @@ MOLTEST(diagnostics_names_the_package_of_the_distribution_it_is_on) {
                           vendor_clang, 14));
 
     inventory_settle(&list);
-    diagnostics_report report = { 0 };
-    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
-    ASSERT_EQ(1, (int)report.count);
+    diagnostics_report *report = calloc(1, sizeof *report);
+    ASSERT_TRUE(report != NULL);
+    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, report));
+    ASSERT_EQ(1, (int)report->count);
 
     /* Two remedies, and they do different things, so both are offered. */
-    ASSERT_EQ(2, (int)report.items[0].remedy_count);
-    EXPECT_TRUE(strstr(report.items[0].remedies[0], "g++-12") != NULL);
-    EXPECT_TRUE(strstr(report.items[0].remedies[1], "pickup install gcc") != NULL);
+    ASSERT_EQ(2, (int)report->items[0].remedy_count);
+    EXPECT_TRUE(strstr(report->items[0].remedies[0], "g++-12") != NULL);
+    EXPECT_TRUE(strstr(report->items[0].remedies[1], "pickup install gcc") != NULL);
     /* The second must not read as an equivalent of the first: it leaves the
        broken installation exactly where it was. */
-    EXPECT_TRUE(strstr(report.items[0].remedies[1], "untouched") != NULL);
+    EXPECT_TRUE(strstr(report->items[0].remedies[1], "untouched") != NULL);
 
     inventory_free(&list);
     machine_teardown(&machine);
+    free(report);
 }
 
 MOLTEST(diagnostics_suggests_no_package_it_cannot_name) {
@@ -285,17 +291,19 @@ MOLTEST(diagnostics_suggests_no_package_it_cannot_name) {
                           vendor_clang, 14));
 
     inventory_settle(&list);
-    diagnostics_report report = { 0 };
+    diagnostics_report *report = calloc(1, sizeof *report);
+    ASSERT_TRUE(report != NULL);
     /* On a distribution Pickup does not recognise the package name is
        unknown, and inventing one would send a reader looking for something
        that does not exist. What pickup can do itself still stands. */
-    ASSERT_TRUE(diagnostics_examine(&list, distro_unknown, &report));
-    ASSERT_EQ(1, (int)report.count);
-    ASSERT_EQ(1, (int)report.items[0].remedy_count);
-    EXPECT_TRUE(strstr(report.items[0].remedies[0], "pickup install gcc") != NULL);
+    ASSERT_TRUE(diagnostics_examine(&list, distro_unknown, report));
+    ASSERT_EQ(1, (int)report->count);
+    ASSERT_EQ(1, (int)report->items[0].remedy_count);
+    EXPECT_TRUE(strstr(report->items[0].remedies[0], "pickup install gcc") != NULL);
 
     inventory_free(&list);
     machine_teardown(&machine);
+    free(report);
 }
 
 MOLTEST(diagnostics_finds_nothing_wrong_with_a_whole_installation) {
@@ -307,16 +315,18 @@ MOLTEST(diagnostics_finds_nothing_wrong_with_a_whole_installation) {
                           vendor_clang, 14));
 
     inventory_settle(&list);
-    diagnostics_report report = { 0 };
-    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
+    diagnostics_report *report = calloc(1, sizeof *report);
+    ASSERT_TRUE(report != NULL);
+    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, report));
 
-    /* A machine that builds is a machine with nothing to report. An empty
+    /* A machine that builds is a machine with nothing to report-> An empty
        report is the result, not a failure to produce one. */
-    EXPECT_EQ(0, (int)report.count);
-    EXPECT_FALSE(diagnostics_has_errors(&report));
+    EXPECT_EQ(0, (int)report->count);
+    EXPECT_FALSE(diagnostics_has_errors(report));
 
     inventory_free(&list);
     machine_teardown(&machine);
+    free(report);
 }
 
 MOLTEST(diagnostics_does_not_fault_a_c_compiler_for_having_no_cxx) {
@@ -329,38 +339,44 @@ MOLTEST(diagnostics_does_not_fault_a_c_compiler_for_having_no_cxx) {
     ASSERT_TRUE(add_chain(&list, "cc", machine.gcc, "", vendor_gcc, 9));
 
     inventory_settle(&list);
-    diagnostics_report report = { 0 };
-    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
-    EXPECT_EQ(0, (int)findings_about(&report, "cc"));
+    diagnostics_report *report = calloc(1, sizeof *report);
+    ASSERT_TRUE(report != NULL);
+    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, report));
+    EXPECT_EQ(0, (int)findings_about(report, "cc"));
 
     inventory_free(&list);
     machine_teardown(&machine);
+    free(report);
 }
 
 MOLTEST(diagnostics_reports_a_machine_with_no_compilers) {
     inventory list = { 0 };
     inventory_settle(&list);
-    diagnostics_report report = { 0 };
-    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
+    diagnostics_report *report = calloc(1, sizeof *report);
+    ASSERT_TRUE(report != NULL);
+    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, report));
 
-    ASSERT_EQ(1, (int)report.count);
-    EXPECT_EQ(finding_error, report.items[0].severity);
-    EXPECT_TRUE(report.items[0].remedy_count > 0);
+    ASSERT_EQ(1, (int)report->count);
+    EXPECT_EQ(finding_error, report->items[0].severity);
+    EXPECT_TRUE(report->items[0].remedy_count > 0);
 
     inventory_free(&list);
+    free(report);
 }
 
 MOLTEST(diagnostics_separates_what_stops_a_build_from_what_merely_annoys) {
-    diagnostics_report report = { 0 };
-    EXPECT_FALSE(diagnostics_has_errors(&report));
+    diagnostics_report *report = calloc(1, sizeof *report);
+    ASSERT_TRUE(report != NULL);
+    EXPECT_FALSE(diagnostics_has_errors(report));
 
-    report.items[0].severity = finding_warning;
-    report.count = 1;
+    report->items[0].severity = finding_warning;
+    report->count = 1;
     /* A warning leaves the exit code at zero: the machine can still build. */
-    EXPECT_FALSE(diagnostics_has_errors(&report));
+    EXPECT_FALSE(diagnostics_has_errors(report));
 
-    report.items[0].severity = finding_error;
-    EXPECT_TRUE(diagnostics_has_errors(&report));
+    report->items[0].severity = finding_error;
+    EXPECT_TRUE(diagnostics_has_errors(report));
+    free(report);
 }
 
 MOLTEST(diagnostics_names_every_severity) {
@@ -396,24 +412,26 @@ MOLTEST(diagnostics_does_not_fail_over_what_something_else_covers) {
                           vendor_clang, 22));
     inventory_settle(&list);
 
-    diagnostics_report report = { 0 };
-    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
+    diagnostics_report *report = calloc(1, sizeof *report);
+    ASSERT_TRUE(report != NULL);
+    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, report));
 
     const finding *installation = NULL;
-    for (size_t i = 0; i < report.count && installation == NULL; i++) {
-        if (report.items[i].section == section_compilers)
-            installation = &report.items[i];
+    for (size_t i = 0; i < report->count && installation == NULL; i++) {
+        if (report->items[i].section == section_compilers)
+            installation = &report->items[i];
     }
     ASSERT_TRUE(installation != NULL);
 
     /* Reported, and not as a failure. That is what keeps the exit code
        meaning "this machine cannot be worked on". */
     EXPECT_FALSE(installation->blocking);
-    EXPECT_FALSE(diagnostics_is_blocked(&report));
+    EXPECT_FALSE(diagnostics_is_blocked(report));
 
     inventory_free(&list);
     machine_teardown(&broken);
     machine_teardown(&whole);
+    free(report);
 }
 
 MOLTEST(diagnostics_fails_when_nothing_covers_it) {
@@ -426,14 +444,16 @@ MOLTEST(diagnostics_fails_when_nothing_covers_it) {
                           vendor_clang, 14));
     inventory_settle(&list);
 
-    diagnostics_report report = { 0 };
-    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
+    diagnostics_report *report = calloc(1, sizeof *report);
+    ASSERT_TRUE(report != NULL);
+    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, report));
 
-    EXPECT_TRUE(diagnostics_is_blocked(&report));
-    EXPECT_EQ(1, findings_about(&report, "gcc 12"));
+    EXPECT_TRUE(diagnostics_is_blocked(report));
+    EXPECT_EQ(1, findings_about(report, "gcc 12"));
 
     inventory_free(&list);
     machine_teardown(&machine);
+    free(report);
 }
 
 MOLTEST(diagnostics_says_what_the_machine_has_even_when_all_is_well) {
@@ -445,25 +465,27 @@ MOLTEST(diagnostics_says_what_the_machine_has_even_when_all_is_well) {
                           vendor_clang, 22));
     inventory_settle(&list);
 
-    diagnostics_report report = { 0 };
-    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, &report));
+    diagnostics_report *report = calloc(1, sizeof *report);
+    ASSERT_TRUE(report != NULL);
+    ASSERT_TRUE(diagnostics_examine(&list, distro_debian, report));
 
     /* "What is broken" is the question asked least often. A report with
        nothing to complain about still has to answer "what does this machine
        have", or it says nothing at all. */
-    ASSERT_TRUE(report.summary_count >= 2);
+    ASSERT_TRUE(report->summary_count >= 2);
     bool counted = false, ranged = false;
-    for (size_t i = 0; i < report.summary_count; i++) {
-        if (report.summary_section[i] != section_compilers)
+    for (size_t i = 0; i < report->summary_count; i++) {
+        if (report->summary_section[i] != section_compilers)
             continue;
-        ranged = ranged || strstr(report.summary[i], "clang") != NULL;
-        counted = counted || strstr(report.summary[i], "build C and C++") != NULL;
+        ranged = ranged || strstr(report->summary[i], "clang") != NULL;
+        counted = counted || strstr(report->summary[i], "build C and C++") != NULL;
     }
     EXPECT_TRUE(ranged);
     EXPECT_TRUE(counted);
 
     inventory_free(&list);
     machine_teardown(&machine);
+    free(report);
 }
 
 MOLTEST(diagnostics_names_every_section) {

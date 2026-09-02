@@ -7,6 +7,7 @@
 #include <pickup/util/progress.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* What is said when there is nothing to say. */
@@ -192,22 +193,33 @@ static void watch_examine(const char *subject, size_t done, size_t total, void *
 }
 
 int doctor_command_run(bool as_toml, bool all) {
-    diagnostics_report report;
+    /* On the heap, because a `diagnostics_report` is 944 KB — sixty-four
+       findings that each carry their own symptoms and remedies — and the main
+       thread on Windows gets a megabyte of stack against Linux's eight. One
+       of these is the whole stack, so declaring it here crashed `doctor`
+       before it examined anything. */
+    diagnostics_report *report = calloc(1, sizeof *report);
+    if (report == NULL) {
+        fprintf(stderr, "pickup: out of memory\n");
+        return exit_failure;
+    }
+
     progress_line line = {.drawn = false};
-    bool examined = diagnostics_run_watched(watch_examine, &line, &report);
+    bool examined = diagnostics_run_watched(watch_examine, &line, report);
     /* Wiped whether it worked or not: a failure prints a message of its own,
        and half a bar in front of it reads as part of the message. */
     progress_line_clear(stderr, &line);
 
     if (!examined) {
         fprintf(stderr, "pickup: could not examine this machine\n");
+        free(report);
         return exit_failure;
     }
 
     if (as_toml)
-        print_toml(&report);
+        print_toml(report);
     else
-        print_text(&report, all);
+        print_text(report, all);
 
     /*
      * Failure means the machine cannot be worked on, not that something on it
@@ -218,5 +230,7 @@ int doctor_command_run(bool as_toml, bool all) {
      * nobody — and a command that exits non-zero over it would be a command no
      * script could act on.
      */
-    return diagnostics_is_blocked(&report) ? exit_failure : exit_ok;
+    const bool blocked = diagnostics_is_blocked(report);
+    free(report);
+    return blocked ? exit_failure : exit_ok;
 }

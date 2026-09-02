@@ -20,11 +20,15 @@ does not run turns this red too. Filtered to `event=push`, so a rehearsal (the
 workflow can be asked for on demand, without a tag) never reads as the state of
 a release.
 
-**Windows** is not a gate, and it is red on purpose. It reports how far the
-Windows port has got (RFC-0017): pickup compiles, links, finds the compiler the
-machine has and answers `resolve` there, and thirty of its cases still fail. It
-turns green when the suite does, and that is the point of putting it here — a
-platform is not supported until something says so, and this is the something.
+**Windows** reports how far the port has got (RFC-0017), and it is green:
+pickup compiles, links, finds the compiler the machine has, answers `resolve`,
+and **its whole suite passes on a Windows runner**. It was red until it wasn't,
+which is the point of putting a badge on a thing nobody is required to fix.
+
+Green is not the same as supported. RFC-0017 asks for four things and this is
+one of them; the one that is missing is `install` — the archives are zstd and
+Windows ships `curl.exe` and `tar.exe` but no zstd, so a toolchain can be found
+and answered for there but not yet fetched.
 
 Pickup answers one question truthfully: **which compilers exist on this machine,
 and what can each of them actually do?**

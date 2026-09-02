@@ -118,7 +118,7 @@ bool cache_load(const str_list *candidates, inventory *out) {
     if (!cache_path(path, sizeof path))
         return false;
 
-    FILE *file = fopen(path, "r");
+    FILE *file = fopen(path, "rb");
     if (file == NULL)
         return false;
 
@@ -169,7 +169,7 @@ bool cache_store(const str_list *candidates, const inventory *list) {
             return false;
     }
 
-    FILE *file = fopen(path, "w");
+    FILE *file = fopen(path, "wb");
     if (file == NULL)
         return false;
 

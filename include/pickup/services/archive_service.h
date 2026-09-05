@@ -137,8 +137,7 @@ typedef enum {
     archive_stalled,
 } archive_outcome;
 
-[[nodiscard]] archive_outcome archive_extract_reported(const char *archive,
-                                                       const char *destination,
+[[nodiscard]] archive_outcome archive_extract_reported(const char *archive, const char *destination,
                                                        const archive_request *request);
 
 #endif /* PICKUP_ARCHIVE_SERVICE_H */

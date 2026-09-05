@@ -1,8 +1,8 @@
 #include <pickup/commands/install_command.h>
 
 #include <pickup/exit_code.h>
-#include <pickup/services/http_service.h>
 #include <pickup/services/archive_service.h>
+#include <pickup/services/http_service.h>
 #include <pickup/services/install_service.h>
 #include <pickup/sources/registry_source.h>
 #include <pickup/util/color.h>

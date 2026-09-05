@@ -6,10 +6,10 @@
 #include <pickup/detect/recipe.h>
 #include <pickup/detect/tools.h>
 #include <pickup/services/archive_service.h>
-#include <pickup/sources/registry_source.h>
 #include <pickup/services/fs_service.h>
 #include <pickup/services/http_service.h>
 #include <pickup/services/inventory_service.h>
+#include <pickup/sources/registry_source.h>
 
 #include <stdarg.h>
 #include <stdio.h>

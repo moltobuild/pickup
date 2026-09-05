@@ -102,4 +102,11 @@ void progress_line_clear(FILE *out, progress_line *line) {
     line->drawn = false;
 }
 
-bool progress_is_interactive(FILE *out) { return isatty(fileno(out)) == 1; }
+/* Whether there is someone watching this stream.
+ *
+ * `!= 0`, not `== 1`. POSIX promises only that isatty answers non-zero for a
+ * terminal, and the Windows CRT answers with the character-device bit, 0x40.
+ * Spelled `== 1` this returns false on every Windows console, which is not a
+ * cosmetic loss: the download bar and the extraction spinner are both gated on
+ * it, so the two longest waits pickup has go by with nothing on screen. */
+bool progress_is_interactive(FILE *out) { return out != NULL && isatty(fileno(out)) != 0; }

@@ -8,6 +8,7 @@
 #include <windows.h>
 #else
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -292,6 +293,12 @@ static process_result platform_wait(process_handle *handle) {
     return reap_handle(handle->process);
 }
 
+/* The handle stays open and `running` stays true: what makes a stopped child
+   finished is the poll that observes it, and that is where it is closed. */
+static void platform_stop(process_handle *handle) {
+    (void)TerminateProcess(handle->process, (UINT)EXIT_COMMAND_NOT_RUNNABLE);
+}
+
 #else
 
 /* --- POSIX --- */
@@ -441,6 +448,11 @@ static process_result platform_wait(process_handle *handle) {
     return reap(handle->pid);
 }
 
+/* SIGKILL rather than SIGTERM: what this is for is a child that has stopped
+   responding to anything, and a signal it may choose to ignore would leave the
+   caller waiting exactly as long as it already has. */
+static void platform_stop(process_handle *handle) { (void)kill(handle->pid, SIGKILL); }
+
 #endif
 
 /* --- the public half, which is the same on both --- */
@@ -485,6 +497,12 @@ process_result process_wait(process_handle *handle) {
     if (!handle->running)
         return failed_result();
     return platform_wait(handle);
+}
+
+void process_stop(process_handle *handle) {
+    if (!handle->running)
+        return;
+    platform_stop(handle);
 }
 
 void process_pause_ms(unsigned milliseconds) {

@@ -10,8 +10,11 @@
  * Delegated to the system's tar for the same reason downloads are delegated to
  * curl: it keeps Pickup building against libc alone, and tar is present on
  * every target platform, Windows 10 and later included. Modern tar detects the
- * compression itself, so the registry's zstd needs no telling — though whether
- * this tar can actually open one is a separate question, and asked below.
+ * compression itself, so no packing needs telling — though whether this tar can
+ * actually open a given one is a separate question, and asked below, once per
+ * codec. Being present is not being capable: the tar Windows ships is linked
+ * against zlib alone and hands everything else to a program that is usually
+ * not there.
  */
 
 /* True if a usable tar was found. Worked out once. */
@@ -42,23 +45,45 @@
    once. */
 [[nodiscard]] bool archive_supports_force_local(void);
 
-/* True if this tar can open a zstd-compressed archive, which is how the
-   registry packs everything it publishes.
+/* True if this tar can open an archive packed this way -- one question per
+   codec the registry publishes.
 
-   Settled by opening one -- twenty-one bytes of empty archive -- rather than by
-   asking. Neither question available answers it: `zstd --version` misses a tar
-   with the library linked in and needing no such program, and
+   Settled by opening one, an empty archive of a few dozen bytes, rather than
+   by asking. Neither question available answers it: `zstd --version` misses a
+   tar with the library linked in and needing no such program, and
    `tar --zstd --version` misses a GNU tar that accepts the option and only
-   fails when it tries to delegate. Worked out once. */
+   fails when it tries to delegate. Each is worked out once.
+
+   Note what an answer of true does *not* promise. A tar that opens the probe
+   may still be one that delegates the codec to another program, and on Windows
+   that path deadlocks once the compressed input passes a pipe buffer -- so a
+   yes here means "packed this way is worth attempting", and the attempt itself
+   is watched. */
 [[nodiscard]] bool archive_supports_zstd(void);
+[[nodiscard]] bool archive_supports_xz(void);
+[[nodiscard]] bool archive_supports_gzip(void);
 
 /* The command a caller should be told to install when archive_available is
    false. */
 [[nodiscard]] const char *archive_requirement(void);
 
-/* The command to install when archive_supports_zstd is false and tar itself is
-   present: GNU tar hands zstd archives to this program. */
+/* The program a tar without the codec built in delegates to, which is what a
+   caller has to be told to install when the matching question answers false.
+   Naming it is honest only where tar delegates and the program is missing; a
+   tar that cannot use the program either is a different problem, and the
+   remedy for that one is a different tar. */
 [[nodiscard]] const char *archive_zstd_requirement(void);
+[[nodiscard]] const char *archive_xz_requirement(void);
+[[nodiscard]] const char *archive_gzip_requirement(void);
+
+/* Whether naming that program is a remedy at all.
+
+   A tar without a codec built in delegates it, and where the delegation works
+   installing the program is the fix. Where the delegation itself is what is
+   broken -- libarchive on Windows, which deadlocks against the program it
+   started -- it is not, and saying so sends someone to fetch something that
+   turns a refusal into a hang. */
+[[nodiscard]] bool archive_delegation_works(void);
 
 /* Extract `archive` into `destination`, which must already exist.
 
@@ -98,5 +123,21 @@ typedef struct {
    silence is what makes people think it has hung. */
 [[nodiscard]] bool archive_extract_selected(const char *archive, const char *destination,
                                             const archive_request *request);
+
+/* How an extraction ended, for a caller that reports the difference.
+
+   `archive_stalled` is its own answer rather than a kind of failure: a tar that
+   produced nothing for long enough to be stopped has not read a bad archive, it
+   has wedged -- on Windows, by handing the codec to a program and then
+   deadlocking against it -- and telling someone their download is corrupt would
+   send them to fix the wrong thing. */
+typedef enum {
+    archive_ok,
+    archive_failed,
+    archive_stalled,
+} archive_outcome;
+
+[[nodiscard]] archive_outcome archive_extract_reported(const char *archive, const char *destination,
+                                                       const archive_request *request);
 
 #endif /* PICKUP_ARCHIVE_SERVICE_H */

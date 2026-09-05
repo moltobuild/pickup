@@ -235,14 +235,18 @@ MOLTEST(install_refuses_a_packing_it_cannot_open) {
     registry_artifact artifact = { 0 };
     snprintf(artifact.name, sizeof artifact.name, "%s", "clang");
     snprintf(artifact.version, sizeof artifact.version, "%s", "1.0.0");
-    snprintf(artifact.format, sizeof artifact.format, "%s", "tar.gz");
+    snprintf(artifact.format, sizeof artifact.format, "%s", "tar.br");
     snprintf(artifact.download_url, sizeof artifact.download_url, "%s",
              "file:///nowhere");
 
     /* How a blob is packed is something the registry states, and this build
-       opens two packings, of which gzip is not one. Refused on the statement,
-       before anything is fetched and without inferring anything from the
-       URL. */
+       opens three packings, of which brotli is not one. Refused on the
+       statement, before anything is fetched and without inferring anything
+       from the URL.
+
+       Not to be confused with a packing this build knows and this tar cannot
+       open: that one is install_no_codec, and it names a program to install.
+       This is the registry saying something pickup has never heard of. */
     const install_request request = { .artifact = &artifact };
     install_report report = install_run(&request);
     EXPECT_EQ(install_unsupported_format, report.status);
@@ -254,26 +258,95 @@ MOLTEST(install_refuses_a_packing_it_cannot_open) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(install_opens_xz_without_asking_for_zstd) {
+/* The packing this machine's tar can actually open, or NULL if it opens none.
+   Asked rather than assumed -- assuming was the bug these tests exist for. */
+static const char *a_packing_this_tar_opens(void) {
+    if (archive_supports_gzip())
+        return REGISTRY_FORMAT_TAR_GZ;
+    if (archive_supports_xz())
+        return REGISTRY_FORMAT_TAR_XZ;
+    if (archive_supports_zstd())
+        return REGISTRY_FORMAT_TAR_ZST;
+    return NULL;
+}
+
+/* And one it cannot, or NULL if it opens all of them. */
+static const char *a_packing_this_tar_refuses(void) {
+    if (!archive_supports_zstd())
+        return REGISTRY_FORMAT_TAR_ZST;
+    if (!archive_supports_xz())
+        return REGISTRY_FORMAT_TAR_XZ;
+    if (!archive_supports_gzip())
+        return REGISTRY_FORMAT_TAR_GZ;
+    return NULL;
+}
+
+MOLTEST(install_lets_through_a_packing_this_tar_opens) {
     install_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
+
+    const char *packing = a_packing_this_tar_opens();
+    if (packing == NULL) {
+        /* A tar that opens nothing has no question to answer here. */
+        fixture_teardown(&fixture);
+        return;
+    }
 
     registry_artifact artifact = { 0 };
     snprintf(artifact.name, sizeof artifact.name, "%s", "clang");
     snprintf(artifact.version, sizeof artifact.version, "%s", "1.0.0");
-    snprintf(artifact.format, sizeof artifact.format, "%s", REGISTRY_FORMAT_TAR_XZ);
+    snprintf(artifact.format, sizeof artifact.format, "%s", packing);
     snprintf(artifact.download_url, sizeof artifact.download_url, "%s", "file:///nowhere");
 
-    /* An artifact packed for a host whose tar has no zstd must not be turned
-       away for lacking zstd. The URL is nowhere, so the download is what fails
-       — and that it got as far as the download is the assertion: the format
-       check let it through. */
+    /* The URL is nowhere, so the download is what fails -- and that it got as
+       far as the download is the assertion: the packing was not the reason. */
     const install_request request = { .artifact = &artifact };
     install_report report = install_run(&request);
     EXPECT_TRUE(report.status != install_unsupported_format);
-    EXPECT_TRUE(report.status != install_no_zstd);
+    EXPECT_TRUE(report.status != install_no_codec);
 
     fixture_teardown(&fixture);
+}
+
+MOLTEST(install_refuses_a_packing_this_tar_cannot_open_before_downloading) {
+    install_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    const char *packing = a_packing_this_tar_refuses();
+    if (packing == NULL) {
+        /* A tar that opens all three: nothing to be turned away. */
+        fixture_teardown(&fixture);
+        return;
+    }
+
+    registry_artifact artifact = { 0 };
+    snprintf(artifact.name, sizeof artifact.name, "%s", "clang");
+    snprintf(artifact.version, sizeof artifact.version, "%s", "1.0.0");
+    snprintf(artifact.format, sizeof artifact.format, "%s", packing);
+    snprintf(artifact.download_url, sizeof artifact.download_url, "%s", "file:///nowhere");
+
+    const install_request request = { .artifact = &artifact };
+    install_report report = install_run(&request);
+    EXPECT_EQ(install_no_codec, report.status);
+
+    /* Before the transfer, not after it. The whole point of asking early is
+       that the answer costs nothing: an artifact refused here has not been
+       downloaded, so the downloads directory was never even made. */
+    char downloads[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(paths_downloads(downloads, sizeof downloads));
+    EXPECT_FALSE(fs_path_exists(downloads));
+
+    fixture_teardown(&fixture);
+}
+
+MOLTEST(install_names_the_program_a_packing_needs) {
+    /* Every packing pickup accepts has a program to name when the tar cannot
+       open it; anything else is not a packing pickup knows. */
+    EXPECT_TRUE(install_format_requirement(REGISTRY_FORMAT_TAR_GZ) != NULL);
+    EXPECT_TRUE(install_format_requirement(REGISTRY_FORMAT_TAR_XZ) != NULL);
+    EXPECT_TRUE(install_format_requirement(REGISTRY_FORMAT_TAR_ZST) != NULL);
+    EXPECT_TRUE(install_format_requirement("tar.br") == NULL);
+    EXPECT_TRUE(install_format_requirement(NULL) == NULL);
 }
 
 MOLTEST(install_rejects_an_archive_without_a_compiler_in_it) {
@@ -402,9 +475,10 @@ MOLTEST(install_rejects_a_tool_whose_binary_says_nothing) {
 MOLTEST(install_status_messages_cover_every_outcome) {
     /* A caller prints these; none may come out blank. */
     const install_status all[] = {
-        install_ok, install_no_downloader, install_no_extractor, install_no_zstd,
+        install_ok, install_no_downloader, install_no_extractor, install_no_codec,
         install_unsupported_format, install_yanked, install_download_failed,
-        install_hash_mismatch, install_extract_failed, install_not_a_toolchain,
+        install_hash_mismatch, install_extract_failed, install_extract_stalled,
+        install_not_a_toolchain,
         install_not_a_tool, install_path_error,
     };
     for (size_t i = 0; i < sizeof all / sizeof all[0]; i++) {

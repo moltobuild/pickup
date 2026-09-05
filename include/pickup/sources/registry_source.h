@@ -46,15 +46,26 @@
 /* The packings this build knows how to open. Published by the registry as
    `format`, and compared rather than guessed.
 
-   Two, because one of them is not openable everywhere. zstd compresses better
-   and decompresses faster and is what the registry serves by default — but the
-   `tar.exe` Windows ships opens gzip, bzip2, xz and lzma and *not* zstd, and
-   there is no zstd on a stock Windows to install alongside it. So an artifact
-   built for a Windows host is packed `tar.xz`, which that tar opens, which also
-   compresses smaller than zstd at the cost of a slower unpack — a trade worth
-   making once at install time. */
+   Three, because what a tar can open is not one answer. zstd compresses better
+   and decompresses faster and is what the registry serves for a Linux host,
+   where installing zstd beside tar is a package away.
+
+   Windows was packed `tar.xz` on the belief that the `tar.exe` it ships opens
+   gzip, bzip2, xz and lzma. Only the first is true. That tar is bsdtar with
+   libarchive built against zlib alone — `tar --version` says so, listing the
+   compression libraries it is linked with and naming no other — and every
+   codec that is not gzip it hands to an outside program, which on Windows is
+   both absent and, when present, deadlocked: libarchive fills the child's
+   stdin while waiting on its stdout, so anything past a pipe buffer of
+   compressed input never returns. Measured on that tar: 816 bytes of xz opens,
+   128 KB of xz hangs for as long as it is left alone.
+
+   So gzip is the packing a Windows host can actually be served, and the extra
+   bytes it costs are the price of an install that works in cmd, in PowerShell
+   and in a Unix shell alike. */
 #define REGISTRY_FORMAT_TAR_ZST "tar.zst"
 #define REGISTRY_FORMAT_TAR_XZ "tar.xz"
+#define REGISTRY_FORMAT_TAR_GZ "tar.gz"
 
 /* Where artifacts come from, in falling order of precedence: the environment,
    the configuration file, this. */

@@ -14,6 +14,7 @@
 #include <pickup/exit_code.h>
 #include <pickup/util/cli.h>
 #include <pickup/util/color.h>
+#include <pickup/util/console.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -192,6 +193,11 @@ static const cli_command commands[] = {
 };
 
 int cli_run(int argc, char **argv) {
+    /* Before anything is drawn, and before colour is decided: on Windows what
+       a console does with an escape sequence and with UTF-8 is a mode that has
+       to be asked for, and color_enabled needs the answer. */
+    console_configure();
+
     /* Decided once, from the stream the reports go to. */
     color_configure(stdout);
 

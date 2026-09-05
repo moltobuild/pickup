@@ -40,21 +40,33 @@
 set -euo pipefail
 
 readonly ZSTD_LEVEL=19
-readonly XZ_LEVEL=9
+readonly GZIP_LEVEL=9
 
 # How a host's artifact is packed.
 #
 # zstd for a Linux host: it decompresses several times faster, and every Linux
 # that can install anything can install zstd.
 #
-# xz for a Windows host, because the tar Windows ships opens gzip, bzip2, xz
-# and lzma and *not* zstd — and there is no stock zstd there to install beside
-# it, which makes the choice of packing the difference between a toolchain that
-# can be fetched and one that cannot. It also compresses smaller. The unpack is
-# slower and it happens once.
+# gzip for a Windows host, and gzip only. This was tar.xz on the belief that
+# the tar Windows ships opens gzip, bzip2, xz and lzma; of that list only the
+# first is true. That tar is bsdtar with libarchive linked against zlib alone
+# -- `tar --version` prints the libraries it has and names no other -- and
+# every codec that is not gzip it hands to an outside program. On Windows that
+# path fails twice over: the program is not installed, and when it is,
+# libarchive fills its stdin while waiting on its stdout and the pair deadlocks
+# past a pipe buffer of compressed input. Measured on the tar Windows 10 ships:
+# 816 bytes of xz lists fine, 128 KB of xz never returns.
+#
+# It costs bytes and it is worth them. The llvm-mingw 23.1.0 artifact is 73.6 MB
+# packed with xz -9 and 127.9 MB packed with gzip -9, from 488.9 MB unpacked.
+# Fifty-four extra megabytes, once, buys an install that works in cmd, in
+# PowerShell and in a Unix shell -- and on Windows the shell does not even get
+# a say: pickup starts tar through CreateProcess, which searches the system
+# directory before PATH, so C:\Windows\System32\tar.exe is what runs no matter
+# what the user has installed or which shell they typed in.
 packing_for() {
     case "$1" in
-    windows-*) printf 'tar.xz\n' ;;
+    windows-*) printf 'tar.gz\n' ;;
     *) printf 'tar.zst\n' ;;
     esac
 }
@@ -76,7 +88,7 @@ note() {
 
 require_tools() {
     local tool
-    for tool in tar zstd xz file sha256sum; do
+    for tool in tar zstd gzip file sha256sum; do
         command -v "$tool" >/dev/null || die "$tool is needed and not on the PATH"
     done
     tar --help 2>/dev/null | grep -q zstd || die "this tar cannot open zstd archives"
@@ -363,7 +375,9 @@ main() {
     packing=$(packing_for "$host")
     local archive="$outdir/$name-$version-$host.$packing"
     case "$packing" in
-    tar.xz) tar -C "$stage" -c -I "xz -$XZ_LEVEL -T0" -f "$archive" . ;;
+    # -n so the blob has no build date in it: the same tree packed twice is the
+    # same bytes, and the same sha256 the registry publishes.
+    tar.gz) tar -C "$stage" -c -I "gzip -$GZIP_LEVEL -n" -f "$archive" . ;;
     *) tar -C "$stage" -c -I "zstd -$ZSTD_LEVEL -T0" -f "$archive" . ;;
     esac
     write_recipe "$outdir/recipe-$host.toml" "$name" "$version" "$host" "$triple" \

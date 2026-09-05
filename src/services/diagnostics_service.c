@@ -6,6 +6,7 @@
 #include <pickup/detect/recipe.h>
 #include <pickup/detect/tools.h>
 #include <pickup/services/archive_service.h>
+#include <pickup/sources/registry_source.h>
 #include <pickup/services/fs_service.h>
 #include <pickup/services/http_service.h>
 #include <pickup/services/inventory_service.h>
@@ -130,6 +131,83 @@ static void add_remedy(finding *entry, const char *format, ...) {
 
 /* --- the environment Pickup itself depends on --- */
 
+/*
+ * The packings the registry serves, and whether this tar opens them.
+ *
+ * Three questions rather than one, because a tar is not simply capable or
+ * incapable: the one Windows ships is linked against zlib and nothing else, so
+ * it opens gzip and hands every other codec to an outside program. Which
+ * packing a given artifact uses is stated by the artifact, so what can be said
+ * here is which of them are openable at all.
+ */
+static const struct {
+    const char *packing;
+    bool (*opens)(void);
+    const char *program;
+} packings[] = {
+    {REGISTRY_FORMAT_TAR_GZ, archive_supports_gzip, "gzip"},
+    {REGISTRY_FORMAT_TAR_XZ, archive_supports_xz, "xz"},
+    {REGISTRY_FORMAT_TAR_ZST, archive_supports_zstd, "zstd"},
+};
+
+#define PACKING_COUNT (sizeof packings / sizeof packings[0])
+
+/* Add "a", or "a and b", or "a, b and c" to `text`. Three is the whole range,
+   so the joining is spelled out rather than generalised. */
+static void join_packings(char *text, size_t size, const char *const *names, size_t count) {
+    if (count == 1)
+        (void)snprintf(text, size, "%s", names[0]);
+    else if (count == 2)
+        (void)snprintf(text, size, "%s and %s", names[0], names[1]);
+    else if (count >= 3)
+        (void)snprintf(text, size, "%s, %s and %s", names[0], names[1], names[2]);
+}
+
+static void check_packings(diagnostics_report *report) {
+    const char *missing[PACKING_COUNT];
+    const char *programs[PACKING_COUNT];
+    size_t missing_count = 0;
+    for (size_t i = 0; i < PACKING_COUNT; i++) {
+        if (packings[i].opens())
+            continue;
+        programs[missing_count] = packings[i].program;
+        missing[missing_count++] = packings[i].packing;
+    }
+
+    if (missing_count == 0)
+        return;
+
+    char names[FINDING_TEXT_MAX];
+    names[0] = '\0';
+    join_packings(names, sizeof names, missing, missing_count);
+
+    /* Blocking only when nothing is left: a tar that opens one of the three
+       can still install whatever is packed that way, and install_run asks the
+       question again for the packing that actually turns up. */
+    const bool nothing_left = missing_count == PACKING_COUNT;
+    finding *entry = open_finding(report, nothing_left ? finding_error : finding_warning,
+                                  section_environment, nothing_left, "tar");
+    if (entry == NULL)
+        return;
+
+    if (nothing_left)
+        set_detail(entry, "opens none of the packings the registry uses; nothing can be installed");
+    else
+        set_detail(entry, "cannot open %s; an artifact packed that way will not install", names);
+
+    /* What to install is worth naming only where installing it is a remedy.
+       Where tar delegates and the delegation is what is broken, the program is
+       not the answer, and saying so would send someone to fetch it for
+       nothing. */
+    const bool name_the_programs = archive_delegation_works();
+    if (name_the_programs) {
+        for (size_t i = 0; i < missing_count; i++)
+            add_remedy(entry, "install %s", programs[i]);
+    }
+    add_remedy(entry, "%suse a tar with %s built in", name_the_programs ? "or " : "",
+               missing_count == 1 ? names : "them");
+}
+
 static void check_environment(diagnostics_report *report) {
     if (!http_available()) {
         finding *entry = open_finding(report, finding_error, section_environment, true, "curl");
@@ -146,17 +224,9 @@ static void check_environment(diagnostics_report *report) {
         add_remedy(entry, "install %s", archive_requirement());
         return;
     }
-    /* Everything the registry publishes is packed with zstd, so a tar that
-       cannot open one leaves nothing installable even though tar is there.
-       Only asked once tar is known to exist, or the answer would be about the
+    /* Only asked once tar is known to exist, or the answer would be about the
        wrong missing program. */
-    if (!archive_supports_zstd()) {
-        finding *entry = open_finding(report, finding_error, section_environment, true, "zstd");
-        if (entry == NULL)
-            return;
-        set_detail(entry, "tar cannot open a zstd archive; nothing can be installed");
-        add_remedy(entry, "install %s", archive_zstd_requirement());
-    }
+    check_packings(report);
 }
 
 static void check_home(diagnostics_report *report) {

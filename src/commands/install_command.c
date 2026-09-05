@@ -2,6 +2,7 @@
 
 #include <pickup/exit_code.h>
 #include <pickup/services/http_service.h>
+#include <pickup/services/archive_service.h>
 #include <pickup/services/install_service.h>
 #include <pickup/sources/registry_source.h>
 #include <pickup/util/color.h>
@@ -98,8 +99,24 @@ static int report_failure(const install_report *report, const registry_artifact 
         /* An answer rather than a breakage: the registry replied, and what it
            has is not to be used for new builds. */
         return exit_no_match;
-    case install_no_zstd:
-        fprintf(stderr, "  everything the registry publishes is packed with zstd\n");
+    case install_no_codec: {
+        /* Named rather than described: what is missing is a program, and the
+           only useful thing to print is which one. */
+        const char *needed = install_format_requirement(artifact->format);
+        fprintf(stderr, "  this one is packed %s, and this tar cannot open that\n",
+                artifact->format);
+        if (needed != NULL && archive_delegation_works())
+            fprintf(stderr, "  install %s, or use a tar that has it built in\n", needed);
+        else if (needed != NULL)
+            fprintf(stderr, "  use a tar with %s built in: this one would start %s and hang\n",
+                    needed, needed);
+        break;
+    }
+    case install_extract_stalled:
+        fprintf(stderr, "  tar produced nothing for long enough to be stopped\n");
+        fprintf(stderr, "  a tar that hands %s to another program deadlocks on Windows,\n",
+                artifact->format);
+        fprintf(stderr, "  where one with the codec built in does not\n");
         break;
     default:
         break;

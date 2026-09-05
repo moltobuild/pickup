@@ -29,12 +29,13 @@ typedef enum {
     install_ok,
     install_no_downloader,      /* curl is missing */
     install_no_extractor,       /* tar is missing */
-    install_no_zstd,            /* tar cannot open what the registry packs */
+    install_no_codec,           /* tar cannot open the way this one is packed */
     install_unsupported_format, /* packed in a way this build cannot open */
     install_yanked,             /* withdrawn, and not asked for by its version */
     install_download_failed,
     install_hash_mismatch,
     install_extract_failed,
+    install_extract_stalled, /* tar stopped producing anything and was stopped */
     install_not_a_toolchain, /* unpacked, but nothing in it compiles */
     install_not_a_tool,      /* unpacked, but the binary it named said nothing */
     install_path_error,
@@ -75,6 +76,12 @@ typedef struct {
 
 /* A one-line explanation of a status, for a caller that reports to a user. */
 [[nodiscard]] const char *install_status_message(install_status status);
+
+/* The program a tar without this codec built in would delegate to, for a
+   packing spelled the way the registry spells it — "tar.gz", "tar.xz",
+   "tar.zst". NULL for a packing this build does not know, which is how a
+   caller tells "cannot open it" from "has never heard of it". */
+[[nodiscard]] const char *install_format_requirement(const char *format);
 
 /* True if it ended up installed. There is only one such outcome now: the
    registry publishes a digest for everything, so there is no such thing as an

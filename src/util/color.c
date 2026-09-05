@@ -1,5 +1,7 @@
 #include <pickup/util/color.h>
 
+#include <pickup/util/console.h>
+
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -17,7 +19,19 @@
 static bool enabled = false;
 
 bool color_enabled(FILE *out) {
-    if (out == NULL || isatty(fileno(out)) != 1)
+    /* Asked as `== 0` rather than `!= 1`, because 1 is not the answer a
+       terminal gives everywhere. POSIX says isatty returns non-zero for a
+       terminal and names no particular non-zero; the Windows CRT returns the
+       bit that marks a character device, 0x40. A check spelled `== 1` reads a
+       Windows console as a pipe, and every bar and spinner behind it silently
+       stops being drawn. */
+    if (out == NULL || isatty(fileno(out)) == 0)
+        return false;
+
+    /* Written only where it will be acted on. A console that has not been put
+       into virtual-terminal mode prints the sequence as its own characters,
+       which is worse than plain output rather than better. */
+    if (!console_supports_sequences())
         return false;
 
     /* Set to anything at all, NO_COLOR means no colour. */

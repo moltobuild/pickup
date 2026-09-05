@@ -55,8 +55,8 @@ const char *install_status_message(install_status status) {
         return "curl is required to download from the registry";
     case install_no_extractor:
         return "tar is required to unpack what the registry packs";
-    case install_no_zstd:
-        return "this tar cannot open a zstd archive";
+    case install_no_codec:
+        return "this tar cannot open the way the registry packed this";
     case install_unsupported_format:
         return "the registry packed this in a way this build cannot open";
     case install_yanked:
@@ -67,6 +67,8 @@ const char *install_status_message(install_status status) {
         return "sha256 mismatch, archive discarded";
     case install_extract_failed:
         return "the archive could not be unpacked";
+    case install_extract_stalled:
+        return "unpacking stopped making progress and was ended";
     case install_not_a_toolchain:
         return "the archive holds no usable compiler";
     case install_not_a_tool:
@@ -147,8 +149,8 @@ static bool prepare_partial(const char *root, char *partial, size_t partial_size
     return fs_remove_tree(partial) && fs_make_dirs(partial);
 }
 
-static bool extract_to_partial(const char *archive, const registry_artifact *artifact,
-                               const char *partial) {
+static archive_outcome extract_to_partial(const char *archive, const registry_artifact *artifact,
+                                          const char *partial) {
     char label[LABEL_SIZE];
     snprintf(label, sizeof label, EXTRACT_LABEL_FORMAT, artifact->name, artifact->version);
 
@@ -160,7 +162,7 @@ static bool extract_to_partial(const char *archive, const registry_artifact *art
         .label = label,
         .waiting_label = PREPARING_LABEL,
     };
-    return archive_extract_selected(archive, partial, &request);
+    return archive_extract_reported(archive, partial, &request);
 }
 
 /* Count what the installed compiler actually compiles. */
@@ -426,25 +428,53 @@ static bool proves_it_compiles(const char *prefix, const char *published, instal
 
 /* --- the install --- */
 
+const char *install_format_requirement(const char *format) {
+    if (format == NULL)
+        return NULL;
+    if (strcmp(format, REGISTRY_FORMAT_TAR_GZ) == 0)
+        return archive_gzip_requirement();
+    if (strcmp(format, REGISTRY_FORMAT_TAR_XZ) == 0)
+        return archive_xz_requirement();
+    if (strcmp(format, REGISTRY_FORMAT_TAR_ZST) == 0)
+        return archive_zstd_requirement();
+    return NULL;
+}
+
+/* Whether the tar that will do the work opens a blob packed this way.
+ *
+ * Every packing is asked about, and none is waved through. The one that used
+ * to be — xz, on the grounds that every tar worth calling one opens it,
+ * including the one Windows ships — is the one that turned out not to be
+ * openable on the very platform it was chosen for. What that belief cost was
+ * a 73 MB download, a checksum that matched, and then "the archive could not
+ * be unpacked" with nothing to act on. An unasked question is not a saved
+ * question; it is an answer assumed.
+ */
+static bool tar_opens(const char *format) {
+    if (strcmp(format, REGISTRY_FORMAT_TAR_GZ) == 0)
+        return archive_supports_gzip();
+    if (strcmp(format, REGISTRY_FORMAT_TAR_XZ) == 0)
+        return archive_supports_xz();
+    if (strcmp(format, REGISTRY_FORMAT_TAR_ZST) == 0)
+        return archive_supports_zstd();
+    return false;
+}
+
 /* What has to be there before anything is downloaded. */
 static install_status check_environment(const registry_artifact *artifact) {
     if (!http_available())
         return install_no_downloader;
     if (!archive_available())
         return install_no_extractor;
+
     /* Compared rather than inferred from the URL: how a blob is packed is
        something the registry states, and a name is not a statement. */
-    if (strcmp(artifact->format, REGISTRY_FORMAT_TAR_ZST) == 0)
-        return archive_supports_zstd() ? install_ok : install_no_zstd;
+    if (install_format_requirement(artifact->format) == NULL)
+        return install_unsupported_format;
 
-    /* No matching question for xz: every tar that is worth calling one opens
-       it, including the one Windows ships — which is the whole reason an
-       artifact is ever packed that way. Asking anyway would mean inventing a
-       probe for a capability nothing lacks. */
-    if (strcmp(artifact->format, REGISTRY_FORMAT_TAR_XZ) == 0)
-        return install_ok;
-
-    return install_unsupported_format;
+    /* Asked here, where it is still free. Past this point the answer costs
+       whatever the artifact weighs. */
+    return tar_opens(artifact->format) ? install_ok : install_no_codec;
 }
 
 install_report install_run(const install_request *request) {
@@ -482,10 +512,15 @@ install_report install_run(const install_request *request) {
         return report_of(install_path_error);
     }
 
-    if (!extract_to_partial(archive, artifact, partial)) {
+    const archive_outcome unpacked = extract_to_partial(archive, artifact, partial);
+    if (unpacked != archive_ok) {
         remove(archive);
         (void)fs_remove_tree(partial);
-        return report_of(install_extract_failed);
+        /* Told apart because they send someone to different places: a tar that
+           read the archive and refused it is a problem with the blob, and one
+           that stopped moving is a problem with the tar. */
+        return report_of(unpacked == archive_stalled ? install_extract_stalled
+                                                     : install_extract_failed);
     }
 
     /* The archive has served its purpose; keeping it around to never be read

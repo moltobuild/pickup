@@ -65,6 +65,14 @@ typedef struct {
 /* Wait for a started child to finish and report how it went. */
 process_result process_wait(process_handle *handle);
 
+/* End a started child that is not going to finish on its own.
+ *
+ * For a watchdog, and only for one: a caller that can tell a working child from
+ * a wedged one, and has decided. The handle is not settled by this call --
+ * `process_poll` or `process_wait` still has to observe the child and collect
+ * it, exactly as if it had ended by itself. */
+void process_stop(process_handle *handle);
+
 /* Pause for `milliseconds`, between one `process_poll` and the next.
  *
  * It belongs beside poll because it exists for poll: a caller watching a child

@@ -87,11 +87,20 @@ note() {
 }
 
 require_tools() {
-    local tool
-    for tool in tar zstd gzip file sha256sum; do
+    local packing="$1" tool
+    for tool in tar file sha256sum; do
         command -v "$tool" >/dev/null || die "$tool is needed and not on the PATH"
     done
-    tar --help 2>/dev/null | grep -q zstd || die "this tar cannot open zstd archives"
+    # Only the compressor this packing actually uses. Asking for both would
+    # refuse to pack a Windows artifact on a machine with no zstd, which is
+    # every Windows machine and is exactly where packing one is now possible.
+    case "$packing" in
+    tar.gz) command -v gzip >/dev/null || die "gzip is needed and not on the PATH" ;;
+    tar.zst)
+        command -v zstd >/dev/null || die "zstd is needed and not on the PATH"
+        tar --help 2>/dev/null | grep -q zstd || die "this tar cannot open zstd archives"
+        ;;
+    esac
 }
 
 # On Windows a suffix is a permission (RFC-0017): what says a file may be run
@@ -206,13 +215,37 @@ run_native() {
     fi
 }
 
-# Run a program the toolchain produced. Always a PE, so always wine, and always
-# with the runtime directory on PATH: libc++.dll and libunwind.dll are found
-# beside the executable or not at all.
+# Run a program the toolchain produced. Always a PE, and always with the runtime
+# directory where the loader will look: libc++.dll and libunwind.dll are found
+# beside the executable or on PATH, and nowhere else.
+#
+# Under wine that is WINEPATH; on Windows it is PATH, because the program is
+# native and there is no loader to tell.
 run_emitted() {
     local runtime="$1"
     shift
-    WINEDEBUG=-all WINEPATH="$runtime" "$WINE" "$@"
+    if [ "$NEEDS_WINE" = yes ]; then
+        WINEDEBUG=-all WINEPATH="$runtime" "$WINE" "$@"
+    else
+        PATH="$runtime:$PATH" "$@"
+    fi
+}
+
+# Whether a program built for `host` has to be started through wine here.
+#
+# This script was written on Linux, where a Windows binary runs no other way,
+# and it required wine outright. On a Windows machine every binary it packs is
+# native and wine is neither present nor wanted — so what decides is the machine
+# doing the packing, not the artifact being packed.
+needs_wine() {
+    case "$1" in
+    windows-*) ;;
+    *) printf 'no\n'; return 0 ;;
+    esac
+    case "$(uname -s 2>/dev/null)" in
+    MINGW* | MSYS* | CYGWIN*) printf 'no\n' ;;
+    *) printf 'yes\n' ;;
+    esac
 }
 
 require_wine() {
@@ -338,12 +371,13 @@ main() {
     [ -d "$prefix/bin" ] || die "$prefix has no bin/ directory"
 
     case "$host" in
-        linux-x86_64) NEEDS_WINE=no ;;
-        windows-x86_64) NEEDS_WINE=yes ;;
+        linux-x86_64) ;;
+        windows-x86_64) ;;
         *) die "host must be linux-x86_64 or windows-x86_64, not $host" ;;
     esac
-    require_tools
-    require_wine
+    NEEDS_WINE="$(needs_wine "$host")"
+    require_tools "$(packing_for "$host")"
+    [ "$NEEDS_WINE" = no ] || require_wine
     mkdir -p "$outdir"
 
     local suffix stage
@@ -374,11 +408,15 @@ main() {
     local packing
     packing=$(packing_for "$host")
     local archive="$outdir/$name-$version-$host.$packing"
+    # A fixed entry order rather than the filesystem's, nobody's uid on the way
+    # out, and -n so gzip stores no date of its own. Not quite the same bytes
+    # twice, and the difference is worth naming: strip_binaries rewrites the
+    # binaries it strips, so they carry the date they were stripped. Everything
+    # a reader could otherwise blame is ruled out.
+    local reproducibly="--sort=name --owner=0 --group=0 --numeric-owner"
     case "$packing" in
-    # -n so the blob has no build date in it: the same tree packed twice is the
-    # same bytes, and the same sha256 the registry publishes.
-    tar.gz) tar -C "$stage" -c -I "gzip -$GZIP_LEVEL -n" -f "$archive" . ;;
-    *) tar -C "$stage" -c -I "zstd -$ZSTD_LEVEL -T0" -f "$archive" . ;;
+    tar.gz) tar $reproducibly -C "$stage" -c -I "gzip -$GZIP_LEVEL -n" -f "$archive" . ;;
+    *) tar $reproducibly -C "$stage" -c -I "zstd -$ZSTD_LEVEL -T0" -f "$archive" . ;;
     esac
     write_recipe "$outdir/recipe-$host.toml" "$name" "$version" "$host" "$triple" \
         "$stage" "$c_driver" "$cxx_driver" "$runtime" "$packing"

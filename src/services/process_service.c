@@ -188,11 +188,15 @@ static bool launch(const char *const argv[], HANDLE in, HANDLE out, HANDLE err,
      * already planned for.
      *
      * SEM_FAILCRITICALERRORS makes it the answer it always was: the process
-     * does not start and the exit code says so. Set on this process because a
-     * child created without CREATE_DEFAULT_ERROR_MODE inherits it, and set
-     * beside the call so it covers every program pickup starts and nothing
-     * else. SEM_NOGPFAULTERRORBOX is the same argument for a probe that
-     * crashes rather than one that will not load.
+     * does not start and the exit code says so. It has to be the process-wide
+     * mode: the box belongs to the child's loader, and what a child created
+     * without CREATE_DEFAULT_ERROR_MODE inherits is the process mode --
+     * SetThreadErrorMode lives in the TEB, does not survive process creation,
+     * and leaves the box exactly where it was. So this is global and permanent
+     * from the first call rather than scoped to the line below; it sits here
+     * because this is the only place pickup starts a program, not because the
+     * effect stops here. SEM_NOGPFAULTERRORBOX is the same argument for a
+     * probe that crashes rather than one that will not load.
      */
     (void)SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
 

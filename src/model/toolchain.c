@@ -151,6 +151,104 @@ void toolchain_target_tag(const char *target, char *out, size_t out_size) {
     }
 }
 
+/*
+ * The machine this pickup runs on, spelled the ways a target triple spells it.
+ *
+ * More than one spelling per operating system, because there is more than one:
+ * a compiler for this same Windows answers `x86_64-w64-mingw32` or
+ * `x86_64-w64-windows-gnu` depending on who built it, and a list that knew only
+ * the second would call the first a cross compiler and refuse to build with it.
+ *
+ * A guess about somebody else's naming, and treated as one: a host with no name
+ * here claims nothing, and every toolchain is then taken at its word.
+ */
+#if defined(_WIN32)
+static const char *const host_os_in_triple[] = {"windows", "mingw", "cygwin", "msys"};
+#elif defined(__APPLE__)
+static const char *const host_os_in_triple[] = {"darwin", "macos", "apple"};
+#elif defined(__linux__)
+static const char *const host_os_in_triple[] = {"linux"};
+#else
+static const char *const host_os_in_triple[] = {NULL};
+#endif
+
+#define HOST_OS_COUNT (sizeof host_os_in_triple / sizeof host_os_in_triple[0])
+
+#if defined(__x86_64__) || defined(_M_X64)
+#define HOST_ARCH_IN_TRIPLE "x86_64"
+#elif defined(__aarch64__) || defined(_M_ARM64)
+#define HOST_ARCH_IN_TRIPLE "aarch64"
+#elif defined(__i386__) || defined(_M_IX86)
+#define HOST_ARCH_IN_TRIPLE "i686"
+#else
+#define HOST_ARCH_IN_TRIPLE ""
+#endif
+
+/* Architectures that are one instruction set under two names. Compilers and
+   operating systems do not agree on the spelling, and a name is not a
+   difference. */
+static const char *const arch_aliases[][2] = {
+    {"arm64", "aarch64"}, {"amd64", "x86_64"}, {"i386", "i686"},
+    {"i486", "i686"},     {"i586", "i686"},
+};
+
+#define ALIAS_COUNT (sizeof arch_aliases / sizeof arch_aliases[0])
+
+/* Room for an architecture: "x86_64", "aarch64", "arm64ec". */
+#define ARCH_MAX 24
+
+/* Copy the first `length` bytes of `text` into `out` under the one spelling
+   this file compares by. False when it is not an architecture name at all. */
+static bool canonical_arch(const char *text, size_t length, char *out, size_t out_size) {
+    if (length == 0 || length >= out_size)
+        return false;
+    memcpy(out, text, length);
+    out[length] = 0;
+    for (size_t i = 0; i < ALIAS_COUNT; i++) {
+        if (strcmp(out, arch_aliases[i][0]) == 0) {
+            if (strlen(arch_aliases[i][1]) >= out_size)
+                return false;
+            snprintf(out, out_size, "%s", arch_aliases[i][1]);
+            break;
+        }
+    }
+    return true;
+}
+
+/* True if `target` names an operating system this one could be. */
+static bool names_this_os(const char *target) {
+    if (host_os_in_triple[0] == NULL)
+        return true; /* no spelling here, so nothing to disagree with */
+    for (size_t i = 0; i < HOST_OS_COUNT; i++) {
+        if (strstr(target, host_os_in_triple[i]) != NULL)
+            return true;
+    }
+    return false;
+}
+
+bool toolchain_emits_for_host(const toolchain *chain) {
+    /* Ignorance is not a mismatch. A compiler without -dumpmachine reports no
+       target, and a host with no spelling here has nothing to compare against;
+       either way the toolchain is taken at its word rather than turned down
+       over something Pickup does not know. */
+    if (chain->target[0] == 0)
+        return true;
+    if (!names_this_os(chain->target))
+        return false;
+    if (HOST_ARCH_IN_TRIPLE[0] == 0)
+        return true;
+
+    /* The architecture is the first component, and it is compared as a whole
+       component: `arm64ec` is not `arm64`, and a substring search says it is. */
+    const char *dash = strchr(chain->target, '-');
+    size_t length = dash != NULL ? (size_t)(dash - chain->target) : strlen(chain->target);
+
+    char emits[ARCH_MAX];
+    if (!canonical_arch(chain->target, length, emits, sizeof emits))
+        return true;
+    return strcmp(emits, HOST_ARCH_IN_TRIPLE) == 0;
+}
+
 /* A target tag is one component of a triple, and those are short words:
    "conda", "musl", "apple". Bounded so the identity stays readable. */
 #define TARGET_TAG_MAX 32

@@ -356,31 +356,6 @@ static void configure_installed(install_report *report, const char *published) {
 /* --- proving it --- */
 
 /*
- * The operating system this pickup runs on, spelled the way a target triple
- * spells it.
- *
- * A guess about somebody else's naming, and treated as one: a host with no name
- * here claims nothing, and every toolchain is then held to the stricter test
- * rather than the looser one.
- */
-#if defined(_WIN32)
-#define HOST_OS_IN_TRIPLE "windows"
-#elif defined(__APPLE__)
-#define HOST_OS_IN_TRIPLE "darwin"
-#elif defined(__linux__)
-#define HOST_OS_IN_TRIPLE "linux"
-#else
-#define HOST_OS_IN_TRIPLE ""
-#endif
-
-/* True if what this toolchain emits is not for this machine. Read off the
-   triple the compiler itself answered with, so it describes the toolchain that
-   arrived rather than the name the artifact was published under. */
-static bool emits_for_elsewhere(const toolchain *chain) {
-    return HOST_OS_IN_TRIPLE[0] != '\0' && strstr(chain->target, HOST_OS_IN_TRIPLE) == NULL;
-}
-
-/*
  * The test that decides whether what was unpacked is a toolchain at all.
  *
  * Counting features is not enough, and finding that out is what this is for:
@@ -396,10 +371,11 @@ static bool emits_for_elsewhere(const toolchain *chain) {
  *
  * "Run something" is the one part a cross toolchain cannot do. What it builds
  * is for another machine, so it links and never starts here, and requiring the
- * program to run rejects every cross compiler there is. `resolve` settled this
- * already -- a toolchain asked to emit for elsewhere is judged on whether it
- * linked -- and installing has to answer it the same way, or the two disagree
- * about what a working toolchain is.
+ * program to run would reject every cross compiler there is. So the strict test
+ * is asked for unconditionally and the recipe lowers it where it cannot be met
+ * -- which keeps the rule in one place. Stated twice it would disagree with
+ * itself the first time an archive unpacked a cross compiler for the operating
+ * system it is already running on, and llvm-mingw unpacks four.
  */
 static bool proves_it_compiles(const char *prefix, const char *published, install_report *report) {
     if (!identify_in_prefix(prefix, published, &report->installed))
@@ -408,8 +384,7 @@ static bool proves_it_compiles(const char *prefix, const char *published, instal
     report->features_proven = count_proven_features(&report->installed);
     probe_find_cxx_driver(&report->installed);
 
-    const bool must_run = !emits_for_elsewhere(&report->installed);
-    link_recipe c = recipe_discover_for(&report->installed, lang_c, stdlib_unknown, must_run);
+    link_recipe c = recipe_discover_for(&report->installed, lang_c, stdlib_unknown, true);
     if (report->features_proven == 0 || !c.usable)
         return false;
 
@@ -419,7 +394,7 @@ static bool proves_it_compiles(const char *prefix, const char *published, instal
        being reported as success. */
     if (report->installed.cxx_path[0] != '\0') {
         link_recipe cxx =
-            recipe_discover_for(&report->installed, lang_cxx, stdlib_unknown, must_run);
+            recipe_discover_for(&report->installed, lang_cxx, stdlib_unknown, true);
         if (!cxx.usable)
             return false;
     }

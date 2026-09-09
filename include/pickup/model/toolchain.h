@@ -77,6 +77,23 @@ void toolchain_make_id(toolchain *chain);
    nothing. */
 void toolchain_target_tag(const char *target, char *out, size_t out_size);
 
+/*
+ * True when a program this toolchain builds would start on this machine.
+ *
+ * Read off the triple the compiler answered with, and off both halves of it.
+ * The operating system alone is not enough: llvm-mingw is one archive carrying
+ * five drivers that all say `windows`, and four of them emit for an
+ * architecture this machine cannot execute. Asking one of those to prove itself
+ * by running what it built is asking for a failure that says nothing about the
+ * toolchain, and on Windows that failure arrives as a dialog box in front of
+ * whoever was building.
+ *
+ * A host Pickup has no triple spelling for claims nothing, and so does a
+ * compiler that reported no target: either way the toolchain is taken at its
+ * word rather than turned down over something Pickup does not know.
+ */
+[[nodiscard]] bool toolchain_emits_for_host(const toolchain *chain);
+
 /* Human-readable source name ("system", "pickup"). Never NULL. */
 [[nodiscard]] const char *toolchain_source_name(toolchain_source source);
 

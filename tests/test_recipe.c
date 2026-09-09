@@ -41,6 +41,9 @@ typedef struct {
     bool libcxx;           /* works when given -stdlib=libc++ */
     bool ships_libcxx;     /* carries a libc++ to be pointed at */
     bool ships_libstdcxx;  /* carries a libstdc++ of its own */
+    /* Links whatever it is given, and produces something that only starts when
+       the runtime went inside it. The one failure a link cannot report. */
+    bool needs_static;
 } fake_accepts;
 
 /* The pickup home a fake is judged against. Restored afterwards, because
@@ -224,8 +227,17 @@ MOLTEST_FAKE(fake_driver) {
         return 0;
 
     const char *out = argument_after(argc, argv, "-o");
-    if (out != NULL && !moltest_fake_program(out, "exit 0\n", NULL, 0))
-        return 1;
+    if (out != NULL) {
+        /* Linked either way; whether it *starts* is the question. A toolchain
+           whose runtime is a library beside the compiler links a program the
+           loader then cannot complete, and only the configuration that put the
+           runtime inside the binary produces one that runs. Nothing about the
+           link says so, which is why the probe runs what it built. */
+        const bool starts =
+            !setting_is_yes("needs_static") || argument_given(argc, argv, "-static");
+        if (!moltest_fake_program(out, starts ? "exit 0\n" : "exit 1\n", NULL, 0))
+            return 1;
+    }
     return 0;
 }
 
@@ -237,6 +249,7 @@ static bool write_driver(fake_toolchain *fake, const fake_accepts *accepts) {
                                  "set gcc_install %s\n"
                                  "set libcxx %s\n"
                                  "set bare %s\n"
+                                 "set needs_static %s\n"
                                  "set libcxx_dir %s\n"
                                  "set libstdcxx_dir %s\n"
                                  "set gcc_dir %s\n"
@@ -245,7 +258,8 @@ static bool write_driver(fake_toolchain *fake, const fake_accepts *accepts) {
                                  accepts->ships_libstdcxx ? "yes" : "no",
                                  accepts->gcc_install ? "yes" : "no",
                                  accepts->libcxx ? "yes" : "no", accepts->bare ? "yes" : "no",
-                                 fake->libcxx_dir, fake->libstdcxx_dir, fake->gcc_dir);
+                                 accepts->needs_static ? "yes" : "no", fake->libcxx_dir,
+                                 fake->libstdcxx_dir, fake->gcc_dir);
     if (written < 0 || (size_t)written >= sizeof spec)
         return false;
 
@@ -344,6 +358,45 @@ MOLTEST(recipe_publishes_nothing_when_the_compiler_needs_nothing) {
     EXPECT_EQ(stdlib_libstdcxx, recipe.stdlib);
 
     fake_teardown(&fake);
+}
+
+/*
+ * A runtime the binary cannot be told about, so it carries it instead.
+ *
+ * Everywhere else here the answer to "the loader will not find this" is an
+ * rpath. A PE has nowhere to keep one: Windows looks beside the executable,
+ * then in the system directories, then along PATH, and a toolchain's own
+ * runtime is in none of the three. So the link succeeds and the program dies
+ * on its first run -- and a probe that only linked would call that a working
+ * toolchain, which is the whole failure this module exists to stop reporting
+ * as success.
+ *
+ * Measured on llvm-mingw, whose C++ output asks for libc++.dll and
+ * libunwind.dll and whose C output asks for nothing at all. Hence a fixture
+ * that links either way and only runs one of them.
+ */
+MOLTEST(recipe_puts_the_runtime_inside_a_binary_that_cannot_be_told_where_it_is) {
+#ifndef _WIN32
+    SKIP("only a PE has nowhere to keep the path to its runtime");
+#else
+    fake_toolchain fake;
+    fake_accepts accepts = { .bare = true, .needs_static = true };
+    ASSERT_TRUE(fake_setup(&fake, &accepts));
+
+    toolchain chain = chain_of(&fake);
+    link_recipe recipe = recipe_discover(&chain, lang_cxx);
+
+    ASSERT_TRUE(recipe.usable);
+    EXPECT_TRUE(has_compile_flag(&recipe, "-static"));
+    EXPECT_TRUE(has_link_flag(&recipe, "-static"));
+
+    /* And nothing claimed about where the runtime lives, because on this
+       platform it does not live anywhere: it is in the binary. A directory
+       reported here would be a search path no PE will ever consult. */
+    EXPECT_EQ(0, (int)recipe.runtime_count);
+
+    fake_teardown(&fake);
+#endif
 }
 
 MOLTEST(recipe_pins_the_gcc_installation_when_that_is_what_is_needed) {

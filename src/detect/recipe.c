@@ -32,6 +32,28 @@
 #define FLAG_GCC_TOOLCHAIN "--gcc-toolchain=%s"
 #define FLAG_RPATH "-Wl,-rpath,%s"
 
+/*
+ * Carry the runtime instead of naming where it lives.
+ *
+ * Everywhere else here, a program that needs a library the loader will not
+ * find is answered with an rpath: the binary is told where its runtime is and
+ * carries that with it. A PE has nowhere to keep such a thing. Windows looks
+ * beside the executable, then in the system directories, then along PATH, and
+ * a toolchain's own `libc++.dll` is in none of the three -- so the link
+ * succeeds, the program dies on its first run, and that is exactly the failure
+ * the rpath candidates exist to stop reporting as success.
+ *
+ * The same intent, then, by the only means the format leaves: put the runtime
+ * inside the binary. Measured on llvm-mingw, where a C++ program links clean
+ * and then asks for `libc++.dll` and `libunwind.dll` -- and where
+ * `-static-libstdc++` is not enough, because it answers for the library and
+ * leaves the unwinder behind.
+ *
+ * Windows only. On ELF the rpath candidates already answer this and answer it
+ * better, and a fully static glibc binary is its own, worse problem.
+ */
+#define FLAG_STATIC "-static"
+
 /* How far above a GCC installation directory its prefix sits:
    <prefix>/lib/gcc/<triple>/<version> is four levels down. */
 #define GCC_PREFIX_DEPTH 4
@@ -373,6 +395,31 @@ static void add_bare(candidate *out, size_t *count, size_t max) {
         out[(*count)++] = (candidate){.stdlib = stdlib_unknown, .count = 0};
 }
 
+/*
+ * The runtime inside the binary, for the platform that cannot be told where it
+ * is. See FLAG_STATIC.
+ *
+ * Emitted after the bare candidate and never before it, so a toolchain whose
+ * output already runs keeps the empty recipe. On llvm-mingw that is the C half
+ * -- a C program there needs no DLL of the toolchain's at all -- and only C++
+ * falls through to this one. Which of the two it is, is not decided here: the
+ * probe links the program and runs it, and the first candidate whose output
+ * starts is the answer.
+ */
+static void add_static_runtime(candidate *out, size_t *count, size_t max) {
+#ifdef _WIN32
+    if (*count >= max)
+        return;
+    candidate entry = {.stdlib = stdlib_unknown, .count = 0};
+    add_flag(&entry, FLAG_STATIC);
+    out[(*count)++] = entry;
+#else
+    (void)out;
+    (void)count;
+    (void)max;
+#endif
+}
+
 /* Name where the toolchain's own C++ library lives. */
 static void add_own_libstdcxx(const candidate_storage *storage, candidate *out, size_t *count,
                               size_t max) {
@@ -464,6 +511,9 @@ static size_t build_candidates(capability_lang lang, const char *driver, candida
         add_own_libcxx(storage, out, &count, max);
 
     add_bare(out, &count, max);
+    /* Before the GCC candidates, which have nothing to say to a toolchain that
+       brought its own runtime and cannot be told where it put it. */
+    add_static_runtime(out, &count, max);
     if (!stdlib_is_its_own)
         add_own_libstdcxx(storage, out, &count, max);
     add_gcc_install(storage, out, &count, max);

@@ -748,6 +748,14 @@ link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang, cx
     if (driver == NULL || driver[0] == '\0')
         return recipe;
 
+    /* A cross toolchain is judged on whether it linked, whatever the caller
+       asked for. What it builds is for another machine, so starting it here
+       proves nothing about the toolchain -- and the attempt is not free: the
+       program either fails to load or, on Windows, stops the build behind a
+       dialog box nobody asked for. The caller's `must_run` says the caller
+       wants a native answer; it cannot make this one native. */
+    const bool prove_it_runs = must_run && toolchain_emits_for_host(chain);
+
     candidate_storage storage = {0};
     candidate candidates[RECIPE_MAX_FLAGS];
     size_t count = build_candidates(lang, driver, &storage, candidates, RECIPE_MAX_FLAGS);
@@ -771,7 +779,7 @@ link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang, cx
      * pass only ever runs where the first one came back empty.
      */
     for (bool ignore_config = takes_no_default_config(driver);; ignore_config = false) {
-        if (discover_with(driver, lang, wanted, must_run, ignore_config, candidates, count,
+        if (discover_with(driver, lang, wanted, prove_it_runs, ignore_config, candidates, count,
                           &storage, &recipe))
             return recipe;
         if (!ignore_config)

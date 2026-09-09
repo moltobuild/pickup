@@ -90,7 +90,13 @@ typedef struct {
    ordinary case. Naming one narrows the search instead of filtering its
    result: a toolchain whose preferred recipe uses libstdc++ may well have a
    working libc++ recipe further down the list, and a caller with an ABI
-   constraint wants that one rather than a refusal. */
+   constraint wants that one rather than a refusal.
+
+   `must_run` asks for a recipe whose program was watched starting, which is
+   what a caller building for this machine needs. It is a ceiling and not a
+   floor: a toolchain that emits for another machine is judged on whether it
+   linked, because what it produced could not start here whatever the recipe
+   said. */
 [[nodiscard]] link_recipe recipe_discover_for(const toolchain *chain, capability_lang lang,
                                               cxx_stdlib wanted, bool must_run);
 

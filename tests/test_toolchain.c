@@ -97,6 +97,47 @@ MOLTEST(toolchain_tag_comes_from_the_target_alone) {
     EXPECT_STREQ("", tag);
 }
 
+MOLTEST(toolchain_emits_for_host_reads_the_architecture_too) {
+    toolchain chain = {0};
+
+    /* Nothing to compare against is not a mismatch: a compiler that answered
+       no -dumpmachine is taken at its word rather than turned down. */
+    EXPECT_TRUE(toolchain_emits_for_host(&chain));
+
+    /* No host Pickup runs on is any of this. */
+    snprintf(chain.target, sizeof chain.target, "%s", "mips64-unknown-none-elf");
+    EXPECT_FALSE(toolchain_emits_for_host(&chain));
+
+#if defined(_WIN32) && (defined(__x86_64__) || defined(_M_X64))
+    /* llvm-mingw is one archive holding five drivers: one operating system,
+       five architectures. Reading the operating system alone called every one
+       of them native, and four of them build programs this host cannot start
+       -- which Windows reports by stopping the build behind a dialog box. */
+    snprintf(chain.target, sizeof chain.target, "%s", "x86_64-w64-windows-gnu");
+    EXPECT_TRUE(toolchain_emits_for_host(&chain));
+    snprintf(chain.target, sizeof chain.target, "%s", "aarch64-w64-windows-gnu");
+    EXPECT_FALSE(toolchain_emits_for_host(&chain));
+    snprintf(chain.target, sizeof chain.target, "%s", "armv7-w64-windows-gnu");
+    EXPECT_FALSE(toolchain_emits_for_host(&chain));
+    snprintf(chain.target, sizeof chain.target, "%s", "i686-w64-windows-gnu");
+    EXPECT_FALSE(toolchain_emits_for_host(&chain));
+
+    /* Compared as a whole component. A substring search reads `arm64ec` as the
+       host's own `arm64`, and it is neither that nor x86_64. */
+    snprintf(chain.target, sizeof chain.target, "%s", "arm64ec-w64-windows-gnu");
+    EXPECT_FALSE(toolchain_emits_for_host(&chain));
+
+    /* The same Windows under the other spelling: MinGW says `mingw32` where
+       llvm-mingw says `windows`, and both of them mean here. */
+    snprintf(chain.target, sizeof chain.target, "%s", "x86_64-w64-mingw32");
+    EXPECT_TRUE(toolchain_emits_for_host(&chain));
+
+    /* Same architecture, somewhere else. */
+    snprintf(chain.target, sizeof chain.target, "%s", "x86_64-unknown-linux-gnu");
+    EXPECT_FALSE(toolchain_emits_for_host(&chain));
+#endif
+}
+
 MOLTEST(toolchain_answers_to_the_shorter_forms_a_person_types) {
     toolchain chain = { .vendor = vendor_gcc, .version = { 12, 3, 0 } };
     snprintf(chain.target, sizeof chain.target, "%s", "x86_64-linux-gnu");

@@ -2,6 +2,7 @@
 
 #include <pickup/exit_code.h>
 #include <pickup/sources/registry_source.h>
+#include <pickup/util/toml_write.h>
 
 #include <stdio.h>
 
@@ -17,7 +18,7 @@ int host_command_run(bool as_toml) {
     }
 
     if (as_toml)
-        printf("target = \"%s\"\n", target);
+        toml_write_string("target", target);
     else
         printf("%s\n", target);
     return exit_ok;

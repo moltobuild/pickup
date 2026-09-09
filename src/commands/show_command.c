@@ -4,6 +4,7 @@
 #include <pickup/detect/recipe.h>
 #include <pickup/exit_code.h>
 #include <pickup/services/inventory_service.h>
+#include <pickup/util/toml_write.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -54,14 +55,14 @@ static void print_toml(const toolchain *chain) {
     toolchain_version_format(chain->version, version, sizeof version);
 
     printf("[toolchain]\n");
-    printf("id = \"%s\"\n", chain->id);
-    printf("name = \"%s\"\n", chain->name);
-    printf("path = \"%s\"\n", chain->path);
-    printf("vendor = \"%s\"\n", toolchain_vendor_name(chain->vendor));
-    printf("version = \"%s\"\n", version);
-    printf("target = \"%s\"\n", chain->target);
-    printf("source = \"%s\"\n", toolchain_source_name(chain->source));
-    printf("cxx_path = \"%s\"\n", chain->cxx_path);
+    toml_write_string("id", chain->id);
+    toml_write_string("name", chain->name);
+    toml_write_string("path", chain->path);
+    toml_write_string("vendor", toolchain_vendor_name(chain->vendor));
+    toml_write_string("version", version);
+    toml_write_string("target", chain->target);
+    toml_write_string("source", toolchain_source_name(chain->source));
+    toml_write_string("cxx_path", chain->cxx_path);
 
     size_t count = 0;
     const capability *catalog = capability_catalog(&count);
@@ -72,7 +73,8 @@ static void print_toml(const toolchain *chain) {
         for (size_t i = 0; i < count; i++) {
             if (catalog[i].lang != lang || !capability_set_has(proven, i))
                 continue;
-            printf("%s\"%s\"", first ? "" : ", ", catalog[i].id);
+            fputs(first ? "" : ", ", stdout);
+            toml_write_quoted(catalog[i].id);
             first = false;
         }
         printf("]\n");

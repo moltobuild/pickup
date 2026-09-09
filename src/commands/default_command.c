@@ -5,6 +5,7 @@
 #include <pickup/services/inventory_service.h>
 #include <pickup/services/preference_service.h>
 #include <pickup/util/format.h>
+#include <pickup/util/toml_write.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -24,7 +25,7 @@ static int report_clear(void) {
 
 static void print_toml(const char *id, bool installed) {
     printf("[default]\n");
-    printf("id = \"%s\"\n", id != NULL ? id : "");
+    toml_write_string("id", id != NULL ? id : "");
     /* Always emitted, so a consumer reads one shape whether or not anything is
        set: a missing key and an empty one are the same answer here. */
     printf("installed = %s\n", installed ? "true" : "false");

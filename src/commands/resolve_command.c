@@ -6,6 +6,7 @@
 #include <pickup/exit_code.h>
 #include <pickup/services/inventory_service.h>
 #include <pickup/services/preference_service.h>
+#include <pickup/util/toml_write.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -325,16 +326,16 @@ static void print_toml(const toolchain *chain, capability_lang lang, const char 
     printf("[compiler]\n");
     /* The identity, so a caller can name this same toolchain again to `show`
        or to a later resolve without holding on to a path. */
-    printf("id = \"%s\"\n", chain->id);
-    printf("path = \"%s\"\n", lang == lang_cxx ? chain->cxx_path : chain->path);
+    toml_write_string("id", chain->id);
+    toml_write_string("path", lang == lang_cxx ? chain->cxx_path : chain->path);
     /* Both drivers, always. A project with C and C++ sources needs each one,
        and they must come from the same toolchain; `path` alone answers only
        the language that was asked about. */
-    printf("c_path = \"%s\"\n", chain->path);
-    printf("cxx_path = \"%s\"\n", chain->cxx_path);
-    printf("vendor = \"%s\"\n", toolchain_vendor_name(chain->vendor));
-    printf("version = \"%s\"\n", version);
-    printf("target = \"%s\"\n", chain->target);
+    toml_write_string("c_path", chain->path);
+    toml_write_string("cxx_path", chain->cxx_path);
+    toml_write_string("vendor", toolchain_vendor_name(chain->vendor));
+    toml_write_string("version", version);
+    toml_write_string("target", chain->target);
     if (standard != NULL)
         printf("std_flag = \"-std=%s\"\n", standard);
 

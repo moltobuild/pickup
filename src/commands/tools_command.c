@@ -3,6 +3,7 @@
 #include <pickup/detect/tools.h>
 #include <pickup/exit_code.h>
 #include <pickup/util/table.h>
+#include <pickup/util/toml_write.h>
 
 #include <stdio.h>
 
@@ -56,11 +57,11 @@ static void print_text(const dev_tool *found, size_t count) {
 static void print_toml(const dev_tool *found, size_t count) {
     for (size_t i = 0; i < count; i++) {
         printf("[[tool]]\n");
-        printf("kind = \"%s\"\n", tool_kind_name(found[i].kind));
-        printf("name = \"%s\"\n", found[i].name);
-        printf("path = \"%s\"\n", found[i].path);
-        printf("version = \"%s\"\n", found[i].version);
-        printf("source = \"%s\"\n", toolchain_source_name(found[i].source));
+        toml_write_string("kind", tool_kind_name(found[i].kind));
+        toml_write_string("name", found[i].name);
+        toml_write_string("path", found[i].path);
+        toml_write_string("version", found[i].version);
+        toml_write_string("source", toolchain_source_name(found[i].source));
         if (i + 1 < count)
             printf("\n");
     }

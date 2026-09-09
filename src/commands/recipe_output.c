@@ -1,19 +1,25 @@
 #include <pickup/commands/recipe_output.h>
 
+#include <pickup/util/toml_write.h>
+
 #include <stdio.h>
 
 /* Print a TOML array of strings on one line. */
 static void print_string_array(const char *key, const char rows[][RECIPE_FLAG_MAX], size_t count) {
     printf("%s = [", key);
-    for (size_t i = 0; i < count; i++)
-        printf("%s\"%s\"", i == 0 ? "" : ", ", rows[i]);
+    for (size_t i = 0; i < count; i++) {
+        fputs(i == 0 ? "" : ", ", stdout);
+        toml_write_quoted(rows[i]);
+    }
     printf("]\n");
 }
 
 static void print_dir_array(const char *key, const char rows[][PICKUP_PATHS_MAX], size_t count) {
     printf("%s = [", key);
-    for (size_t i = 0; i < count; i++)
-        printf("%s\"%s\"", i == 0 ? "" : ", ", rows[i]);
+    for (size_t i = 0; i < count; i++) {
+        fputs(i == 0 ? "" : ", ", stdout);
+        toml_write_quoted(rows[i]);
+    }
     printf("]\n");
 }
 
@@ -25,7 +31,7 @@ void recipe_print_toml(capability_lang lang, const link_recipe *recipe) {
        against libstdc++ cannot be linked together, so a caller pulling in a
        prebuilt library has to know which one it is looking at. */
     if (lang == lang_cxx)
-        printf("stdlib = \"%s\"\n", recipe_stdlib_name(recipe->stdlib));
+        toml_write_string("stdlib", recipe_stdlib_name(recipe->stdlib));
 
     print_string_array("compile_flags", recipe->compile_flags, recipe->compile_count);
     print_string_array("link_flags", recipe->link_flags, recipe->link_count);

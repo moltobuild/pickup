@@ -6,6 +6,7 @@
 #include <pickup/util/format.h>
 #include <pickup/util/progress.h>
 #include <pickup/util/table.h>
+#include <pickup/util/toml_write.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -44,7 +45,7 @@ static const char *publisher_cell(const char *published_by) {
    knows who it was. */
 static void print_optional_key(const char *key, const char *value) {
     if (value[0] != '\0')
-        printf("%s = \"%s\"\n", key, value);
+        toml_write_string(key, value);
 }
 
 /* Room for the joined target names of one catalogue row. */
@@ -119,13 +120,15 @@ static void print_catalogue_toml(const registry_entry_list *list) {
         if (i > 0)
             printf("\n");
         printf("[entry.%zu]\n", i);
-        printf("name = \"%s\"\n", entry->name);
-        printf("kind = \"%s\"\n", registry_kind_name(entry->kind));
-        printf("latest_version = \"%s\"\n", entry->latest_version);
+        toml_write_string("name", entry->name);
+        toml_write_string("kind", registry_kind_name(entry->kind));
+        toml_write_string("latest_version", entry->latest_version);
         printf("versions = %zu\n", entry->versions);
         printf("targets = [");
-        for (size_t j = 0; j < entry->target_count; j++)
-            printf("%s\"%s\"", j > 0 ? ", " : "", entry->targets[j]);
+        for (size_t j = 0; j < entry->target_count; j++) {
+            fputs(j > 0 ? ", " : "", stdout);
+            toml_write_quoted(entry->targets[j]);
+        }
         printf("]\n");
         print_optional_key("published_by", entry->published_by);
     }
@@ -212,16 +215,16 @@ static void print_releases_toml(const registry_artifact_list *list) {
         if (i > 0)
             printf("\n");
         printf("[release.%zu]\n", i);
-        printf("name = \"%s\"\n", artifact->name);
-        printf("kind = \"%s\"\n", registry_kind_name(artifact->kind));
-        printf("version = \"%s\"\n", artifact->version);
-        printf("target = \"%s\"\n", artifact->target);
-        printf("format = \"%s\"\n", artifact->format);
-        printf("sha256 = \"%s\"\n", artifact->checksum);
+        toml_write_string("name", artifact->name);
+        toml_write_string("kind", registry_kind_name(artifact->kind));
+        toml_write_string("version", artifact->version);
+        toml_write_string("target", artifact->target);
+        toml_write_string("format", artifact->format);
+        toml_write_string("sha256", artifact->checksum);
         printf("size = %lld\n", artifact->size_bytes);
         printf("yanked = %s\n", artifact->yanked ? "true" : "false");
         print_optional_key("published_by", artifact->published_by);
-        printf("url = \"%s\"\n", artifact->download_url);
+        toml_write_string("url", artifact->download_url);
     }
 }
 

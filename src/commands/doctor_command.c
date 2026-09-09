@@ -5,6 +5,7 @@
 #include <pickup/util/color.h>
 #include <pickup/util/format.h>
 #include <pickup/util/progress.h>
+#include <pickup/util/toml_write.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -147,8 +148,10 @@ static void print_text(const diagnostics_report *report, bool all) {
    remedy does not produce an unreadable line. */
 static void print_toml_array(const char *key, const char rows[][FINDING_TEXT_MAX], size_t count) {
     printf("%s = [", key);
-    for (size_t i = 0; i < count; i++)
-        printf("%s\n  \"%s\"", i == 0 ? "" : ",", rows[i]);
+    for (size_t i = 0; i < count; i++) {
+        printf("%s\n  ", i == 0 ? "" : ",");
+        toml_write_quoted(rows[i]);
+    }
     printf("%s]\n", count == 0 ? "" : "\n");
 }
 
@@ -158,19 +161,20 @@ static void print_toml_array(const char *key, const char rows[][FINDING_TEXT_MAX
 static void print_toml(const diagnostics_report *report) {
     for (size_t i = 0; i < report->summary_count; i++) {
         printf("[[summary]]\n");
-        printf("section = \"%s\"\n", finding_section_name(report->summary_section[i]));
-        printf("detail = \"%s\"\n\n", report->summary[i]);
+        toml_write_string("section", finding_section_name(report->summary_section[i]));
+        toml_write_string("detail", report->summary[i]);
+        putchar(0x0a);
     }
 
     for (size_t i = 0; i < report->count; i++) {
         const finding *entry = &report->items[i];
         printf("[[finding]]\n");
-        printf("section = \"%s\"\n", finding_section_name(entry->section));
-        printf("severity = \"%s\"\n", finding_severity_name(entry->severity));
+        toml_write_string("section", finding_section_name(entry->section));
+        toml_write_string("severity", finding_severity_name(entry->severity));
         printf("blocking = %s\n", entry->blocking ? "true" : "false");
-        printf("subject = \"%s\"\n", entry->subject);
-        printf("location = \"%s\"\n", entry->location);
-        printf("detail = \"%s\"\n", entry->detail);
+        toml_write_string("subject", entry->subject);
+        toml_write_string("location", entry->location);
+        toml_write_string("detail", entry->detail);
         print_toml_array("symptoms", entry->symptoms, entry->symptom_count);
         print_toml_array("remedies", entry->remedies, entry->remedy_count);
         if (i + 1 < report->count)

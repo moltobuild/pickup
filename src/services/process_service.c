@@ -171,6 +171,31 @@ static bool launch(const char *const argv[], HANDLE in, HANDLE out, HANDLE err,
                             .hStdInput = in,
                             .hStdOutput = out,
                             .hStdError = err};
+
+    /*
+     * A probe that fails has to fail quietly.
+     *
+     * Pickup runs programs it fully expects some of to be unrunnable: that is
+     * how one candidate is preferred over another, and a program that does not
+     * start is an answer rather than an accident. Windows does not treat it as
+     * one. A process whose libraries the loader cannot find raises a hard
+     * error, and the default handling for a hard error is a message box that
+     * somebody has to dismiss before this process is told anything at all.
+     *
+     * So probing a toolchain that keeps its runtime beside the compiler put a
+     * box on screen for every library the loader missed -- from a candidate
+     * that was going to be discarded either way, about a failure this code had
+     * already planned for.
+     *
+     * SEM_FAILCRITICALERRORS makes it the answer it always was: the process
+     * does not start and the exit code says so. Set on this process because a
+     * child created without CREATE_DEFAULT_ERROR_MODE inherits it, and set
+     * beside the call so it covers every program pickup starts and nothing
+     * else. SEM_NOGPFAULTERRORBOX is the same argument for a probe that
+     * crashes rather than one that will not load.
+     */
+    (void)SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+
     return CreateProcessA(NULL, command, NULL, NULL, TRUE, 0, NULL, NULL, &startup, info) != 0;
 }
 

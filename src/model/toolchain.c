@@ -188,8 +188,7 @@ static const char *const host_os_in_triple[] = {NULL};
    operating systems do not agree on the spelling, and a name is not a
    difference. */
 static const char *const arch_aliases[][2] = {
-    {"arm64", "aarch64"}, {"amd64", "x86_64"}, {"i386", "i686"},
-    {"i486", "i686"},     {"i586", "i686"},
+    {"arm64", "aarch64"}, {"amd64", "x86_64"}, {"i386", "i686"}, {"i486", "i686"}, {"i586", "i686"},
 };
 
 #define ALIAS_COUNT (sizeof arch_aliases / sizeof arch_aliases[0])

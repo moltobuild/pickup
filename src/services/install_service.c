@@ -393,8 +393,7 @@ static bool proves_it_compiles(const char *prefix, const char *published, instal
        is half a toolchain — and half is the state this check exists to stop
        being reported as success. */
     if (report->installed.cxx_path[0] != '\0') {
-        link_recipe cxx =
-            recipe_discover_for(&report->installed, lang_cxx, stdlib_unknown, true);
+        link_recipe cxx = recipe_discover_for(&report->installed, lang_cxx, stdlib_unknown, true);
         if (!cxx.usable)
             return false;
     }

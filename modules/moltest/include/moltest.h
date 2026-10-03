@@ -17,6 +17,7 @@
 #include <direct.h>
 #include <io.h>
 #else
+#include <limits.h>
 #include <unistd.h>
 #endif
 #ifdef _WIN32
@@ -86,7 +87,27 @@ static inline void moltest_one_separator(char *path) {
     moltest_one_separator(out);
     return true;
 #else
-    return mkdtemp(out) != NULL;
+    if (mkdtemp(out) == NULL)
+        return false;
+    /*
+     * Handed back with every symlink followed, and that is not a nicety.
+     *
+     * `/tmp` is a symlink to `/private/tmp` on macOS, so `mkdtemp` answers with
+     * a name that is not where the directory is. Code under test that resolves
+     * a path then disagrees with the fixture about where the fixture put its
+     * own files, and the test fails about the spelling rather than about
+     * anything it meant to check. A fixture that hands out a name the code will
+     * spell differently is a fixture that lies.
+     *
+     * POSIX only. `GetFullPathNameA` makes a path absolute without resolving
+     * anything, so it would not answer this question on Windows, and Windows
+     * does not ask it.
+     */
+    char resolved[PATH_MAX];
+    if (realpath(out, resolved) == NULL)
+        return true; /* Made, and its name is the best one available. */
+    const int resolved_length = snprintf(out, size, "%s", resolved);
+    return resolved_length >= 0 && (size_t)resolved_length < size;
 #endif
 }
 

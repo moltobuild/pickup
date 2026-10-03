@@ -3,8 +3,14 @@
 #include <pickup/services/fs_service.h>
 #include <pickup/services/paths_service.h>
 
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+
+#ifndef _WIN32
+#include <fcntl.h>
+#include <sys/stat.h>
+#endif
 
 /*
  * The two questions fs_service answers that have a different answer on each
@@ -51,6 +57,54 @@ MOLTEST(a_real_path_that_does_not_fit_is_refused) {
 
     EXPECT_TRUE(fs_remove_tree(root));
 }
+
+/* The fixture's name for its directory is the one the code will arrive at.
+   `/tmp` is a symlink to `/private/tmp` on macOS, and a suite comparing a path
+   pickup resolved against one the fixture did not fails about the spelling
+   rather than about anything it meant to check. */
+MOLTEST(a_temporary_directory_is_named_the_way_it_resolves) {
+    char root[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(moltest_temp_dir("pickup_temp_resolved", root, sizeof root));
+
+    char resolved[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_real_path(root, resolved, sizeof resolved));
+    EXPECT_STREQ(resolved, root);
+
+    EXPECT_TRUE(fs_remove_tree(root));
+}
+
+/* --- fs_mtime_ns --- */
+
+#ifdef _WIN32
+MOLTEST_SKIP(a_modification_time_keeps_its_nanoseconds,
+             "Windows keeps whole seconds in struct stat; there are none to keep");
+#else
+/* Set rather than observed, so the answer is exact: a remainder that came back
+   as zero would be a clock counting seconds, and one that came back different
+   would be the field read from the wrong place. Darwin spells it `st_mtimespec`
+   and Linux `st_mtim`, and this is the test that notices which one was read. */
+MOLTEST(a_modification_time_keeps_its_nanoseconds) {
+    char root[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(moltest_temp_dir("pickup_mtime", root, sizeof root));
+    char path[PICKUP_PATHS_MAX];
+    snprintf(path, sizeof path, "%s/stamped", root);
+    ASSERT_TRUE(fs_write_file(path, "x"));
+
+    const struct timespec when[2] = {
+        {.tv_sec = 1700000000, .tv_nsec = 123456789},
+        {.tv_sec = 1700000000, .tv_nsec = 123456789},
+    };
+    ASSERT_EQ(0, utimensat(AT_FDCWD, path, when, 0));
+
+    int64_t mtime = 0;
+    ASSERT_TRUE(fs_mtime_ns(path, &mtime));
+    EXPECT_EQ(INT64_C(1700000000123456789), mtime);
+
+    EXPECT_FALSE(fs_mtime_ns("/pickup/no/such/place/at/all", &mtime));
+
+    EXPECT_TRUE(fs_remove_tree(root));
+}
+#endif
 
 /* --- fs_executable_name --- */
 

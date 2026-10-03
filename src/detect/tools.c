@@ -192,9 +192,47 @@ static bool find_on_path(const tool_candidate *candidate, dev_tool *out) {
     return search.found;
 }
 
-/* And in the bin directory of everything Pickup installed, which is not on
-   PATH and would otherwise be invisible — a clang toolchain carries both of
-   these, so missing them would report a machine as barer than it is. */
+/* The version a tool reported, read from the first number in its answer that
+   has a dot after it: "clang-format version 21.1.8 (...)" and "LLVM version
+   21.1.8" both lead with text, and a bare "21" is not a version. */
+static bool reported_version(const char *answer, toolchain_version *out) {
+    for (const char *at = answer; *at != '\0'; at++) {
+        if (*at < '0' || *at > '9')
+            continue;
+        const char *digits = at;
+        while (*at >= '0' && *at <= '9')
+            at++;
+        if (*at == '.' && toolchain_version_parse(digits, out))
+            return true;
+        if (*at == '\0')
+            break;
+    }
+    return false;
+}
+
+/* Whether `candidate` reported a newer version than `best`. One that reported
+   no readable version never displaces one that did. */
+static bool is_newer(const dev_tool *candidate, const dev_tool *best) {
+    toolchain_version mine;
+    toolchain_version theirs;
+    if (!reported_version(candidate->version, &mine))
+        return false;
+    if (!reported_version(best->version, &theirs))
+        return true;
+    return toolchain_version_compare(mine, theirs) > 0;
+}
+
+/*
+ * And in the bin directory of everything Pickup installed, which is not on
+ * PATH and would otherwise be invisible — a clang toolchain carries both of
+ * these, so missing them would report a machine as barer than it is.
+ *
+ * Every directory is asked, and the newest answer wins. Several versions of
+ * one tool side by side is what an upgrade leaves behind, and the order
+ * `readdir` lists them in is the filesystem's, not anyone's choice: stopping
+ * at the first one answered with whichever the disk happened to store first,
+ * which on a Mac was the older, broken one.
+ */
 static bool find_under(const char *root, const tool_candidate *candidate, dev_tool *out) {
     DIR *dir = opendir(root);
     if (dir == NULL)
@@ -202,13 +240,19 @@ static bool find_under(const char *root, const tool_candidate *candidate, dev_to
 
     bool found = false;
     const struct dirent *entry;
-    while (!found && (entry = readdir(dir)) != NULL) {
+    while ((entry = readdir(dir)) != NULL) {
         if (entry->d_name[0] == '.')
             continue;
         char bin[PICKUP_PATHS_MAX];
         if (!fs_format_path(bin, sizeof bin, "%s/%s/bin", root, entry->d_name))
             continue;
-        found = find_in(bin, candidate, toolchain_source_pickup, out);
+        dev_tool answer;
+        if (!find_in(bin, candidate, toolchain_source_pickup, &answer))
+            continue;
+        if (!found || is_newer(&answer, out)) {
+            *out = answer;
+            found = true;
+        }
     }
     closedir(dir);
     return found;

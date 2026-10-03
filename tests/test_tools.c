@@ -232,6 +232,63 @@ MOLTEST(tools_keeps_a_version_worded_without_the_word) {
     fixture_teardown(&fixture);
 }
 
+/* Install `name` at `version` under the pickup home the way `install` lays it
+   out: <home>/tools/<name>-<version>/bin/<name>. */
+static bool plant_installed(const tools_fixture *fixture, const char *name, const char *version) {
+    char bin[PICKUP_PATHS_MAX];
+    if (!fs_format_path(bin, sizeof bin, "%s/tools/%s-%s/bin", fixture->root, name, version) ||
+        !fs_make_dirs(bin))
+        return false;
+    char path[PICKUP_PATHS_MAX];
+    char spec[256];
+    if (!fs_format_path(path, sizeof path, "%s/%s", bin, name))
+        return false;
+    snprintf(spec, sizeof spec, "out %s version %s\nexit 0\n", name, version);
+    return moltest_fake_program(path, spec, NULL, 0);
+}
+
+/* Several versions of one tool installed side by side is the normal state
+   after an upgrade, and the one that answers must be the newest — not
+   whichever directory the filesystem happens to list first. 9.0.0 is there
+   because it sorts after 21.1.8 as text, so an alphabetical walk would pick
+   the wrong one too. */
+MOLTEST(tools_takes_the_newest_version_pickup_installed) {
+    tools_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+    ASSERT_TRUE(plant_installed(&fixture, "clang-format", "9.0.0"));
+    ASSERT_TRUE(plant_installed(&fixture, "clang-format", "21.1.8"));
+    ASSERT_TRUE(plant_installed(&fixture, "clang-format", "19.1.6"));
+
+    dev_tool found[TOOLS_MAX];
+    size_t count = tools_discover(found, TOOLS_MAX);
+
+    const dev_tool *formatter = of_kind(found, count, tool_formatter);
+    ASSERT_TRUE(formatter != NULL);
+    EXPECT_EQ(toolchain_source_pickup, formatter->source);
+    EXPECT_TRUE(strstr(formatter->version, "21.1.8") != NULL);
+    EXPECT_TRUE(strstr(formatter->path, "clang-format-21.1.8") != NULL);
+
+    fixture_teardown(&fixture);
+}
+
+/* A newer one on PATH still wins over anything pickup installed, as it always
+   has: what the machine puts first is what the user chose. */
+MOLTEST(tools_still_prefers_what_is_on_the_path) {
+    tools_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+    ASSERT_TRUE(plant_installed(&fixture, "clang-format", "21.1.8"));
+    ASSERT_TRUE(plant_working(&fixture, "clang-format", "clang-format version 18.1.0"));
+
+    dev_tool found[TOOLS_MAX];
+    size_t count = tools_discover(found, TOOLS_MAX);
+
+    const dev_tool *formatter = of_kind(found, count, tool_formatter);
+    ASSERT_TRUE(formatter != NULL);
+    EXPECT_EQ(toolchain_source_system, formatter->source);
+
+    fixture_teardown(&fixture);
+}
+
 MOLTEST(tools_says_where_a_tool_came_from) {
     tools_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));

@@ -75,15 +75,14 @@ MOLTEST(a_temporary_directory_is_named_the_way_it_resolves) {
 
 /* --- fs_mtime_ns --- */
 
-#ifdef _WIN32
-MOLTEST_SKIP(a_modification_time_keeps_its_nanoseconds,
-             "Windows keeps whole seconds in struct stat; there are none to keep");
-#else
 /* Set rather than observed, so the answer is exact: a remainder that came back
    as zero would be a clock counting seconds, and one that came back different
    would be the field read from the wrong place. Darwin spells it `st_mtimespec`
    and Linux `st_mtim`, and this is the test that notices which one was read. */
 MOLTEST(a_modification_time_keeps_its_nanoseconds) {
+#ifdef _WIN32
+    SKIP("Windows keeps whole seconds in struct stat; there are none to keep");
+#else
     char root[PICKUP_PATHS_MAX];
     ASSERT_TRUE(moltest_temp_dir("pickup_mtime", root, sizeof root));
     char path[PICKUP_PATHS_MAX];
@@ -103,8 +102,8 @@ MOLTEST(a_modification_time_keeps_its_nanoseconds) {
     EXPECT_FALSE(fs_mtime_ns("/pickup/no/such/place/at/all", &mtime));
 
     EXPECT_TRUE(fs_remove_tree(root));
-}
 #endif
+}
 
 /* --- fs_executable_name --- */
 

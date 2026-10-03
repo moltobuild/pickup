@@ -1,0 +1,84 @@
+name: macOS
+
+# What pickup on a Mac is measured against, and the badge that says so.
+#
+# It starts green, which is not how molto's or this repository's Windows
+# workflow started. The port was two lines -- `st_mtim`, which Darwin spells
+# `st_mtimespec`, and a test fixture that handed out `/tmp` where the code
+# resolved `/private/tmp` -- and both were fixed before this file existed. So
+# there is nothing to excuse and no tally to keep: every step fails the job.
+#
+# It is still a watch rather than a gate. Nothing requires it to merge until
+# branch protection says so, and it stays its own file either way so the badge
+# does: `ci.yml` answers for Linux, `windows.yml` for Windows, and this one for
+# macOS, and a red badge names its platform without anyone opening a run.
+#
+# Not here, and why: `molto builds pickup`. `ci.yml` does that with the molto
+# it pins, and that release predates molto's macOS binary. A different molto on
+# this runner only would make the two answers about two different things.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: Runs on macOS
+    # Pinned rather than `macos-latest`: arm64, which is what a Mac is now, and
+    # a runner label that does not change what it means underneath a badge. It
+    # is also the runner the release builds the published binary on.
+    runs-on: macos-14
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: What this is being built with
+        run: |
+          clang --version
+          make --version | head -1
+          uname -m
+
+      # `CC=clang` because the bootstrap Makefile reaches for `gcc-12` when
+      # nobody names a compiler, and on a Mac `gcc` is Apple clang under
+      # another name -- so naming clang says what is really happening.
+      # `-Werror` because `ci.yml` builds with it too, and a warning only this
+      # platform's headers raise is still a warning.
+      - name: Build
+        run: make build CC=clang EXTRA_CFLAGS=-Werror
+
+      # The architecture is printed and not asserted: what is checked is that a
+      # Mach-O came out, not which architecture a runner label keeps offering.
+      - name: And it really is a Mach-O binary
+        run: |
+          file build/pickup
+          file build/pickup | grep -q 'Mach-O 64-bit executable'
+
+      # Before the suite, deliberately: "does it find a compiler at all" is the
+      # headline. Not `pickup list` on its own, for the reason `windows.yml`
+      # gives: it exits 0 with an empty table. Xcode's compiler is named for
+      # what it is, `apple-clang`, whichever of `gcc` and `clang` found it.
+      - name: It finds the compiler this machine has
+        run: |
+          ./build/pickup --version
+          ./build/pickup host
+          ./build/pickup scan
+          ./build/pickup list | tee found.txt
+          grep -qE '^(apple-clang|clang|gcc)' found.txt \
+            || { echo "pickup found no toolchain on a machine that has one"; exit 1; }
+
+      # `resolve` is the question molto actually asks, for both languages it
+      # builds. A pickup that lists a compiler and then cannot answer for one
+      # is a pickup molto cannot use.
+      - name: And it can answer molto's question
+        run: |
+          ./build/pickup resolve --lang c
+          ./build/pickup resolve --lang c++
+
+      - name: Run the suite
+        run: make test CC=clang

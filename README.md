@@ -2,6 +2,7 @@
 
 [![Linux](https://github.com/moltobuild/pickup/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/moltobuild/pickup/actions/workflows/ci.yml)
 [![Windows](https://github.com/moltobuild/pickup/actions/workflows/windows.yml/badge.svg?branch=master)](https://github.com/moltobuild/pickup/actions/workflows/windows.yml)
+[![macOS](https://github.com/moltobuild/pickup/actions/workflows/macos.yml/badge.svg?branch=master)](https://github.com/moltobuild/pickup/actions/workflows/macos.yml)
 [![Release](https://github.com/moltobuild/pickup/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/moltobuild/pickup/actions/workflows/release.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
@@ -22,6 +23,13 @@ Green is not the same as supported. RFC-0017 asks for four things and this is
 one of them; the one that is missing is `install` — the archives are zstd and
 Windows ships `curl.exe` and `tar.exe` but no zstd, so a toolchain can be found
 and answered for there but not yet fetched.
+
+**macOS** is watched rather than gated: nothing requires it to merge, but its
+badge says whether pickup builds with `-Werror`, finds Xcode's compiler,
+answers `resolve` for C and C++, and passes the suite on an arm64 macOS runner.
+It started green, because the port was two lines and both were fixed first. The
+gap is the same shape as Windows': `install` has nothing to fetch there,
+because the registry publishes its toolchains and tools for Linux only.
 
 **Release** is what a tag runs: the static Linux binary, the cross-compiled
 Windows one, the macOS one — which has to be built on a Mac, because Darwin

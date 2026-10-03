@@ -62,10 +62,18 @@ static int stat_no_follow(const char *path, struct stat *out) {
  * second multiplied out rather than a second measured. What depends on this is
  * freshness: two writes inside one second look simultaneous, and a rebuild
  * that would have been triggered by nanoseconds is not. It is the honest
- * ceiling of the interface, not a rounding this code chose. */
+ * ceiling of the interface, not a rounding this code chose.
+ *
+ * Darwin keeps the nanoseconds too and only spells the field differently:
+ * POSIX.1-2008 named it `st_mtim`, Darwin arrived first with `st_mtimespec` and
+ * never added the other name. `st_mtime` would compile on both and bring back
+ * the whole seconds Windows is stuck with. */
 static int64_t stat_mtime_ns(const struct stat *info) {
-#ifdef _WIN32
+#if defined(_WIN32)
     return (int64_t)info->st_mtime * NANOS_PER_SECOND;
+#elif defined(__APPLE__)
+    const struct timespec written = info->st_mtimespec;
+    return (int64_t)written.tv_sec * NANOS_PER_SECOND + (int64_t)written.tv_nsec;
 #else
     return (int64_t)info->st_mtim.tv_sec * NANOS_PER_SECOND + (int64_t)info->st_mtim.tv_nsec;
 #endif

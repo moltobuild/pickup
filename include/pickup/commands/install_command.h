@@ -9,6 +9,7 @@ typedef struct {
     const char *version; /* exact or partial; NULL for the newest offered */
     bool dry_run;        /* resolve and report, download nothing */
     bool refresh;        /* ignore the cached catalogue and ask again */
+    bool force;          /* reinstall even when the same artifact is installed */
 } install_command_request;
 
 /* Install a toolchain or a tool under the pickup home. Returns an exit code. */

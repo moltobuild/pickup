@@ -86,6 +86,8 @@ static const cli_option install_options[] = {
      NULL},
     {"--refresh", 0, cli_opt_flag, NULL,
      "Ask the registry again instead of using the cached catalogue", NULL},
+    {"--force", 0, cli_opt_flag, NULL,
+     "Download and install again even when that version is already installed", NULL},
 };
 
 /* What `pickup uninstall` accepts. */
@@ -142,6 +144,7 @@ static int handle_install(const cli_args *args) {
         .version = cli_args_option(args, "--version"),
         .dry_run = cli_args_flag(args, "--dry-run"),
         .refresh = cli_args_flag(args, "--refresh"),
+        .force = cli_args_flag(args, "--force"),
     };
     return install_command_run(&request);
 }

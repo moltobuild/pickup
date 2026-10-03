@@ -13,6 +13,7 @@
 
 #include <dirent.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /*
@@ -307,6 +308,103 @@ static bool adopt_tool(const char *partial, const char *tools, const registry_ar
     return fs_rename(partial, final_path);
 }
 
+/* --- what is already there --- */
+
+/* Room for a receipt: five short fields and a digest. */
+#define RECEIPT_SIZE (REGISTRY_NAME_MAX + REGISTRY_VERSION_MAX + SHA256_HEX_SIZE + 256)
+
+/* Leave a note in `directory` saying which artifact it holds.
+   Not being able to is not a failed install: what was installed works, and
+   the only cost is that the next install of it downloads it again. */
+static void write_receipt(const char *directory, const registry_artifact *artifact) {
+    char path[PICKUP_PATHS_MAX];
+    if (!fs_format_path(path, sizeof path, "%s/%s", directory, INSTALL_RECEIPT_NAME))
+        return;
+    char text[RECEIPT_SIZE];
+    const int written = snprintf(text, sizeof text,
+                                 "kind = \"%s\"\nname = \"%s\"\nversion = \"%s\"\n"
+                                 "target = \"%s\"\nchecksum = \"%s\"\n",
+                                 registry_kind_name(artifact->kind), artifact->name,
+                                 artifact->version, artifact->target, artifact->checksum);
+    if (written > 0 && (size_t)written < sizeof text)
+        (void)fs_write_file(path, text);
+}
+
+typedef enum {
+    receipt_missing, /* installed before receipts were kept, or by hand */
+    receipt_same,    /* the same artifact, byte for byte */
+    receipt_other,   /* something else under the same name */
+} receipt_answer;
+
+/* What `directory` says it holds, compared against `artifact`. */
+static receipt_answer receipt_of(const char *directory, const registry_artifact *artifact) {
+    char path[PICKUP_PATHS_MAX];
+    if (!fs_format_path(path, sizeof path, "%s/%s", directory, INSTALL_RECEIPT_NAME))
+        return receipt_missing;
+    char *text = fs_read_file(path);
+    if (text == NULL)
+        return receipt_missing;
+
+    char checksum[SHA256_HEX_SIZE + 32];
+    char name[REGISTRY_NAME_MAX + 32];
+    (void)snprintf(checksum, sizeof checksum, "checksum = \"%s\"\n", artifact->checksum);
+    (void)snprintf(name, sizeof name, "name = \"%s\"\n", artifact->name);
+    const bool same = artifact->checksum[0] != '\0' && strstr(text, checksum) != NULL &&
+                      strstr(text, name) != NULL;
+    free(text);
+    return same ? receipt_same : receipt_other;
+}
+
+/* A tool is where its name and version put it. A receipt naming other bytes
+   disqualifies it; a missing one does not, since tools installed before
+   receipts were kept have none, and the coordinate alone already says which
+   bytes those were. Either way it has to answer. */
+static bool installed_tool(const registry_artifact *artifact, const char *tools, char *out,
+                           size_t out_size) {
+    char directory[PICKUP_PATHS_MAX];
+    if (!fs_format_path(directory, sizeof directory, "%s/%s-%s", tools, artifact->name,
+                        artifact->version) ||
+        !fs_is_dir(directory))
+        return false;
+    if (receipt_of(directory, artifact) == receipt_other || !tool_answers(directory, artifact))
+        return false;
+    return fs_format_path(out, out_size, "%s", directory);
+}
+
+/* A toolchain is named after what its compiler reported, so it is found by its
+   receipt and nothing else — and only counts if the compiler in it still
+   identifies itself. */
+static bool installed_toolchain(const registry_artifact *artifact, const char *toolchains,
+                                install_report *report) {
+    DIR *dir = opendir(toolchains);
+    if (dir == NULL)
+        return false;
+
+    bool found = false;
+    const struct dirent *entry;
+    while (!found && (entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] == '.')
+            continue;
+        char directory[PICKUP_PATHS_MAX];
+        if (!fs_format_path(directory, sizeof directory, "%s/%s", toolchains, entry->d_name) ||
+            receipt_of(directory, artifact) != receipt_same)
+            continue;
+        found = identify_in_prefix(directory, artifact->c_driver, &report->installed) &&
+                fs_format_path(report->directory, sizeof report->directory, "%s", directory);
+    }
+    closedir(dir);
+    return found;
+}
+
+/* Whether this exact artifact is already installed and working, and where. */
+static bool find_installed(const registry_artifact *artifact, install_report *report) {
+    char root[PICKUP_PATHS_MAX];
+    if (artifact->kind == registry_kind_tool)
+        return paths_tools(root, sizeof root) &&
+               installed_tool(artifact, root, report->directory, sizeof report->directory);
+    return paths_toolchains(root, sizeof root) && installed_toolchain(artifact, root, report);
+}
+
 /*
  * Leave the installed toolchain configured to build.
  *
@@ -454,6 +552,17 @@ static install_status check_environment(const registry_artifact *artifact) {
 install_report install_run(const install_request *request) {
     const registry_artifact *artifact = request->artifact;
 
+    /* Before anything else, including the environment: an artifact already in
+       place needs no curl, no tar and no download to be there. */
+    if (!request->force) {
+        install_report present = report_of(install_ok);
+        if (find_installed(artifact, &present)) {
+            present.already_installed = true;
+            (void)fs_tree_size(present.directory, &present.installed_size);
+            return present;
+        }
+    }
+
     install_status ready = check_environment(artifact);
     if (ready != install_ok)
         return report_of(ready);
@@ -511,6 +620,7 @@ install_report install_run(const install_request *request) {
             (void)fs_remove_tree(partial);
             return report_of(install_path_error);
         }
+        write_receipt(report.directory, artifact);
         return report;
     }
 
@@ -532,5 +642,6 @@ install_report install_run(const install_request *request) {
        the moment the rename finishes. The cost is discovering the recipe twice,
        and it is not a saving worth making. */
     configure_installed(&report, request->artifact->c_driver);
+    write_receipt(report.directory, artifact);
     return report;
 }

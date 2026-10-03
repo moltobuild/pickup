@@ -631,3 +631,225 @@ MOLTEST(install_falls_back_to_the_search_when_a_recipe_names_no_driver) {
 
     fixture_teardown(&fixture);
 }
+
+/* --- what is already there --- */
+
+/* Packed as gzip, which every tar opens, so these run on a machine without
+   zstd — a Mac as it ships is one. */
+static bool gzip_installs_work(void) {
+    return http_available() && archive_available() && archive_supports_gzip();
+}
+
+/* A clang-format 1.0.0 packed the way the registry packs a tool, as gzip. */
+static bool make_gzip_tool(install_fixture *fixture, registry_artifact *artifact) {
+    char bin[256];
+    snprintf(bin, sizeof bin, "%s/tool-stage/bin", fixture->root);
+    if (!fs_make_dirs(bin))
+        return false;
+    char binary[512];
+    snprintf(binary, sizeof binary, "%s/clang-format", bin);
+    if (!moltest_fake_program(binary, "out clang-format version 1.0.0\nexit 0\n", binary,
+                              sizeof binary))
+        return false;
+
+    char archive[256], stage[256];
+    snprintf(archive, sizeof archive, "%s/cf.tar.gz", fixture->root);
+    snprintf(stage, sizeof stage, "%s/tool-stage", fixture->root);
+    if (!pack(stage, archive) ||
+        !describe(archive, "clang-format", "1.0.0", registry_kind_tool, artifact))
+        return false;
+    snprintf(artifact->format, sizeof artifact->format, "%s", REGISTRY_FORMAT_TAR_GZ);
+    const char *slash = strrchr(binary, '/');
+    snprintf(artifact->binary, sizeof artifact->binary, "bin/%s", slash + 1);
+    return true;
+}
+
+/* The archive a second install would have to download, taken away: an install
+   that still succeeds afterwards did not download anything. */
+static void take_away_the_download(const registry_artifact *artifact) {
+    (void)remove(artifact->download_url + strlen("file://"));
+}
+
+/*
+ * The second install of the same coordinate downloads nothing.
+ *
+ * A published coordinate is immutable, so the same name, version and target
+ * is the same bytes: fetching them again is a download, a digest and an unpack
+ * spent on arriving where things already are.
+ */
+MOLTEST(install_downloads_nothing_for_a_tool_already_installed) {
+    if (!gzip_installs_work())
+        SKIP("curl and tar with gzip are needed for an end to end install");
+
+    install_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    registry_artifact artifact;
+    ASSERT_TRUE(make_gzip_tool(&fixture, &artifact));
+
+    const install_request request = { .artifact = &artifact };
+    install_report first = install_run(&request);
+    ASSERT_EQ(install_ok, first.status);
+    EXPECT_FALSE(first.already_installed);
+
+    take_away_the_download(&artifact);
+
+    install_report second = install_run(&request);
+    ASSERT_EQ(install_ok, second.status);
+    EXPECT_TRUE(second.already_installed);
+    EXPECT_STREQ(first.directory, second.directory);
+
+    fixture_teardown(&fixture);
+}
+
+/* `--force` is the way to ask for the download anyway: here it is attempted,
+   and fails because the archive is gone, which is the proof it was. */
+MOLTEST(install_downloads_again_when_forced) {
+    if (!gzip_installs_work())
+        SKIP("curl and tar with gzip are needed for an end to end install");
+
+    install_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    registry_artifact artifact;
+    ASSERT_TRUE(make_gzip_tool(&fixture, &artifact));
+    const install_request request = { .artifact = &artifact };
+    ASSERT_EQ(install_ok, install_run(&request).status);
+
+    take_away_the_download(&artifact);
+
+    const install_request forced = { .artifact = &artifact, .force = true };
+    install_report report = install_run(&forced);
+    EXPECT_EQ(install_download_failed, report.status);
+    EXPECT_FALSE(report.already_installed);
+
+    fixture_teardown(&fixture);
+}
+
+/* What an install leaves behind says what it installed, which is how the
+   next one knows the bytes are the same. */
+MOLTEST(install_records_what_it_installed) {
+    if (!gzip_installs_work())
+        SKIP("curl and tar with gzip are needed for an end to end install");
+
+    install_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    registry_artifact artifact;
+    ASSERT_TRUE(make_gzip_tool(&fixture, &artifact));
+    const install_request request = { .artifact = &artifact };
+    install_report report = install_run(&request);
+    ASSERT_EQ(install_ok, report.status);
+
+    char receipt[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(receipt, sizeof receipt, "%s/%s", report.directory,
+                               INSTALL_RECEIPT_NAME));
+    char *text = fs_read_file(receipt);
+    ASSERT_TRUE(text != NULL);
+    EXPECT_TRUE(strstr(text, artifact.checksum) != NULL);
+    EXPECT_TRUE(strstr(text, "clang-format") != NULL);
+    EXPECT_TRUE(strstr(text, "1.0.0") != NULL);
+    free(text);
+
+    fixture_teardown(&fixture);
+}
+
+/* An install that recorded different bytes under the same name is not the
+   same thing, however it is named: it is replaced rather than kept. */
+MOLTEST(install_replaces_a_tool_that_recorded_other_bytes) {
+    if (!gzip_installs_work())
+        SKIP("curl and tar with gzip are needed for an end to end install");
+
+    install_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    registry_artifact artifact;
+    ASSERT_TRUE(make_gzip_tool(&fixture, &artifact));
+    const install_request request = { .artifact = &artifact };
+    install_report first = install_run(&request);
+    ASSERT_EQ(install_ok, first.status);
+
+    char receipt[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(receipt, sizeof receipt, "%s/%s", first.directory,
+                               INSTALL_RECEIPT_NAME));
+    ASSERT_TRUE(fs_write_file(receipt, "checksum = \"0000\"\n"));
+
+    install_report second = install_run(&request);
+    ASSERT_EQ(install_ok, second.status);
+    EXPECT_FALSE(second.already_installed);
+
+    fixture_teardown(&fixture);
+}
+
+/* A tool installed before installs left a record still counts, as long as it
+   is where that version is installed and it answers. */
+MOLTEST(install_counts_a_tool_installed_before_records_were_kept) {
+    if (!gzip_installs_work())
+        SKIP("curl and tar with gzip are needed for an end to end install");
+
+    install_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    registry_artifact artifact;
+    ASSERT_TRUE(make_gzip_tool(&fixture, &artifact));
+    const install_request request = { .artifact = &artifact };
+    install_report first = install_run(&request);
+    ASSERT_EQ(install_ok, first.status);
+
+    char receipt[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(receipt, sizeof receipt, "%s/%s", first.directory,
+                               INSTALL_RECEIPT_NAME));
+    ASSERT_EQ(0, remove(receipt));
+    take_away_the_download(&artifact);
+
+    install_report second = install_run(&request);
+    ASSERT_EQ(install_ok, second.status);
+    EXPECT_TRUE(second.already_installed);
+
+    fixture_teardown(&fixture);
+}
+
+/* A toolchain is found by its record, since the directory it lands in is named
+   after what the compiler said it is rather than after what was published. */
+static bool has_a_gcc(void) {
+    const char *argv[] = {"gcc", "--version", NULL};
+    const process_result result = process_try(argv, NULL);
+    return result.completed && result.exit_code == 0;
+}
+
+MOLTEST(install_downloads_nothing_for_a_toolchain_already_installed) {
+    if (!gzip_installs_work() || !has_a_gcc())
+        SKIP("curl, tar with gzip and a gcc are needed for an end to end install");
+
+    install_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+
+    char bin[256];
+    snprintf(bin, sizeof bin, "%s/chain-stage/bin", fixture.root);
+    ASSERT_TRUE(fs_make_dirs(bin));
+    char driver[512];
+    snprintf(driver, sizeof driver, "%s/clang", bin);
+    ASSERT_TRUE(moltest_fake_program(driver, "exec gcc\n", NULL, 0));
+
+    char archive[256], stage[256];
+    snprintf(archive, sizeof archive, "%s/clang.tar.gz", fixture.root);
+    snprintf(stage, sizeof stage, "%s/chain-stage", fixture.root);
+    ASSERT_TRUE(pack(stage, archive));
+    registry_artifact artifact;
+    ASSERT_TRUE(describe(archive, "clang", "1.0.0", registry_kind_toolchain, &artifact));
+    snprintf(artifact.format, sizeof artifact.format, "%s", REGISTRY_FORMAT_TAR_GZ);
+
+    const install_request request = { .artifact = &artifact };
+    install_report first = install_run(&request);
+    ASSERT_EQ(install_ok, first.status);
+    EXPECT_FALSE(first.already_installed);
+
+    take_away_the_download(&artifact);
+
+    install_report second = install_run(&request);
+    ASSERT_EQ(install_ok, second.status);
+    EXPECT_TRUE(second.already_installed);
+    EXPECT_STREQ(first.directory, second.directory);
+
+    fixture_teardown(&fixture);
+}

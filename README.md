@@ -24,8 +24,10 @@ Windows ships `curl.exe` and `tar.exe` but no zstd, so a toolchain can be found
 and answered for there but not yet fetched.
 
 **Release** is what a tag runs: the static Linux binary, the cross-compiled
-Windows one, the sums that cover both, and each of them exercised on the
-platform it is for before any of it is published. Filtered to `event=push`, so
+Windows one, the macOS one — which has to be built on a Mac, because Darwin
+cannot be cross-compiled without Apple's SDK — the sums that cover all three,
+and each of them exercised on the platform it is for before any of it is
+published. Filtered to `event=push`, so
 a rehearsal — the workflow can be asked for on demand, without a tag — never
 reads as the state of a release.
 

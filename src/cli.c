@@ -190,8 +190,8 @@ static const cli_command commands[] = {
      search_options, sizeof search_options / sizeof search_options[0], handle_search},
     {"install", "Download and install a toolchain or a tool from the registry", "<name>[@version]",
      install_options, sizeof install_options / sizeof install_options[0], handle_install},
-    {"uninstall", "Remove a toolchain pickup installed", "<toolchain>", uninstall_options,
-     sizeof uninstall_options / sizeof uninstall_options[0], handle_uninstall},
+    {"uninstall", "Remove a toolchain or a tool pickup installed", "<toolchain|tool[@version]>",
+     uninstall_options, sizeof uninstall_options / sizeof uninstall_options[0], handle_uninstall},
     {"default", "Show or set the toolchain resolve should prefer", "[toolchain]", default_options,
      sizeof default_options / sizeof default_options[0], handle_default},
 };

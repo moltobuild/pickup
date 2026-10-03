@@ -1,6 +1,7 @@
 #include <pickup/commands/uninstall_command.h>
 
 #include <pickup/commands/probe_progress.h>
+#include <pickup/detect/tools.h>
 #include <pickup/exit_code.h>
 #include <pickup/services/cache_service.h>
 #include <pickup/services/fs_service.h>
@@ -9,6 +10,7 @@
 #include <pickup/services/preference_service.h>
 #include <pickup/util/format.h>
 
+#include <dirent.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -63,11 +65,125 @@ static void forget_if_default(const char *id) {
         fprintf(stderr, "pickup: removed it, but could not clear the default\n");
 }
 
+/* --- tools --- */
+
+/* How many installed versions of one tool are worth listing in a refusal. */
+#define TOOL_MATCHES_MAX 16
+
+typedef struct {
+    char directories[TOOL_MATCHES_MAX][PICKUP_PATHS_MAX];
+    char ids[TOOL_MATCHES_MAX][PICKUP_ID_MAX];
+    size_t count; /* every match, including any past what is kept */
+} tool_matches;
+
+/* Whether the directory `entry` holds `name`, at `version` when one is given.
+   `<name>-` followed by a digit, so that `clang-tidy` does not also mean a
+   `clang-tidy-extra` that happens to be installed beside it. */
+static bool names_the_tool(const char *entry, const char *name, const char *version) {
+    const size_t length = strlen(name);
+    if (strncmp(entry, name, length) != 0 || entry[length] != '-')
+        return false;
+    const char *installed = entry + length + 1;
+    if (version != NULL)
+        return strcmp(installed, version) == 0;
+    return *installed >= '0' && *installed <= '9';
+}
+
+/* Every installed version of `name` (just `version` of it, when given). */
+static void find_tools(const char *name, const char *version, tool_matches *out) {
+    out->count = 0;
+    char tools[PICKUP_PATHS_MAX];
+    if (!paths_tools(tools, sizeof tools))
+        return;
+    DIR *dir = opendir(tools);
+    if (dir == NULL)
+        return;
+    const struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] == '.' || !names_the_tool(entry->d_name, name, version))
+            continue;
+        if (out->count < TOOL_MATCHES_MAX) {
+            const char *installed = entry->d_name + strlen(name) + 1;
+            (void)fs_format_path(out->directories[out->count], PICKUP_PATHS_MAX, "%s/%s", tools,
+                                 entry->d_name);
+            (void)snprintf(out->ids[out->count], PICKUP_ID_MAX, "%s@%s", name, installed);
+        }
+        out->count++;
+    }
+    closedir(dir);
+}
+
+/*
+ * Remove a tool, when `request` names one pickup installed.
+ *
+ * `clang-tidy@21.1.8` names one version; `clang-tidy` names whatever is
+ * installed, and is refused when that is more than one, for the reason the
+ * toolchain side gives. Returns false, touching nothing, when no tool by that
+ * name is installed and it is not a tool's name either, so the caller can go
+ * on to look for a toolchain.
+ */
+static bool uninstall_tool(const char *request, bool assume_yes, int *code) {
+    char name[PICKUP_ID_MAX];
+    (void)snprintf(name, sizeof name, "%s", request);
+    char *at = strchr(name, '@');
+    const char *version = NULL;
+    if (at != NULL) {
+        *at = '\0';
+        version = at + 1;
+    }
+
+    tool_matches matches;
+    find_tools(name, version, &matches);
+    if (matches.count == 0) {
+        /* A toolchain id carries an '@' too ("apple-clang@21.0.0-apple"), so
+           only a name pickup knows as a tool is answered here. */
+        tool_kind kind;
+        if (!tools_kind_of(name, &kind))
+            return false;
+        if (version != NULL)
+            fprintf(stderr, "pickup: %s %s is not installed\n", name, version);
+        else
+            fprintf(stderr, "pickup: no %s is installed\n", name);
+        *code = exit_no_match;
+        return true;
+    }
+
+    if (matches.count > 1) {
+        fprintf(stderr, "pickup: '%s' names %zu installed versions; name one exactly\n", request,
+                matches.count);
+        for (size_t i = 0; i < matches.count && i < TOOL_MATCHES_MAX; i++)
+            fprintf(stderr, "  %s\n", matches.ids[i]);
+        *code = exit_usage_error;
+        return true;
+    }
+
+    if (!assume_yes && isatty(STDIN_FILENO) == 1 &&
+        !confirmed(matches.ids[0], matches.directories[0])) {
+        printf("Nothing was removed.\n");
+        *code = exit_ok;
+        return true;
+    }
+    if (!fs_remove_tree(matches.directories[0])) {
+        fprintf(stderr, "pickup: could not remove %s\n", matches.directories[0]);
+        *code = exit_failure;
+        return true;
+    }
+    printf("%s Removed %s\n", format_check(), matches.ids[0]);
+    *code = exit_ok;
+    return true;
+}
+
 int uninstall_command_run(const char *name, bool assume_yes) {
     if (name == NULL) {
-        fprintf(stderr, "pickup: uninstall needs a toolchain name\n");
+        fprintf(stderr, "pickup: uninstall needs the name of a toolchain or a tool\n");
         return exit_usage_error;
     }
+
+    /* Tools first: answering for one needs no scan of the machine's
+       compilers, and a name that is neither falls through untouched. */
+    int code = exit_ok;
+    if (uninstall_tool(name, assume_yes, &code))
+        return code;
 
     inventory list;
     if (!probe_progress_load(&list, false)) {

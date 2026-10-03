@@ -818,6 +818,13 @@ static bool has_a_gcc(void) {
 }
 
 MOLTEST(install_downloads_nothing_for_a_toolchain_already_installed) {
+#ifdef _WIN32
+    /* The compiler in the archive is a script named `clang`, and on Windows a
+       file is a program by being called `.exe`: the install rightly finds no
+       toolchain in it. The other end to end toolchain tests do not run there
+       either. The tool tests above cover the same logic on Windows. */
+    SKIP("the stand-in compiler is a script, which Windows does not run as clang");
+#endif
     if (!gzip_installs_work() || !has_a_gcc())
         SKIP("curl, tar with gzip and a gcc are needed for an end to end install");
 

@@ -131,8 +131,8 @@ static int report_already_installed(const install_report *report,
     printf("%s%s%s %s %s is already installed in %s%s%s\n", color_ok(), format_check(),
            color_reset(), artifact->name, artifact->version, color_dim(), report->directory,
            color_reset());
-    printf("  nothing was downloaded; pickup install %s@%s --force reinstalls it\n",
-           artifact->name, artifact->version);
+    printf("  nothing was downloaded; pickup install %s@%s --force reinstalls it\n", artifact->name,
+           artifact->version);
     return exit_ok;
 }
 

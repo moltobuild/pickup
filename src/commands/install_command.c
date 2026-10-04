@@ -124,6 +124,18 @@ static int report_failure(const install_report *report, const registry_artifact 
     return exit_failure;
 }
 
+/* Nothing was downloaded, and saying so is the point: the same line as a fresh
+   install would claim work that was not done. */
+static int report_already_installed(const install_report *report,
+                                    const registry_artifact *artifact) {
+    printf("%s%s%s %s %s is already installed in %s%s%s\n", color_ok(), format_check(),
+           color_reset(), artifact->name, artifact->version, color_dim(), report->directory,
+           color_reset());
+    printf("  nothing was downloaded; pickup install %s@%s --force reinstalls it\n", artifact->name,
+           artifact->version);
+    return exit_ok;
+}
+
 static int report_tool_installed(const install_report *report, const registry_artifact *artifact) {
     char size[FORMAT_SIZE_MAX];
     format_size(report->installed_size, size, sizeof size);
@@ -176,26 +188,40 @@ static bool split_versioned_name(const char *raw, char *name, size_t name_size, 
     return true;
 }
 
+/* Ask for the releases of `request->name`, and pick one. False when the
+   registry could not be read; `chosen` says whether anything matched. */
+static bool fetch_and_select(const install_command_request *request, const registry_entry *entry,
+                             const char *target, bool refresh, registry_artifact *out,
+                             bool *chosen) {
+    registry_artifact_list list;
+    progress_line line = {.drawn = false};
+    bool fetched = registry_fetch_releases_watched(entry->kind, request->name, request->version,
+                                                   target, refresh, watch_fetch, &line, &list);
+    progress_line_clear(stderr, &line);
+    *chosen = fetched && registry_select(&list, request->version, out);
+    registry_artifact_list_free(&list);
+    return fetched;
+}
+
 /* Find the one artifact to install, or report why there is none. */
 static int choose(const install_command_request *request, const registry_entry *entry,
                   const char *target, registry_artifact *out) {
-    registry_artifact_list list;
-    progress_line line = {.drawn = false};
-    bool fetched =
-        registry_fetch_releases_watched(entry->kind, request->name, request->version, target,
-                                        request->refresh, watch_fetch, &line, &list);
-    progress_line_clear(stderr, &line);
+    bool chosen = false;
+    bool fetched = fetch_and_select(request, entry, target, request->refresh, out, &chosen);
+
+    /* The cache is trusted for an hour, and the hour after a publish is when
+       someone asks for what was just published. A cached list that has no
+       match is therefore asked again, freshly, once — and only then is the
+       version called missing. A cached list that has one costs nothing more. */
+    if (fetched && !chosen && !request->refresh)
+        fetched = fetch_and_select(request, entry, target, true, out, &chosen);
 
     if (!fetched) {
         fprintf(stderr, "pickup: could not read what the registry publishes for %s\n",
                 request->name);
         report_registry();
-        registry_artifact_list_free(&list);
         return exit_failure;
     }
-
-    bool chosen = registry_select(&list, request->version, out);
-    registry_artifact_list_free(&list);
     if (chosen)
         return exit_ok;
 
@@ -244,8 +270,11 @@ int install_command_run(const install_command_request *request) {
 
     /* Which catalogue holds it decides where it is installed and what it has to
        prove, so it is settled before anything else. */
+    /* A name the cached catalogues do not list is looked up freshly before it
+       is called unpublished, for the reason `choose` gives about versions. */
     registry_entry entry;
-    if (!registry_find(request->name, request->refresh, &entry))
+    if (!registry_find(request->name, request->refresh, &entry) &&
+        (request->refresh || !registry_find(request->name, true, &entry)))
         return report_unknown_name(request->name);
 
     registry_artifact artifact;
@@ -261,16 +290,22 @@ int install_command_run(const install_command_request *request) {
     const install_request install = {
         .artifact = &artifact,
         .allow_yanked = registry_version_is_exact(request->version),
+        .force = request->force,
     };
-    if (artifact.yanked && install.allow_yanked)
-        fprintf(stderr,
-                "! %s %s was withdrawn by the registry; "
-                "installing it because you named it\n",
-                artifact.name, artifact.version);
 
     install_report report = install_run(&install);
     if (!install_succeeded(report.status))
         return report_failure(&report, &artifact);
+    if (report.already_installed)
+        return report_already_installed(&report, &artifact);
+
+    /* Said after the fact rather than before, so it is not printed for an
+       artifact that turned out to be installed already and was not touched. */
+    if (artifact.yanked && install.allow_yanked)
+        fprintf(stderr,
+                "! %s %s was withdrawn by the registry; "
+                "installed it because you named it\n",
+                artifact.name, artifact.version);
 
     return artifact.kind == registry_kind_tool ? report_tool_installed(&report, &artifact)
                                                : report_toolchain_installed(&report, &artifact);

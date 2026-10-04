@@ -86,6 +86,8 @@ static const cli_option install_options[] = {
      NULL},
     {"--refresh", 0, cli_opt_flag, NULL,
      "Ask the registry again instead of using the cached catalogue", NULL},
+    {"--force", 0, cli_opt_flag, NULL,
+     "Download and install again even when that version is already installed", NULL},
 };
 
 /* What `pickup uninstall` accepts. */
@@ -142,6 +144,7 @@ static int handle_install(const cli_args *args) {
         .version = cli_args_option(args, "--version"),
         .dry_run = cli_args_flag(args, "--dry-run"),
         .refresh = cli_args_flag(args, "--refresh"),
+        .force = cli_args_flag(args, "--force"),
     };
     return install_command_run(&request);
 }
@@ -187,8 +190,8 @@ static const cli_command commands[] = {
      search_options, sizeof search_options / sizeof search_options[0], handle_search},
     {"install", "Download and install a toolchain or a tool from the registry", "<name>[@version]",
      install_options, sizeof install_options / sizeof install_options[0], handle_install},
-    {"uninstall", "Remove a toolchain pickup installed", "<toolchain>", uninstall_options,
-     sizeof uninstall_options / sizeof uninstall_options[0], handle_uninstall},
+    {"uninstall", "Remove a toolchain or a tool pickup installed", "<toolchain|tool[@version]>",
+     uninstall_options, sizeof uninstall_options / sizeof uninstall_options[0], handle_uninstall},
     {"default", "Show or set the toolchain resolve should prefer", "[toolchain]", default_options,
      sizeof default_options / sizeof default_options[0], handle_default},
 };

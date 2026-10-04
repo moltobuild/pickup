@@ -49,7 +49,19 @@ typedef struct {
     toolchain installed;      /* what the compiler said it is; empty for a tool */
     size_t features_proven;   /* what it compiled once installed */
     long long installed_size; /* bytes on disk */
+    bool already_installed;   /* found in place: nothing was downloaded */
 } install_report;
+
+/*
+ * The file an install leaves in the directory it adopted, naming what it
+ * installed: kind, name, version, target and the digest of the archive.
+ *
+ * A published coordinate is immutable, so the digest is what says two installs
+ * are the same bytes. It is how the next install of the same thing knows there
+ * is nothing to download, and how a toolchain — whose directory is named after
+ * what the compiler said, not after what was published — is found again.
+ */
+#define INSTALL_RECEIPT_NAME ".pickup-artifact"
 
 typedef struct {
     const registry_artifact *artifact;
@@ -60,6 +72,8 @@ typedef struct {
      * that exact version, and the command is what knows how it was asked.
      */
     bool allow_yanked;
+    /* Download and install even when the same artifact is already installed. */
+    bool force;
 } install_request;
 
 /*

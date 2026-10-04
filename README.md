@@ -124,13 +124,24 @@ pickup scan                # re-probe everything and rewrite the cache
 pickup resolve [options]   # the best toolchain for a set of requirements
 pickup search [name]       # what the registry publishes, or one name's versions
 pickup install <name>[@version]      # download and install one
-pickup uninstall <name>    # remove one pickup installed
+pickup uninstall <name>[@version]    # remove a toolchain or a tool pickup installed
 pickup default [name]      # show or set the one resolve should prefer
 ```
 
 `search` and `install` take any name the registry publishes: a toolchain such as
 `clang` or `gcc`, or a tool such as `clang-format` or `clang-tidy`. `search` with
 no name lists all of them.
+
+`install` downloads nothing for an artifact that is already installed and still
+works: every install leaves a `.pickup-artifact` file naming the archive's
+digest, and a published version is immutable, so the same digest is the same
+bytes. `--force` installs it again anyway. A name or version the cached
+catalogue does not know is asked of the registry once more before it is called
+missing, so something published in the last hour is found.
+
+Several versions of a tool can be installed side by side; `tools`, and molto
+through it, answers with the newest. `uninstall clang-tidy@19.1.6` removes one,
+and a bare `uninstall clang-tidy` is refused while more than one is installed.
 
 ### Looking at what the machine has
 

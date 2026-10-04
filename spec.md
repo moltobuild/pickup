@@ -141,8 +141,8 @@ Pickup scans:
 
 Extra search directories are not configurable. `config.toml` holds two keys —
 the default toolchain, and which registry to install from — and neither adds a
-place to look; a compiler outside `PATH` and outside the pickup home is
-invisible until one of those changes.
+place to look; a compiler outside `PATH` and outside Pickup's toolchains
+directory is invisible until one of those changes.
 
 Candidates are recognized by name:
 
@@ -239,7 +239,7 @@ thing this project exists to stop. What it carries is the half Pickup can vouch
 for, and the ABI it can promise is the same one everywhere.
 
 Ownership is read from the path: a library counts as the toolchain's own only
-when it lives inside a prefix under `<PICKUP_HOME>/toolchains`. Nothing outside
+when it lives inside a prefix under the toolchains directory (section 9). Nothing outside
 one changes behaviour, and neither does a library an installed compiler points
 at outside its own prefix. A caller with a constraint Pickup cannot see says so
 with `--stdlib`, which narrows the search rather than filtering its answer.
@@ -326,27 +326,60 @@ C++:
 
 Probing is expensive: every compiler is invoked once per feature.
 
-Pickup caches discovery results under the pickup home, alongside everything else
-it writes:
+Pickup caches discovery results alongside everything else it writes, which is
+split three ways by what losing it would cost:
 
 ```
-<pickup home>/cache/       regenerable: the probed inventory, the release index
-<pickup home>/downloads/   archives in flight, removed once installed
-<pickup home>/toolchains/  what was installed, one directory each
-<pickup home>/tools/       the formatter and the linter, kept apart
-<pickup home>/config.toml  the choices the user made, in TOML
+<config>/config.toml       the choices the user made, in TOML
+<data>/toolchains/         what was installed, one directory each
+<data>/tools/              the formatter and the linter, kept apart
+<cache>/                   regenerable: the probed inventory, the release index
+<cache>/downloads/         archives in flight, removed once installed
 ```
+
+| Role   | Linux and macOS                                    | Windows                   |
+| ------ | -------------------------------------------------- | ------------------------- |
+| config | `$XDG_CONFIG_HOME/pickup` (`~/.config/pickup`)     | `%APPDATA%\pickup`        |
+| data   | `$XDG_DATA_HOME/pickup` (`~/.local/share/pickup`)  | `%APPDATA%\pickup`        |
+| cache  | `$XDG_CACHE_HOME/pickup` (`~/.cache/pickup`)       | `%APPDATA%\pickup\cache`  |
+
+macOS follows the XDG layout rather than `~/Library`, and an `XDG_*` variable
+that is empty or not absolute is ignored, as the XDG Base Directory
+specification requires. `%APPDATA%` roams with a domain profile, which suits
+the configuration and not hundreds of megabytes of toolchains; the data and
+cache roots are each chosen by one function, so moving them to
+`%LOCALAPPDATA%` is a one-line change.
+
+`PICKUP_HOME` relocates the lot into one directory, in the layout used before
+the split — `config.toml`, `toolchains/`, `tools/`, `cache/` and `downloads/`
+side by side — which is also how the tests run without touching a real home
+directory.
 
 `tools/` is separate from `toolchains/` because nothing resolves against a
 formatter: `list` does not report one and `resolve` cannot return one.
 
-The first two can be deleted at any time and cost time, never correctness. The
-third is what the downloads were for, and the last is neither: a preference
-is a decision, and nothing can rebuild it. That is why it sits beside the cache
-rather than inside it, where clearing disk space would take it along. One root
-rather than two means one
-variable, `PICKUP_HOME`, relocates the lot — which is also how the tests run
-without touching a real home directory.
+The cache can be deleted at any time and costs time, never correctness. The
+data is what the downloads were for, and the configuration is neither: a
+preference is a decision, and nothing can rebuild it. That is why it is kept
+apart from the cache rather than inside it, where clearing disk space would
+take it along.
+
+Earlier versions kept everything in `~/.pickup` (`%USERPROFILE%\.pickup`). On
+the first run with `PICKUP_HOME` unset, Pickup moves its contents:
+
+- each `toolchains/<name>` and `tools/<name>` is renamed into the data
+  directory, whole, never copied and never over an existing name;
+- every `.cfg` Pickup wrote beside a moved driver has the absolute paths it
+  names into a moved toolchain — run-time search paths into its own `lib/`, a
+  GCC installed beside it — rewritten to the new location, so the toolchain
+  keeps building. Files without Pickup's header line are left alone;
+- `config.toml` moves to the config directory unless one is already there;
+- `cache/` and `downloads/` are discarded.
+
+The old directory is removed only once it is empty. Anything that could not
+move stays, with a `MIGRATED.txt` explaining why; that note also stops the
+attempt from repeating, and deleting it asks for another. What happened is
+reported on stderr in one or two lines.
 
 A cache entry is invalidated when the binary it describes changes, detected by
 path, modification time, and size.
@@ -410,12 +443,13 @@ administrator privileges.
 Layout:
 
 ```
-<pickup home>/toolchains/<vendor>-<version>-<target>/
+<data>/toolchains/<vendor>-<version>-<target>/
 ```
 
-The pickup home is `~/.pickup`, or `$PICKUP_HOME` where that is set. Nothing is
-ever written outside it, so installing never requires elevation and uninstalling
-is deleting a directory.
+`<data>` is the data directory of section 9 — `~/.local/share/pickup`,
+`%APPDATA%\pickup`, or `$PICKUP_HOME` where that is set. Nothing is ever written
+outside the directories of section 9, so installing never requires elevation and
+uninstalling is deleting a directory.
 
 The version and target in that name are read from the installed compiler, not
 from the name of the archive it came in. Unpacking something and asking it what

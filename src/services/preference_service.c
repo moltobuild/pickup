@@ -7,7 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* The file, in the pickup home rather than in the cache: see the header. */
+/* The file, in the configuration directory rather than in the cache: see the
+   header. */
 #define CONFIG_FILENAME "config.toml"
 
 /* The keys this version understands. Only the first is ever written. */
@@ -22,10 +23,10 @@
 #define KEY_FORMAT "%s = \"%s\"\n"
 
 static bool config_path(char *out, size_t out_size) {
-    char home[PICKUP_PATHS_MAX];
-    if (!paths_home(home, sizeof home))
+    char directory[PICKUP_PATHS_MAX];
+    if (!paths_config(directory, sizeof directory))
         return false;
-    return fs_format_path(out, out_size, "%s/%s", home, CONFIG_FILENAME);
+    return fs_format_path(out, out_size, "%s/%s", directory, CONFIG_FILENAME);
 }
 
 /* Past the spaces at the front of a line. */
@@ -132,9 +133,9 @@ static bool copy_without(const char *text, const char *key, char *out, size_t ou
 /* Write `key = "value"`, replacing any assignment already there. A NULL
    `value` removes the key instead. */
 static bool write_key(const char *key, const char *value) {
-    char home[PICKUP_PATHS_MAX];
+    char directory[PICKUP_PATHS_MAX];
     char path[PICKUP_PATHS_MAX];
-    if (!paths_home(home, sizeof home) || !config_path(path, sizeof path))
+    if (!paths_config(directory, sizeof directory) || !config_path(path, sizeof path))
         return false;
 
     char content[CONFIG_MAX] = "";
@@ -154,15 +155,15 @@ static bool write_key(const char *key, const char *value) {
     }
 
     /* Nothing left to say: the file goes rather than staying behind empty, so
-       clearing the only preference leaves the home as it was found. */
+       clearing the only preference leaves the directory as it was found. */
     if (content[0] == '\0') {
         (void)remove(path);
         return true;
     }
 
-    /* The home may not exist yet: setting a default is a reason to create it,
-       the same way installing something is. */
-    if (!fs_make_dirs(home))
+    /* The directory may not exist yet: setting a default is a reason to create
+       it, the same way installing something is. */
+    if (!fs_make_dirs(directory))
         return false;
     return fs_write_file(path, content);
 }

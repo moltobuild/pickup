@@ -43,7 +43,7 @@
  *
  * The line between the two is ownership, and ownership is read from the path: a
  * library counts as the toolchain's own only when it lives inside a prefix
- * under <PICKUP_HOME>/toolchains. It is asked about the library rather than the
+ * under the toolchains directory (paths_toolchains). It is asked about the library rather than the
  * compiler, because an installed Clang answers for libstdc++ with a path into
  * /usr, and a library there is the host's however it was reached.
  */
@@ -168,6 +168,26 @@ typedef struct {
  * which is also the caller's cue to say so: nothing here happens silently.
  */
 [[nodiscard]] bool recipe_refresh_config(const char *driver, const link_recipe *recipe);
+
+/*
+ * Rewrite where a configuration file says a toolchain lives.
+ *
+ * The file names directories by absolute path — the toolchain's own lib/ in a
+ * run-time search path, a GCC Pickup installed beside it — so moving a
+ * toolchain leaves a file pointing at where it used to be, and the compiler
+ * goes on building programs that cannot find their runtime. Every occurrence
+ * of `from` that is a whole path component, never a mere prefix of a longer
+ * name, becomes `to`.
+ *
+ * `config_file` is the .cfg itself. Only a file Pickup wrote is touched, by
+ * the same test recipe_refresh_config uses: a path someone typed by hand is
+ * theirs to change. True when the file was changed.
+ */
+[[nodiscard]] bool recipe_relocate_config(const char *config_file, const char *from,
+                                          const char *to);
+
+/* The suffix a driver's configuration file carries, beside the driver. */
+#define RECIPE_CONFIG_SUFFIX ".cfg"
 
 /* Which standard library `compiler` reaches for when invoked with `flags`.
 

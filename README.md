@@ -67,7 +67,7 @@ sudo install "$name" /usr/local/bin/pickup
 
 ```sh
 pickup list             # what this machine already has
-pickup install clang    # or fetch one, under ~/.pickup, no root
+pickup install clang    # or fetch one, into your home directory, no root
 ```
 
 Installing anything needs `curl`, `tar` and `zstd` on the `PATH`;
@@ -346,7 +346,7 @@ pickup install clang-tidy
 Both come from the registry, down the same path as a compiler. What differs is
 the test they have to pass before being adopted: there is nothing here to
 compile, so it is that the binary the registry named runs and answers.
-They land under `~/.pickup/tools/`, apart from the toolchains, because nothing
+They land under `~/.local/share/pickup/tools/`, apart from the toolchains, because nothing
 resolves against them.
 
 `pickup tools` says which ones are there and, in TOML, where:
@@ -363,7 +363,7 @@ $ pickup tools --format toml
 [[tool]]
 kind = "formatter"
 name = "clang-format"
-path = "~/.pickup/toolchains/clang-22.1.8-…/bin/clang-format"
+path = "~/.local/share/pickup/toolchains/clang-22.1.8-…/bin/clang-format"
 version = "clang-format version 22.1.8"
 source = "pickup"
 ```
@@ -478,22 +478,52 @@ a dead network the same way, so a name is resolved against the catalogues
 already fetched instead of against a failure that cannot be told apart from an
 outage.
 
-Everything Pickup writes lives under `~/.pickup` (or `$PICKUP_HOME`), so
-installing never asks for administrator rights:
+Everything Pickup writes lives in your home directory, so installing never asks
+for administrator rights. It is split by what losing it would cost, and each
+part goes where the platform keeps that kind of thing. On Linux and macOS
+(macOS too, rather than `~/Library`) those are the XDG base directories:
 
 ```
-~/.pickup/
-  cache/                   the probed inventory and the registry's catalogues
-  downloads/               archives in flight, removed once installed
+~/.config/pickup/          $XDG_CONFIG_HOME/pickup
+  config.toml              the choices you made
+~/.local/share/pickup/     $XDG_DATA_HOME/pickup
   toolchains/
     clang-19.1.6-x86_64-unknown-linux-gnu/
   tools/
     clang-format-19.1.6/
+~/.cache/pickup/           $XDG_CACHE_HOME/pickup
+                           the probed inventory and the registry's catalogues
+  downloads/               archives in flight, removed once installed
 ```
 
-`cache/` and `downloads/` can be deleted at any time; the cost is a rescan, not
-a wrong answer. Tools live apart from toolchains because nothing resolves
-against them.
+An `XDG_*` variable that is empty or not an absolute path is ignored, as the
+spec says. On Windows all of it is under `%APPDATA%\pickup`: `config.toml`,
+`toolchains\` and `tools\` at its root, and `cache\` (with `downloads\`
+inside) beside them. `%APPDATA%` roams with a domain profile, which is a poor
+fit for toolchains of hundreds of megabytes; the data and cache roots are each
+chosen in one place in `paths_service.c`, so moving them to `%LOCALAPPDATA%` is
+a one-line change.
+
+`PICKUP_HOME` puts everything back under one directory, in the layout earlier
+versions used — `config.toml`, `toolchains/`, `tools/`, `cache/` and
+`downloads/` side by side — which is also how the tests stay out of a real
+home.
+
+The cache can be deleted at any time; the cost is a rescan, not a wrong answer.
+Tools live apart from toolchains because nothing resolves against them.
+
+Earlier versions kept all of it in `~/.pickup` (`%USERPROFILE%\.pickup`). The
+first run of this one, with `PICKUP_HOME` unset, moves what is there: each
+toolchain and tool is renamed into the data directory, `config.toml` into the
+config directory, and the old cache and downloads are dropped. A Clang that
+`install` configured has a `.cfg` beside its driver naming directories inside
+the toolchain by absolute path; those are rewritten to the new location as part
+of the move, so the toolchain keeps building. Nothing is overwritten: anything
+that cannot move — a name already taken, a destination on another filesystem —
+stays in `~/.pickup` with a `MIGRATED.txt` saying so, and the old directory is
+removed only once it is empty. One or two lines on stderr say what moved where.
+Programs you linked earlier against a toolchain's own runtime carry its old
+path and need relinking.
 
 Installed toolchains join the same inventory as the system ones, and `list`,
 `show` and `resolve` treat them no differently.
@@ -506,7 +536,7 @@ downloading clang 19.1.6  [█████████████████�
 verifying clang 19.1.6    [█████████████████████████]  100%  44M/44M
 extracting clang 19.1.6   \  209M extracted
 probing installed toolchain                        12 features
-✓ clang 19.1.6 installed in ~/.pickup/toolchains/clang-19.1.6-x86_64-unknown-linux-gnu (209M)
+✓ clang 19.1.6 installed in ~/.local/share/pickup/toolchains/clang-19.1.6-x86_64-unknown-linux-gnu (209M)
 ```
 
 Every stage says what it is doing, because each takes long enough to look like a
@@ -571,7 +601,7 @@ rename is atomic and an interrupted install leaves nothing that looks finished.
 
 ```
 1. $PICKUP_REGISTRY_URL
-2. registry = "…" in ~/.pickup/config.toml
+2. registry = "…" in ~/.config/pickup/config.toml
 3. the built-in default
 ```
 
@@ -626,9 +656,9 @@ already parses it: consuming Pickup adds no parser to the consumer.
 ```
 $ pickup resolve --lang c++ --format toml
 [compiler]
-path = "~/.pickup/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu/bin/clang++"
-c_path = "~/.pickup/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu/bin/clang"
-cxx_path = "~/.pickup/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu/bin/clang++"
+path = "~/.local/share/pickup/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu/bin/clang++"
+c_path = "~/.local/share/pickup/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu/bin/clang"
+cxx_path = "~/.local/share/pickup/toolchains/clang-22.1.8-x86_64-unknown-linux-gnu/bin/clang++"
 vendor = "clang"
 version = "22.1.8"
 target = "x86_64-unknown-linux-gnu"
@@ -636,8 +666,8 @@ target = "x86_64-unknown-linux-gnu"
 [cxx]
 stdlib = "libc++"
 compile_flags = ["-stdlib=libc++", "--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/11"]
-link_flags = ["-stdlib=libc++", "-Wl,-rpath,~/.pickup/toolchains/clang-19.1.6-x86_64-unknown-linux-gnu/lib/x86_64-unknown-linux-gnu", …]
-runtime_dirs = ["~/.pickup/toolchains/clang-19.1.6-x86_64-unknown-linux-gnu/lib/x86_64-unknown-linux-gnu"]
+link_flags = ["-stdlib=libc++", "-Wl,-rpath,~/.local/share/pickup/toolchains/clang-19.1.6-x86_64-unknown-linux-gnu/lib/x86_64-unknown-linux-gnu", …]
+runtime_dirs = ["~/.local/share/pickup/toolchains/clang-19.1.6-x86_64-unknown-linux-gnu/lib/x86_64-unknown-linux-gnu"]
 ```
 
 `id` names the toolchain, as `list` and `default` do. Asking with `--std` adds
@@ -676,7 +706,7 @@ For a toolchain Pickup installed it is the other way round: what it brought
 inside its own prefix beats what the host lends it. That toolchain was built
 elsewhere and borrows a libstdc++ only by accident of where it was unpacked,
 which would make one `pickup install` a different compiler on every machine.
-Ownership is read from the path, so nothing outside `~/.pickup/toolchains`
+Ownership is read from the path, so nothing outside the toolchains directory
 changes behaviour.
 
 `--stdlib` forces one when the project has a constraint Pickup cannot see —
@@ -716,7 +746,7 @@ $ pickup default gcc@12.3.0-conda
 ✓ Default toolchain is now gcc@12.3.0-conda
 
 $ pickup resolve
-cc gcc 12.3.0 (/home/you/.pickup/toolchains/gcc-12.3.0-x86_64-conda-linux-gnu/bin/cc)
+cc gcc 12.3.0 (/home/you/.local/share/pickup/toolchains/gcc-12.3.0-x86_64-conda-linux-gnu/bin/cc)
 ```
 
 It is a preference, not a constraint. Ask for something it cannot do and you
@@ -725,7 +755,7 @@ get an answer anyway, plus a line on stderr saying why it was passed over:
 ```
 $ pickup resolve --vendor clang
 pickup: the default gcc@12.3.0-conda cannot serve this request; chose clang@22.1.8
-clang clang 22.1.8 (/home/you/.pickup/toolchains/clang-22.1.8-.../bin/clang)
+clang clang 22.1.8 (/home/you/.local/share/pickup/toolchains/clang-22.1.8-.../bin/clang)
 ```
 
 What gets stored is the resolved identity, never what you typed: `gcc@latest`
@@ -733,15 +763,15 @@ recorded as written would quietly mean a different compiler the next time
 anything was installed. `pickup default` on its own reports the current one,
 `--clear` forgets it, and `list` marks it.
 
-The preference lives in `~/.pickup/config.toml`, beside the cache rather than
-inside it. Clearing the cache costs a rescan; it must not cost a decision.
+The preference lives in `~/.config/pickup/config.toml`, apart from the cache
+rather than inside it. Clearing the cache costs a rescan; it must not cost a decision.
 
 ### Removing one
 
 ```
 $ pickup uninstall gcc@12.3.0-conda
 Remove gcc@12.3.0-conda
-  /home/you/.pickup/toolchains/gcc-12.3.0-x86_64-conda-linux-gnu  (845M)
+  /home/you/.local/share/pickup/toolchains/gcc-12.3.0-x86_64-conda-linux-gnu  (845M)
 This cannot be undone. Continue? [y/N]
 ```
 

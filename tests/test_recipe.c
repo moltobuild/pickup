@@ -975,3 +975,61 @@ MOLTEST(recipe_keeps_the_configuration_a_driver_needs_to_link) {
     for (size_t i = 0; i < recipe.compile_count; i++)
         EXPECT_STRNE("--no-default-config", recipe.compile_flags[i]);
 }
+
+/* --- moving a configuration file with its toolchain --- */
+
+/* A .cfg as `install` writes one, through the same function. */
+static bool write_moved_config(const char *root, const char *flag, char *driver, size_t size) {
+    snprintf(driver, size, "%s/clang", root);
+    link_recipe recipe = {0};
+    recipe.usable = true;
+    snprintf(recipe.link_flags[recipe.link_count++], RECIPE_FLAG_MAX, "%s", flag);
+    recipe.compile_count = recipe.link_count;
+    return recipe_write_config(driver, &recipe);
+}
+
+MOLTEST(recipe_relocates_a_whole_path_and_not_a_longer_name) {
+    char root[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(moltest_temp_dir("pickup_relocate", root, sizeof root));
+
+    char driver[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(write_moved_config(root,
+                                   "-Wl,-rpath,/old/toolchains/clang-1/lib:"
+                                   "/old/toolchains/clang-10/lib",
+                                   driver, sizeof driver));
+    char file[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(file, sizeof file, "%s.cfg", driver));
+
+    EXPECT_TRUE(recipe_relocate_config(file, "/old/toolchains/clang-1", "/new/toolchains/clang-1"));
+    char *body = fs_read_file(file);
+    ASSERT_TRUE(body != NULL);
+    /* clang-10 is another toolchain whose name merely starts the same way. */
+    EXPECT_TRUE(strstr(body, "-Wl,-rpath,/new/toolchains/clang-1/lib:"
+                             "/old/toolchains/clang-10/lib\n") != NULL);
+    free(body);
+
+    /* Nothing left to change is not a change. */
+    EXPECT_FALSE(
+        recipe_relocate_config(file, "/old/toolchains/clang-1", "/new/toolchains/clang-1"));
+
+    (void)fs_remove_tree(root);
+}
+
+MOLTEST(recipe_does_not_relocate_a_configuration_someone_wrote) {
+    char root[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(moltest_temp_dir("pickup_relocate", root, sizeof root));
+
+    char file[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(file, sizeof file, "%s/clang.cfg", root));
+    ASSERT_TRUE(fs_write_file(file, "-I/old/toolchains/clang-1/include\n"));
+
+    /* A path typed by hand is a decision, and not this function's to undo. */
+    EXPECT_FALSE(
+        recipe_relocate_config(file, "/old/toolchains/clang-1", "/new/toolchains/clang-1"));
+    char *body = fs_read_file(file);
+    ASSERT_TRUE(body != NULL);
+    EXPECT_STREQ("-I/old/toolchains/clang-1/include\n", body);
+    free(body);
+
+    (void)fs_remove_tree(root);
+}

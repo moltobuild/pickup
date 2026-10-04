@@ -15,7 +15,8 @@
  * So it lives beside those directories rather than inside the cache, where a
  * `pickup scan` or a cleared cache would silently discard it.
  *
- *   <home>/config.toml
+ *   <config>/config.toml   (paths_config: ~/.config/pickup, %APPDATA%\pickup,
+ *                           or $PICKUP_HOME)
  *
  * TOML because that is what the ecosystem already reads: the file a user may
  * want to edit by hand, or commit to a repository, is in the same shape as
@@ -46,7 +47,7 @@
  */
 [[nodiscard]] bool preference_default_get(char *out, size_t out_size);
 
-/* Record `id` as the default. Creates the home and the file if neither is
+/* Record `id` as the default. Creates the directory and the file if neither is
    there yet. False if it could not be written, which must be reported: a
    preference that was silently not stored is worse than one that was
    refused. */

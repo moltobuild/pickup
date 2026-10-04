@@ -305,12 +305,12 @@ MOLTEST(migrate_points_a_moved_configuration_at_the_new_location) {
     char toolchains[PICKUP_PATHS_MAX];
     ASSERT_TRUE(paths_toolchains(toolchains, sizeof toolchains));
     char expected[PICKUP_PATHS_MAX];
-    snprintf(expected, sizeof expected, "-Wl,-rpath,%s/" MOVED_TOOLCHAIN "/lib\n", toolchains);
+    ASSERT_TRUE(fs_format_path(expected, sizeof expected, "-Wl,-rpath,%s/" MOVED_TOOLCHAIN "/lib\n", toolchains));
     EXPECT_TRUE(strstr(config, expected) != NULL);
-    snprintf(expected, sizeof expected, "-I%s/" MOVED_TOOLCHAIN "/include\n", toolchains);
+    ASSERT_TRUE(fs_format_path(expected, sizeof expected, "-I%s/" MOVED_TOOLCHAIN "/include\n", toolchains));
     EXPECT_TRUE(strstr(config, expected) != NULL);
     /* The GCC it stands on moved too, and is named where it went. */
-    snprintf(expected, sizeof expected, "--gcc-install-dir=%s/" MOVED_GCC, toolchains);
+    ASSERT_TRUE(fs_format_path(expected, sizeof expected, "--gcc-install-dir=%s/" MOVED_GCC, toolchains));
     EXPECT_TRUE(strstr(config, expected) != NULL);
     /* Nothing still points at the directory that no longer exists. */
     EXPECT_TRUE(strstr(config, legacy) == NULL);
@@ -421,8 +421,8 @@ MOLTEST(migrate_leaves_a_toolchain_that_still_compiles) {
 
     char source[PICKUP_PATHS_MAX];
     char program[PICKUP_PATHS_MAX];
-    snprintf(source, sizeof source, "%s/main.c", fixture.root);
-    snprintf(program, sizeof program, "%s/main", fixture.root);
+    ASSERT_TRUE(fs_format_path(source, sizeof source, "%s/main.c", fixture.root));
+    ASSERT_TRUE(fs_format_path(program, sizeof program, "%s/main", fixture.root));
     ASSERT_TRUE(plant(source, "#include <own.h>\nint main(void) { return OWN - 42; }\n"));
 
     /* Builds where it is, before anything moves: the test can tell. */

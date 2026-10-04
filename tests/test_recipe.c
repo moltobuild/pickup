@@ -998,7 +998,7 @@ MOLTEST(recipe_relocates_a_whole_path_and_not_a_longer_name) {
                                    "/old/toolchains/clang-10/lib",
                                    driver, sizeof driver));
     char file[PICKUP_PATHS_MAX];
-    snprintf(file, sizeof file, "%s.cfg", driver);
+    ASSERT_TRUE(fs_format_path(file, sizeof file, "%s.cfg", driver));
 
     EXPECT_TRUE(recipe_relocate_config(file, "/old/toolchains/clang-1", "/new/toolchains/clang-1"));
     char *body = fs_read_file(file);
@@ -1020,7 +1020,7 @@ MOLTEST(recipe_does_not_relocate_a_configuration_someone_wrote) {
     ASSERT_TRUE(moltest_temp_dir("pickup_relocate", root, sizeof root));
 
     char file[PICKUP_PATHS_MAX];
-    snprintf(file, sizeof file, "%s/clang.cfg", root);
+    ASSERT_TRUE(fs_format_path(file, sizeof file, "%s/clang.cfg", root));
     ASSERT_TRUE(fs_write_file(file, "-I/old/toolchains/clang-1/include\n"));
 
     /* A path typed by hand is a decision, and not this function's to undo. */

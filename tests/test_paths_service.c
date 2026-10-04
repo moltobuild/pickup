@@ -1,5 +1,6 @@
 #include <moltest.h>
 
+#include <pickup/services/fs_service.h>
 #include <pickup/services/paths_service.h>
 
 #include "user_dirs_fixture.h"
@@ -288,16 +289,16 @@ MOLTEST(paths_find_the_toolchain_a_binary_belongs_to_under_xdg) {
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_xdg"));
 
     char driver[PICKUP_PATHS_MAX];
-    snprintf(driver, sizeof driver, "%s/xdg/data/pickup/toolchains/clang-1-x/bin/clang",
-             fixture.root);
+    ASSERT_TRUE(fs_format_path(driver, sizeof driver, "%s/xdg/data/pickup/toolchains/clang-1-x/bin/clang",
+             fixture.root));
     char owner[PICKUP_PATHS_MAX];
     ASSERT_TRUE(paths_owning_toolchain(driver, owner, sizeof owner));
     EXPECT_TRUE(is_under(&fixture, owner, "/xdg/data/pickup/toolchains/clang-1-x"));
 
     /* What is still in the legacy directory was not installed into the
        current one, and `uninstall` does not reach into it. */
-    snprintf(driver, sizeof driver, "%s/home/.pickup/toolchains/clang-1-x/bin/clang",
-             fixture.root);
+    ASSERT_TRUE(fs_format_path(driver, sizeof driver, "%s/home/.pickup/toolchains/clang-1-x/bin/clang",
+             fixture.root));
     EXPECT_FALSE(paths_owning_toolchain(driver, owner, sizeof owner));
 
     user_dirs_teardown(&fixture);

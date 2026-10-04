@@ -12,6 +12,7 @@
 #include <pickup/commands/tools_command.h>
 #include <pickup/commands/uninstall_command.h>
 #include <pickup/exit_code.h>
+#include <pickup/services/migrate_service.h>
 #include <pickup/util/cli.h>
 #include <pickup/util/color.h>
 #include <pickup/util/console.h>
@@ -200,6 +201,13 @@ int cli_run(int argc, char **argv) {
 
     /* Decided once, from the stream the reports go to. */
     color_configure(stdout);
+
+    /* Before any command looks for what was installed: on the first run after
+       an upgrade it is still in ~/.pickup, and a `list` that ran first would
+       report a machine with nothing on it. On stderr, so a caller parsing the
+       TOML on stdout never sees it. */
+    const migrate_report migrated = migrate_legacy_home();
+    migrate_announce(&migrated, stderr);
 
     const cli_app app = {
         .program = "pickup",

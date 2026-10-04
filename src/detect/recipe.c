@@ -6,6 +6,7 @@
 #include <pickup/services/paths_service.h>
 #include <pickup/services/process_service.h>
 
+#include <ctype.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -312,8 +313,8 @@ static bool climb(const char *path, int levels, char *out, size_t out_size) {
  * comparing one against the other would let /home -> /var/home disown a
  * toolchain.
  *
- * False when nothing under <PICKUP_HOME>/toolchains owns it, and false when
- * there is no pickup home at all — the same answer, and the one that leaves the
+ * False when nothing under the toolchains directory owns it, and false when
+ * there is no such directory at all — the same answer, and the one that leaves the
  * ordering exactly as it was before this rule existed. This has nothing to say
  * about a compiler Pickup did not install.
  */
@@ -602,7 +603,7 @@ bool recipe_align_gcc(const link_recipe *cxx, const char *driver, link_recipe *c
 
 /* What a driver's own configuration file is called: the driver's name with
    this appended, in the directory the driver sits in. */
-#define CONFIG_SUFFIX ".cfg"
+#define CONFIG_SUFFIX RECIPE_CONFIG_SUFFIX
 
 /* The line a file Pickup wrote opens with. It is what tells one apart from a
    file someone edited by hand, which is never overwritten. */
@@ -672,6 +673,71 @@ bool recipe_refresh_config(const char *driver, const link_recipe *recipe) {
     }
 
     return fs_write_file(path, wanted);
+}
+
+/* True when `c` can continue a file or directory name. What follows a match
+   has to be anything else, or `clang-1` would claim `clang-10`. */
+static bool continues_a_name(char c) {
+    return isalnum((unsigned char)c) || c == '-' || c == '.' || c == '_' || c == '+' || c == '@';
+}
+
+/* Count, or with `out` also write, `text` with every whole-component `from`
+   replaced by `to`. Returns the length of the result. */
+static size_t relocate_text(const char *text, const char *from, const char *to, char *out) {
+    const size_t from_length = strlen(from);
+    const size_t to_length = strlen(to);
+    size_t used = 0;
+    const char *cursor = text;
+    for (const char *match = strstr(cursor, from); match != NULL; match = strstr(cursor, from)) {
+        const size_t before = (size_t)(match - cursor);
+        if (out != NULL)
+            memcpy(out + used, cursor, before);
+        used += before;
+
+        const bool whole = !continues_a_name(match[from_length]);
+        const char *replacement = whole ? to : from;
+        const size_t replacement_length = whole ? to_length : from_length;
+        if (out != NULL)
+            memcpy(out + used, replacement, replacement_length);
+        used += replacement_length;
+        cursor = match + from_length;
+    }
+    const size_t rest = strlen(cursor);
+    if (out != NULL) {
+        memcpy(out + used, cursor, rest);
+        out[used + rest] = '\0';
+    }
+    return used + rest;
+}
+
+bool recipe_relocate_config(const char *config_file, const char *from, const char *to) {
+    if (config_file == NULL || from == NULL || to == NULL || from[0] == '\0' ||
+        strcmp(from, to) == 0)
+        return false;
+
+    char *current = fs_read_file(config_file);
+    if (current == NULL)
+        return false;
+
+    /* Only a file Pickup wrote, the same rule recipe_refresh_config keeps. */
+    if (strncmp(current, CONFIG_HEADER, sizeof CONFIG_HEADER - 1) != 0) {
+        free(current);
+        return false;
+    }
+
+    const size_t length = relocate_text(current, from, to, NULL);
+    char *relocated = malloc(length + 1);
+    if (relocated == NULL) {
+        free(current);
+        return false;
+    }
+    (void)relocate_text(current, from, to, relocated);
+
+    const bool changed = strcmp(current, relocated) != 0;
+    const bool written = changed && fs_write_file(config_file, relocated);
+    free(relocated);
+    free(current);
+    return written;
 }
 
 link_recipe recipe_discover(const toolchain *chain, capability_lang lang) {

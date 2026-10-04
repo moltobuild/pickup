@@ -7,6 +7,8 @@
 #include <pickup/services/process_service.h>
 #include <pickup/util/sha256.h>
 
+#include "user_dirs_fixture.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -430,6 +432,59 @@ MOLTEST(install_puts_a_tool_where_nothing_resolves_against_it) {
     EXPECT_TRUE(strncmp(report.directory, tools, strlen(tools)) == 0);
     EXPECT_TRUE(strstr(report.directory, "clang-format-1.0.0") != NULL);
 
+    fixture_teardown(&fixture);
+}
+
+/* With nothing relocated, the tool lands in the data directory and the archive
+   in the cache directory: the platform's places, and not the legacy home. */
+MOLTEST(install_uses_the_platform_directories_when_nothing_is_relocated) {
+    if (!http_available() || !archive_available() || !archive_supports_zstd())
+        SKIP("curl and tar with zstd are needed for an end to end install");
+
+    install_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+    user_dirs_fixture dirs;
+    ASSERT_TRUE(user_dirs_setup(&dirs, "pickup_install_dirs"));
+
+    char bin[256];
+    snprintf(bin, sizeof bin, "%s/stage/bin", fixture.root);
+    ASSERT_TRUE(fs_make_dirs(bin));
+    char binary[512];
+    snprintf(binary, sizeof binary, "%s/clang-format", bin);
+    ASSERT_TRUE(moltest_fake_program(binary, "out clang-format version 1.0.0\nexit 0\n", binary,
+                                     sizeof binary));
+
+    char archive[256], stage[256];
+    snprintf(archive, sizeof archive, "%s/cf.tar.zst", fixture.root);
+    snprintf(stage, sizeof stage, "%s/stage", fixture.root);
+    ASSERT_TRUE(pack(stage, archive));
+
+    const char *slash = strrchr(binary, '/');
+    ASSERT_TRUE(slash != NULL);
+    registry_artifact artifact;
+    ASSERT_TRUE(describe(archive, "clang-format", "1.0.0", registry_kind_tool, &artifact));
+    snprintf(artifact.binary, sizeof artifact.binary, "bin/%s", slash + 1);
+
+    const install_request request = { .artifact = &artifact };
+    install_report report = install_run(&request);
+    ASSERT_EQ(install_ok, report.status);
+
+    char data[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(paths_data(data, sizeof data));
+    EXPECT_TRUE(strncmp(report.directory, data, strlen(data)) == 0);
+
+    char downloads[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(paths_downloads(downloads, sizeof downloads));
+    EXPECT_TRUE(fs_is_dir(downloads));
+    char cache[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(paths_cache(cache, sizeof cache));
+    EXPECT_TRUE(strncmp(downloads, cache, strlen(cache)) == 0);
+
+    char legacy[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(paths_legacy_home(legacy, sizeof legacy));
+    EXPECT_FALSE(fs_path_exists(legacy));
+
+    user_dirs_teardown(&dirs);
     fixture_teardown(&fixture);
 }
 

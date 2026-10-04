@@ -216,8 +216,8 @@ static bool collect_candidates(str_list *out) {
 
    Anything under the toolchains directory is one Pickup installed and can
    remove again; everything else was already on the machine. Worked out rather
-   than stored, because it depends on PICKUP_HOME, which a caller may point
-   somewhere else between two runs. */
+   than stored, because it depends on PICKUP_HOME and the XDG variables, which a
+   caller may point somewhere else between two runs. */
 static toolchain_source source_of(const char *path) {
     char toolchains[PICKUP_PATHS_MAX];
     if (!paths_toolchains(toolchains, sizeof toolchains))
@@ -226,7 +226,7 @@ static toolchain_source source_of(const char *path) {
     size_t length = strlen(toolchains);
     if (length == 0 || strncmp(path, toolchains, length) != 0)
         return toolchain_source_system;
-    /* A prefix match alone would claim /home/x/.pickup/toolchains-old too. */
+    /* A prefix match alone would claim ~/.local/share/pickup/toolchains-old too. */
     return path[length] == '/' ? toolchain_source_pickup : toolchain_source_system;
 }
 

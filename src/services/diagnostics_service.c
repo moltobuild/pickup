@@ -229,29 +229,48 @@ static void check_environment(diagnostics_report *report) {
     check_packings(report);
 }
 
-static void check_home(diagnostics_report *report) {
-    char home[PICKUP_PATHS_MAX];
-    if (!paths_home(home, sizeof home)) {
-        finding *entry =
-            open_finding(report, finding_error, section_environment, true, "pickup home");
+/* One of the directories Pickup writes to: unknown, or there and unusable. */
+static void check_root(diagnostics_report *report, const char *role,
+                       bool (*locate)(char *, size_t)) {
+    char directory[PICKUP_PATHS_MAX];
+    if (!locate(directory, sizeof directory)) {
+        finding *entry = open_finding(report, finding_error, section_environment, true, role);
         if (entry == NULL)
             return;
-        set_detail(entry, "neither $%s nor a home directory is set", PICKUP_HOME_ENV);
+#ifdef _WIN32
+        set_detail(entry, "neither $%s nor %%APPDATA%% is set", PICKUP_HOME_ENV);
+#else
+        set_detail(entry, "neither $%s, its XDG variable nor a home directory is set",
+                   PICKUP_HOME_ENV);
+#endif
         add_remedy(entry, "set %s to a directory pickup may write to", PICKUP_HOME_ENV);
         return;
     }
 
-    /* Only reported when it exists and cannot be used. A home that is not
+    /* Only reported when it exists and cannot be used. A directory that is not
        there yet is the ordinary state before the first install. */
-    if (fs_path_exists(home) && !fs_is_dir(home)) {
-        finding *entry =
-            open_finding(report, finding_error, section_environment, true, "pickup home");
+    if (fs_path_exists(directory) && !fs_is_dir(directory)) {
+        finding *entry = open_finding(report, finding_error, section_environment, true, role);
         if (entry == NULL)
             return;
-        (void)fs_format_path(entry->location, sizeof entry->location, "%s", home);
+        (void)fs_format_path(entry->location, sizeof entry->location, "%s", directory);
         set_detail(entry, "exists and is not a directory");
         add_remedy(entry, "remove it, or point %s elsewhere", PICKUP_HOME_ENV);
     }
+}
+
+/* Configuration, installed toolchains and cache are three directories unless
+   PICKUP_HOME makes them one, and each can be the one that is wrong. */
+static void check_home(diagnostics_report *report) {
+    /* One directory, so one finding: three about the same file would read as
+       three problems. */
+    if (paths_relocated()) {
+        check_root(report, "pickup home", paths_home);
+        return;
+    }
+    check_root(report, "pickup config", paths_config);
+    check_root(report, "pickup data", paths_data);
+    check_root(report, "pickup cache", paths_cache);
 }
 
 /* --- what a project is worked on with --- */
@@ -326,14 +345,14 @@ static void survey_toolchain(const toolchain *chain, toolchain_survey *out) {
  * This is the one thing a diagnosis does rather than merely reports, and the
  * line it does not cross is the same one `install` respects: Pickup maintains
  * what Pickup installed and never touches the system. Repairing a GCC in /usr
- * is the reader's decision; keeping a file under the pickup home in step with
+ * is the reader's decision; keeping a file Pickup installed in step with
  * reality is not a decision at all.
  *
  * Whatever changes is said out loud. Nothing here happens quietly.
  */
 static void refresh_configuration(const toolchain *chain, const toolchain_survey *survey,
                                   diagnostics_report *report) {
-    /* Nothing outside the pickup home, and nothing that does not read a
+    /* Nothing Pickup did not install, and nothing that does not read a
        configuration file in the first place. */
     if (chain->source != toolchain_source_pickup)
         return;

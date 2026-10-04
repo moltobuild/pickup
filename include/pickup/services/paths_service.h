@@ -7,30 +7,72 @@
 /*
  * Where Pickup keeps everything it writes.
  *
- * All of it lives under one directory the user owns, so installing a toolchain
- * never needs administrator rights and removing one is deleting a folder.
- * `PICKUP_HOME` relocates the lot, which is also what lets the tests run
- * without touching a real home directory.
+ * All of it lives in directories the user owns, so installing a toolchain never
+ * needs administrator rights and removing one is deleting a folder. What is
+ * kept splits three ways, by what losing it would cost, and each part goes
+ * where the platform says that kind of thing belongs:
  *
- *   <home>/cache/       regenerable: the probed inventory, the registry indexes
- *   <home>/downloads/   archives in flight, removed once installed
- *   <home>/toolchains/  what was installed, one directory each
+ *   config  the choices the user made (config.toml)       never regenerable
+ *   data    toolchains/ and tools/, what was installed     costs a download
+ *   cache   the probed inventory, the registry indexes,    costs a rescan
+ *           and downloads/, archives in flight
  *
- * The first two can be deleted at any time and cost a rescan. The third is
- * what the downloads were for.
+ * On Linux and macOS those are the XDG base directories, macOS included: a
+ * command-line tool there is found in ~/.config like everywhere else, and
+ * ~/Library is where an application bundle's state goes.
+ *
+ *   config  $XDG_CONFIG_HOME/pickup   (~/.config/pickup)
+ *   data    $XDG_DATA_HOME/pickup     (~/.local/share/pickup)
+ *   cache   $XDG_CACHE_HOME/pickup    (~/.cache/pickup)
+ *
+ * On Windows all three are under %APPDATA%\pickup:
+ *
+ *   config  %APPDATA%\pickup                 config.toml
+ *   data    %APPDATA%\pickup                 toolchains\ and tools\
+ *   cache   %APPDATA%\pickup\cache           downloads\ inside it
+ *
+ * `PICKUP_HOME` puts the lot back under one directory, in the layout every
+ * version before this one used — which is also what lets the tests run without
+ * touching a real home directory:
+ *
+ *   <home>/config.toml  <home>/toolchains/  <home>/tools/
+ *   <home>/cache/       <home>/downloads/
  */
 
 /* Environment variable that relocates all of it. */
 #define PICKUP_HOME_ENV "PICKUP_HOME"
 
-/* Default location, relative to the user's home. */
+/* Where everything lived before the split, relative to the user's home. Read
+   now only to move what is in it (see migrate_service.h). */
 #define PICKUP_HOME_DIRNAME ".pickup"
+
+/* The directory Pickup owns inside each platform base directory. */
+#define PICKUP_DIRNAME "pickup"
 
 /* Room for any of the paths below. */
 #define PICKUP_PATHS_MAX 4096
 
-/* The root: $PICKUP_HOME, or ~/.pickup. False if neither is known. */
+/* True when $PICKUP_HOME is set, and everything lives under it. */
+[[nodiscard]] bool paths_relocated(void);
+
+/*
+ * The single-directory home: $PICKUP_HOME when it is set, and otherwise
+ * ~/.pickup (%USERPROFILE%\.pickup), the legacy location nothing new is
+ * written to. False if neither is known.
+ *
+ * Kept under its old name because a relocated home still is exactly this, and
+ * the legacy one is what the migration empties.
+ */
 [[nodiscard]] bool paths_home(char *out, size_t out_size);
+
+/* The legacy ~/.pickup, whatever $PICKUP_HOME says. */
+[[nodiscard]] bool paths_legacy_home(char *out, size_t out_size);
+
+/* Where the user's choices are kept: the directory holding config.toml. */
+[[nodiscard]] bool paths_config(char *out, size_t out_size);
+
+/* Where what was installed is kept: the parent of toolchains/ and tools/. */
+[[nodiscard]] bool paths_data(char *out, size_t out_size);
 
 /* Where installed toolchains live, one directory each. */
 [[nodiscard]] bool paths_toolchains(char *out, size_t out_size);
@@ -58,7 +100,7 @@
 
 /*
  * The installed directory that `path` belongs to: the first level under
- * <home>/toolchains containing it.
+ * the toolchains directory containing it.
  *
  * Read from the path rather than rebuilt with paths_toolchain_dir, because the
  * two can disagree. The name is composed at install time from what the

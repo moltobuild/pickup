@@ -32,10 +32,14 @@ flags = ["-Wall", "-Wextra", "-Wpedantic"]
 
 [test]
 # The suite registers its cases and moltest owns main(), so everything links
-# into one executable. moltest lives outside src/, hence the extra sources.
+# into one executable.
 mode = "single"
-sources = ["modules/moltest/src"]
-include = ["modules/moltest/include"]
+
+# Development dependencies come from molto's shared store, fetched once and
+# reused by every project that names the same tag; the suite is built by molto,
+# and the bootstrap Makefile hands `make test` over to it.
+[dev-deps]
+moltest = { git = "https://github.com/moltobuild/moltest", tag = "v0.3.0" }
 
 [profile.debug]
 opt_level = 0
@@ -44,3 +48,10 @@ debug_info = true
 [profile.release]
 opt_level = 3
 debug_info = false
+
+# What CI's sanitizers job builds: `molto test --profile custom`. Flags in a
+# profile reach the compile and the link line, which the runtime needs.
+[profile.custom]
+opt_level = 0
+debug_info = true
+flags = ["-fsanitize=address,undefined", "-fno-omit-frame-pointer"]

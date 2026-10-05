@@ -66,13 +66,6 @@ jobs:
       - name: Compile pickup for Windows
         run: make build CC=x86_64-w64-mingw32-gcc
 
-      # Built and not run: these are Windows binaries on a Linux runner. Running
-      # them is half two's job. Building them is still worth doing here, because
-      # the suite has POSIX of its own — `setenv`, `unsetenv` and `mkdtemp` — and
-      # a port whose tests cannot be compiled is a port that cannot be proven.
-      - name: Compile its suite for Windows
-        run: make build/pickup_tests CC=x86_64-w64-mingw32-gcc
-
       - name: And it really is a Windows binary
         run: file build/pickup* | grep -q 'PE32+ executable'
 
@@ -106,7 +99,11 @@ jobs:
         with:
           msystem: MINGW64
           update: true
+          # git: the suite is built by molto, which resolves its test framework
+          # from git into its store, and an MSYS2 shell does not see the
+          # runner's own git.
           install: >-
+            git
             make
             mingw-w64-x86_64-gcc
 
@@ -141,5 +138,13 @@ jobs:
       # Every case, and a failure here fails the job. It was excused for as
       # long as it was failing, and counting what failed was the whole point
       # of the tally that used to follow it. There is nothing left to count.
+      #
+      # Built by molto (the Makefile hands `test` over); the release is the one
+      # named in .github/molto-version.
+      - name: Take molto from its release
+        run: ./.github/install-molto.sh x86_64-windows.exe sha256sum
       - name: Run the suite
-        run: make test CC=gcc
+        env:
+          C_COMPILER: gcc
+          CPP_COMPILER: g++
+        run: make test

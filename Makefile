@@ -43,15 +43,9 @@ DEPFLAGS := -MMD -MP
 
 BUILD_DIR := build
 BIN       := $(BUILD_DIR)/pickup
-TEST_BIN  := $(BUILD_DIR)/pickup_tests
 
 LIB_SRC  := $(shell find src -name '*.c' ! -name 'main.c')
 MAIN_SRC := src/main.c
-TEST_SRC := $(shell find tests -name '*.c')
-
-# moltest: the test framework, vendored from molto until a registry exists.
-MOLTEST_DIR := modules/moltest
-MOLTEST_SRC := $(shell find $(MOLTEST_DIR)/src -name '*.c')
 
 LIB_OBJ  := $(LIB_SRC:%.c=$(BUILD_DIR)/%.o)
 MAIN_OBJ := $(MAIN_SRC:%.c=$(BUILD_DIR)/%.o)
@@ -77,13 +71,21 @@ $(BUILD_DIR)/%.o: %.c Project.toml
 run: build
 	./$(BIN) $(ARGS)
 
-test: $(TEST_BIN)
-	./$(TEST_BIN)
+# The suite is built by molto.
+#
+# This file compiles the first pickup because something has to; it does not
+# compile the tests, which need moltest — a development dependency molto
+# resolves into its shared store and reuses across projects (Project.toml).
+# Fetching it here as well would be a second store that nothing else reads.
+#
+# MOLTO names the molto to use (on PATH by default). It asks pickup for a
+# compiler; where there is no pickup yet, name one with C_COMPILER, as CI does.
+# TEST_ARGS reaches the suite: `make test TEST_ARGS="-k glob"` runs a few cases.
+MOLTO     ?= molto
+TEST_ARGS ?=
 
-$(TEST_BIN): $(LIB_OBJ) $(MOLTEST_SRC) $(TEST_SRC)
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -I$(MOLTEST_DIR)/include $(LIB_OBJ) $(MOLTEST_SRC) $(TEST_SRC) \
-	    -o $@ $(LDFLAGS)
+test:
+	$(MOLTO) test $(if $(TEST_ARGS),-- $(TEST_ARGS))
 
 clean:
 	rm -rf $(BUILD_DIR)

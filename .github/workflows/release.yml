@@ -76,8 +76,13 @@ jobs:
       # There is no macOS watch in CI yet, so this is where a Mac first runs the
       # suite against the commit being released. A tag whose suite is red here
       # is a binary nobody should be handed.
+      - name: Take molto from its release
+        run: ./.github/install-molto.sh arm64-macos "shasum -a 256"
       - name: Its suite passes here
-        run: make test CC=clang
+        env:
+          C_COMPILER: clang
+          CPP_COMPILER: clang++
+        run: make test
 
       # Not `list` on its own, for the reason the Windows job gives: it exits 0
       # with an empty table. Xcode's compiler answers to `gcc` and `clang` alike

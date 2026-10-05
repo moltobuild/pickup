@@ -80,5 +80,13 @@ jobs:
           ./build/pickup resolve --lang c
           ./build/pickup resolve --lang c++
 
+      # Built by molto (the Makefile hands `test` over), whose release is the
+      # one named in .github/molto-version; its test framework comes from
+      # molto's store.
+      - name: Take molto from its release
+        run: ./.github/install-molto.sh arm64-macos "shasum -a 256"
       - name: Run the suite
-        run: make test CC=clang
+        env:
+          C_COMPILER: clang
+          CPP_COMPILER: clang++
+        run: make test

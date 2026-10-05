@@ -16,11 +16,8 @@ env:
   # installs here. A different major disagrees about line breaking, and a
   # formatting gate that disagrees with the working copy is worse than none.
   LLVM_VERSION: "19"
-  # Pickup is built by molto, and the molto it is built by is a published
-  # release rather than whatever master happens to be. Pinning is the point:
-  # a toolchain manager whose own CI drifts with another repository's tip
-  # cannot tell its bugs from that repository's.
-  MOLTO_VERSION: "0.16.0"
+  # Pickup is built and tested by a published molto, the one named in
+  # .github/molto-version (install-molto.sh says why it is pinned).
 
 jobs:
   # Pickup answers "which compilers does this machine have", so its suite wants
@@ -36,7 +33,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y -o Acquire::Retries=3 gcc-12 g++-12 gcc-13 g++-13
       - run: make build
-      - run: make test
+      # The suite is built by molto (the Makefile hands `test` over), with its
+      # test framework from molto's store.
+      - name: Take molto from its release
+        run: ./.github/install-molto.sh x86_64-linux sha256sum
+      - name: make test
+        env:
+          C_COMPILER: gcc-12
+          CPP_COMPILER: g++-12
+        run: make test
 
   # Nothing that ships should warn, under either compiler, at either level.
   # -O3 is not redundant: GCC's truncation and use-after-free analyses need
@@ -82,20 +87,13 @@ jobs:
       - name: Install GCC 12
         run: sudo apt-get update && sudo apt-get install -y -o Acquire::Retries=3 gcc-12 g++-12
       - name: Take molto from its release
-        run: |
-          base=https://github.com/moltobuild/molto/releases/download/v${MOLTO_VERSION}
-          curl -fsSLO "$base/molto-${MOLTO_VERSION}-x86_64-linux"
-          curl -fsSLO "$base/SHA256SUMS"
-          sha256sum --check --ignore-missing SHA256SUMS
-          install "molto-${MOLTO_VERSION}-x86_64-linux" "${RUNNER_TEMP}/molto"
-          echo "${RUNNER_TEMP}" >> "$GITHUB_PATH"
-      - name: molto builds pickup, and runs its suite
+        run: ./.github/install-molto.sh x86_64-linux sha256sum
+      # The suite runs in `test`, by this same molto; here it builds what ships.
+      - name: molto builds pickup
         env:
           C_COMPILER: gcc-12
           CPP_COMPILER: g++-12
-        run: |
-          molto build
-          molto test
+        run: molto build
 
   # What molto says about pickup's own source. Same molto, same reason.
   style:
@@ -112,13 +110,7 @@ jobs:
           sudo apt-get install -y -o Acquire::Retries=3 gcc-12 g++-12 \
             clang-format-${LLVM_VERSION} clang-tidy-${LLVM_VERSION}
       - name: Take molto from its release
-        run: |
-          base=https://github.com/moltobuild/molto/releases/download/v${MOLTO_VERSION}
-          curl -fsSLO "$base/molto-${MOLTO_VERSION}-x86_64-linux"
-          curl -fsSLO "$base/SHA256SUMS"
-          sha256sum --check --ignore-missing SHA256SUMS
-          install "molto-${MOLTO_VERSION}-x86_64-linux" "${RUNNER_TEMP}/molto"
-          echo "${RUNNER_TEMP}" >> "$GITHUB_PATH"
+        run: ./.github/install-molto.sh x86_64-linux sha256sum
       - name: molto fmt --check
         env:
           C_COMPILER: gcc-12
@@ -163,12 +155,14 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - name: Install GCC 12
         run: sudo apt-get update && sudo apt-get install -y -o Acquire::Retries=3 gcc-12 g++-12
-      # EXTRA_CFLAGS and not CFLAGS: the flags have to reach the compiler to
-      # instrument anything. Passing -fsanitize through LDFLAGS alone links the
-      # runtime and instruments nothing, which reads as a pass and checks
-      # almost nothing.
+      - name: Take molto from its release
+        run: ./.github/install-molto.sh x86_64-linux sha256sum
+      # The suite is built by molto, so the sanitizers are a molto profile:
+      # Project.toml's [profile.custom], whose flags reach the compile and the
+      # link line alike. Compile and link both matter: -fsanitize on the link
+      # alone links the runtime and instruments nothing.
       - name: Address and undefined behaviour
-        run: |
-          make test \
-            EXTRA_CFLAGS="-g -fsanitize=address,undefined -fno-omit-frame-pointer" \
-            LDFLAGS="-fsanitize=address,undefined"
+        env:
+          C_COMPILER: gcc-12
+          CPP_COMPILER: g++-12
+        run: molto test --profile custom

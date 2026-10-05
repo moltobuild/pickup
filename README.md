@@ -109,9 +109,14 @@ find a compiler.
 ## Test
 
 ```sh
-make test
-molto test
+make test                      # molto test
+make test TEST_ARGS="-k scan"  # arguments for the suite, after --
 ```
+
+The suite is built by molto, which takes its test framework,
+[moltest](https://github.com/moltobuild/moltest), from its shared store like
+any project's dependencies (`[dev-deps]` in `Project.toml`). Where there is no
+pickup yet to find a compiler, name one: `C_COMPILER=gcc-12 make test`.
 
 ## Usage
 
@@ -818,10 +823,9 @@ malfunction, and a caller must be able to tell them apart.
 ```
 include/pickup/  Public headers (used as <pickup/...>)
 src/             CLI entry point, commands, detection, services
-tests/           Test suites
-modules/moltest/ Test framework, vendored from molto
+tests/           Test suites (moltest, a [dev-deps] entry)
 ```
 
-`modules/moltest` is a copy, not a dependency: neither tool has a package
-manager yet, which is precisely the problem molto exists to solve. It gets
-unified through the registry once that lands.
+moltest used to be a copy in `modules/moltest`, from before molto could fetch
+a dependency. It is one now: molto resolves it at a tag into its shared store,
+the same copy molto and every other project use.

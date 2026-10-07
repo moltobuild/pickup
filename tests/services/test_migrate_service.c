@@ -7,7 +7,7 @@
 #include <pickup/services/preference_service.h>
 #include <pickup/services/process_service.h>
 
-#include "user_dirs_fixture.h"
+#include "../user_dirs_fixture.h"
 
 #include <stdio.h>
 #include <stdlib.h>

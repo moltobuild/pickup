@@ -3,7 +3,7 @@
 #include <pickup/services/fs_service.h>
 #include <pickup/services/paths_service.h>
 
-#include "user_dirs_fixture.h"
+#include "../user_dirs_fixture.h"
 
 #include <stdio.h>
 #include <stdlib.h>

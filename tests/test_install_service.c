@@ -764,7 +764,16 @@ static bool make_zip_tool(install_fixture *fixture, registry_artifact *artifact)
        GNU tar cannot, and then there is nothing here to make one. */
     const char *with_tar[] = {"tar", "-a", "-cf", archive, "-C", stage, ".", NULL};
     const process_result made = process_try(with_tar, NULL);
-    if (!made.completed || made.exit_code != 0 || !fs_path_exists(archive))
+    if (!made.completed || made.exit_code != 0)
+        return false;
+    /* GNU tar takes the suffix without complaint and writes a tar under that
+       name; only the bytes say whether what came out is a zip. */
+    FILE *file = fopen(archive, "rb");
+    unsigned char magic[2] = {0};
+    const bool read = file != NULL && fread(magic, 1, sizeof magic, file) == sizeof magic;
+    if (file != NULL)
+        (void)fclose(file);
+    if (!read || magic[0] != 'P' || magic[1] != 'K')
         return false;
     if (!describe(archive, "ninja", "1.13.2", registry_kind_tool, artifact))
         return false;

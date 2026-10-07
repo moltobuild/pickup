@@ -1,0 +1,70 @@
+name: Upstream tools
+
+# CMake and Ninja installed the way a user installs them: from the published
+# recipes (molto RFC-0023), downloaded from Kitware's and the Ninja project's
+# releases, verified, unpacked, and asked their version. Reaches the network
+# and the live registry, so it runs on demand and when the install code
+# changes, not on every push.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "src/services/install_service.c"
+      - "src/services/archive_service.c"
+      - ".github/workflows/upstream-tools.yml"
+
+jobs:
+  unix:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15]
+    env:
+      PICKUP_HOME: ${{ github.workspace }}/.pickup-home
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: make build CC=cc
+      - name: Install CMake and Ninja
+        run: |
+          ./build/pickup install cmake
+          ./build/pickup install ninja
+      - name: They run
+        run: |
+          "$PICKUP_HOME"/tools/cmake-*/bin/cmake --version
+          "$PICKUP_HOME"/tools/ninja-*/ninja --version
+          ./build/pickup tools | tee tools.txt
+          grep -E '^build +cmake' tools.txt
+
+  windows:
+    name: windows-2022
+    runs-on: windows-2022
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: msys2/setup-msys2@v2.32.0
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            make
+            mingw-w64-x86_64-gcc
+      - uses: actions/checkout@v4
+      - name: Build
+        run: make build CC=gcc
+      - name: Install CMake and Ninja
+        run: |
+          export PICKUP_HOME="$PWD/.pickup-home"
+          ./build/pickup.exe install cmake
+          ./build/pickup.exe install ninja
+      - name: They run
+        run: |
+          export PICKUP_HOME="$PWD/.pickup-home"
+          "$PICKUP_HOME"/tools/cmake-*/bin/cmake.exe --version
+          "$PICKUP_HOME"/tools/ninja-*/ninja.exe --version

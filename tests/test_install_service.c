@@ -742,6 +742,68 @@ MOLTEST(install_keeps_only_what_is_under_the_strip_prefix) {
     fixture_teardown(&fixture);
 }
 
+/*
+ * Ninja as its project packs it: a zip with the binary at the top.
+ * Made with bsdtar; false where there is none.
+ */
+static bool make_zip_tool(install_fixture *fixture, registry_artifact *artifact) {
+    char stage[256];
+    snprintf(stage, sizeof stage, "%s/zip-stage", fixture->root);
+    if (!fs_make_dirs(stage))
+        return false;
+    char binary[512];
+    snprintf(binary, sizeof binary, "%s/ninja", stage);
+    if (!moltest_fake_program(binary, "out 1.13.2\nexit 0\n", binary, sizeof binary))
+        return false;
+    const char *name = strrchr(binary, '/') + 1;
+
+    char archive[256];
+    snprintf(archive, sizeof archive, "%s/ninja.zip", fixture->root);
+    /* The whole stage, as the gzip tool packs it: a fake program may need
+       what moltest wrote beside it. bsdtar writes a zip from the suffix;
+       GNU tar cannot, and then there is nothing here to make one. */
+    const char *with_tar[] = {"tar", "-a", "-cf", archive, "-C", stage, ".", NULL};
+    const process_result made = process_try(with_tar, NULL);
+    if (!made.completed || made.exit_code != 0)
+        return false;
+    /* GNU tar takes the suffix without complaint and writes a tar under that
+       name; only the bytes say whether what came out is a zip. */
+    FILE *file = fopen(archive, "rb");
+    unsigned char magic[2] = {0};
+    const bool read = file != NULL && fread(magic, 1, sizeof magic, file) == sizeof magic;
+    if (file != NULL)
+        (void)fclose(file);
+    if (!read || magic[0] != 'P' || magic[1] != 'K')
+        return false;
+    if (!describe(archive, "ninja", "1.13.2", registry_kind_tool, artifact))
+        return false;
+    snprintf(artifact->format, sizeof artifact->format, "%s", REGISTRY_FORMAT_ZIP);
+    snprintf(artifact->binary, sizeof artifact->binary, "%s", name);
+    return true;
+}
+
+MOLTEST(install_opens_a_zip) {
+    if (!http_available() || !archive_supports_zip())
+        SKIP("curl and something that opens a zip are needed for an end to end install");
+
+    install_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+    registry_artifact artifact;
+    if (!make_zip_tool(&fixture, &artifact)) {
+        fixture_teardown(&fixture);
+        SKIP("nothing here makes a zip");
+    }
+
+    const install_request request = { .artifact = &artifact };
+    install_report report = install_run(&request);
+    ASSERT_EQ(install_ok, report.status);
+    char path[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(path, sizeof path, "%s/%s", report.directory, artifact.binary));
+    EXPECT_TRUE(fs_path_exists(path));
+
+    fixture_teardown(&fixture);
+}
+
 /* The archive a second install would have to download, taken away: an install
    that still succeeds afterwards did not download anything. */
 static void take_away_the_download(const registry_artifact *artifact) {

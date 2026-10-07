@@ -148,19 +148,22 @@ static const struct {
     {REGISTRY_FORMAT_TAR_GZ, archive_supports_gzip, "gzip"},
     {REGISTRY_FORMAT_TAR_XZ, archive_supports_xz, "xz"},
     {REGISTRY_FORMAT_TAR_ZST, archive_supports_zstd, "zstd"},
+    {REGISTRY_FORMAT_ZIP, archive_supports_zip, "unzip"},
 };
 
 #define PACKING_COUNT (sizeof packings / sizeof packings[0])
 
-/* Add "a", or "a and b", or "a, b and c" to `text`. Three is the whole range,
-   so the joining is spelled out rather than generalised. */
+/* Add "a", or "a and b", or "a, b and c", and so on, to `text`. */
 static void join_packings(char *text, size_t size, const char *const *names, size_t count) {
-    if (count == 1)
-        (void)snprintf(text, size, "%s", names[0]);
-    else if (count == 2)
-        (void)snprintf(text, size, "%s and %s", names[0], names[1]);
-    else if (count >= 3)
-        (void)snprintf(text, size, "%s, %s and %s", names[0], names[1], names[2]);
+    size_t used = 0;
+    text[0] = '\0';
+    for (size_t i = 0; i < count && used < size; i++) {
+        const char *joint = i == 0 ? "" : i + 1 == count ? " and " : ", ";
+        const int wrote = snprintf(text + used, size - used, "%s%s", joint, names[i]);
+        if (wrote < 0)
+            break;
+        used += (size_t)wrote;
+    }
 }
 
 static void check_packings(diagnostics_report *report) {

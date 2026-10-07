@@ -556,6 +556,8 @@ const char *install_format_requirement(const char *format) {
         return archive_xz_requirement();
     if (strcmp(format, REGISTRY_FORMAT_TAR_ZST) == 0)
         return archive_zstd_requirement();
+    if (strcmp(format, REGISTRY_FORMAT_ZIP) == 0)
+        return archive_zip_requirement();
     return NULL;
 }
 
@@ -576,6 +578,8 @@ static bool tar_opens(const char *format) {
         return archive_supports_xz();
     if (strcmp(format, REGISTRY_FORMAT_TAR_ZST) == 0)
         return archive_supports_zstd();
+    if (strcmp(format, REGISTRY_FORMAT_ZIP) == 0)
+        return archive_supports_zip();
     return false;
 }
 

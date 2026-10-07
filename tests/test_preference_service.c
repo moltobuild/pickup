@@ -40,7 +40,7 @@ static bool config_path(const preference_fixture *fixture, char *out, size_t out
     return fs_format_path(out, out_size, "%s/config.toml", fixture->root);
 }
 
-MOLTEST(preference_reports_no_default_on_a_fresh_home) {
+DESCRIBE(preference_reports_no_default_on_a_fresh_home) {
     preference_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -51,7 +51,7 @@ MOLTEST(preference_reports_no_default_on_a_fresh_home) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(preference_round_trips_a_default) {
+DESCRIBE(preference_round_trips_a_default) {
     preference_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -64,7 +64,7 @@ MOLTEST(preference_round_trips_a_default) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(preference_keeps_the_home_out_of_the_cache) {
+DESCRIBE(preference_keeps_the_home_out_of_the_cache) {
     preference_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -82,7 +82,7 @@ MOLTEST(preference_keeps_the_home_out_of_the_cache) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(preference_replaces_rather_than_appends) {
+DESCRIBE(preference_replaces_rather_than_appends) {
     preference_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -106,7 +106,7 @@ MOLTEST(preference_replaces_rather_than_appends) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(preference_clears_and_stays_cleared) {
+DESCRIBE(preference_clears_and_stays_cleared) {
     preference_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -122,7 +122,7 @@ MOLTEST(preference_clears_and_stays_cleared) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(preference_preserves_what_it_did_not_write) {
+DESCRIBE(preference_preserves_what_it_did_not_write) {
     preference_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -146,7 +146,7 @@ MOLTEST(preference_preserves_what_it_did_not_write) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(preference_ignores_a_value_it_did_not_write) {
+DESCRIBE(preference_ignores_a_value_it_did_not_write) {
     preference_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -162,7 +162,7 @@ MOLTEST(preference_ignores_a_value_it_did_not_write) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(preference_reads_the_registry_it_was_pointed_at) {
+DESCRIBE(preference_reads_the_registry_it_was_pointed_at) {
     preference_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -177,7 +177,7 @@ MOLTEST(preference_reads_the_registry_it_was_pointed_at) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(preference_keeps_the_registry_when_the_default_changes) {
+DESCRIBE(preference_keeps_the_registry_when_the_default_changes) {
     preference_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 

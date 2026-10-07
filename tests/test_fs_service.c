@@ -20,7 +20,7 @@
 
 /* --- fs_real_path --- */
 
-MOLTEST(a_real_path_is_absolute_and_resolved) {
+DESCRIBE(a_real_path_is_absolute_and_resolved) {
     char root[PICKUP_PATHS_MAX];
     ASSERT_TRUE(moltest_temp_dir("pickup_realpath", root, sizeof root));
 
@@ -41,14 +41,14 @@ MOLTEST(a_real_path_is_absolute_and_resolved) {
     EXPECT_TRUE(fs_remove_tree(root));
 }
 
-MOLTEST(a_path_that_is_not_there_does_not_resolve) {
+DESCRIBE(a_path_that_is_not_there_does_not_resolve) {
     char resolved[PICKUP_PATHS_MAX];
     EXPECT_FALSE(fs_real_path("/pickup/no/such/place/at/all", resolved, sizeof resolved));
 }
 
 /* An answer that does not fit is refused rather than cut: half a path names a
    different file, and a caller that trusted it would open the wrong one. */
-MOLTEST(a_real_path_that_does_not_fit_is_refused) {
+DESCRIBE(a_real_path_that_does_not_fit_is_refused) {
     char root[PICKUP_PATHS_MAX];
     ASSERT_TRUE(moltest_temp_dir("pickup_realpath_small", root, sizeof root));
 
@@ -62,7 +62,7 @@ MOLTEST(a_real_path_that_does_not_fit_is_refused) {
    `/tmp` is a symlink to `/private/tmp` on macOS, and a suite comparing a path
    pickup resolved against one the fixture did not fails about the spelling
    rather than about anything it meant to check. */
-MOLTEST(a_temporary_directory_is_named_the_way_it_resolves) {
+DESCRIBE(a_temporary_directory_is_named_the_way_it_resolves) {
     char root[PICKUP_PATHS_MAX];
     ASSERT_TRUE(moltest_temp_dir("pickup_temp_resolved", root, sizeof root));
 
@@ -79,7 +79,7 @@ MOLTEST(a_temporary_directory_is_named_the_way_it_resolves) {
    as zero would be a clock counting seconds, and one that came back different
    would be the field read from the wrong place. Darwin spells it `st_mtimespec`
    and Linux `st_mtim`, and this is the test that notices which one was read. */
-MOLTEST(a_modification_time_keeps_its_nanoseconds) {
+DESCRIBE(a_modification_time_keeps_its_nanoseconds) {
 #ifdef _WIN32
     SKIP("Windows keeps whole seconds in struct stat; there are none to keep");
 #else
@@ -115,7 +115,7 @@ MOLTEST(a_modification_time_keeps_its_nanoseconds) {
  * suffix is the permission — which is why `gcc.exe` is a candidate there and
  * `gcc` is not.
  */
-MOLTEST(an_executable_name_drops_what_the_platform_appends) {
+DESCRIBE(an_executable_name_drops_what_the_platform_appends) {
     char bare[64];
 
 #ifdef _WIN32
@@ -142,7 +142,7 @@ MOLTEST(an_executable_name_drops_what_the_platform_appends) {
 #endif
 }
 
-MOLTEST(an_executable_name_that_does_not_fit_is_refused) {
+DESCRIBE(an_executable_name_that_does_not_fit_is_refused) {
     char bare[4];
     EXPECT_FALSE(fs_executable_name("a-very-long-compiler-name", bare, sizeof bare));
 }
@@ -170,7 +170,7 @@ static bool record_directory(const char *directory, void *context) {
  * yields four fragments that are not directories — which is exactly how pickup
  * came to report "no compilers found on PATH" on a machine with a compiler.
  */
-MOLTEST(walking_path_splits_on_what_the_platform_separates_with) {
+DESCRIBE(walking_path_splits_on_what_the_platform_separates_with) {
     walk_record record = {0};
 #ifdef _WIN32
     EXPECT_TRUE(fs_walk_path("C:\\one;C:\\two", record_directory, &record));
@@ -187,7 +187,7 @@ MOLTEST(walking_path_splits_on_what_the_platform_separates_with) {
 
 /* An empty entry is not the current directory: PATH says nothing there, and
    visiting `.` would search wherever the caller happened to be standing. */
-MOLTEST(walking_path_skips_the_gaps) {
+DESCRIBE(walking_path_skips_the_gaps) {
     walk_record record = {0};
 #ifdef _WIN32
     EXPECT_TRUE(fs_walk_path(";C:\\one;;C:\\two;", record_directory, &record));
@@ -197,7 +197,7 @@ MOLTEST(walking_path_skips_the_gaps) {
     EXPECT_EQ((size_t)2, record.count);
 }
 
-MOLTEST(walking_path_stops_when_the_visitor_says_so) {
+DESCRIBE(walking_path_stops_when_the_visitor_says_so) {
     walk_record record = {.stop_after = 2};
 #ifdef _WIN32
     EXPECT_FALSE(fs_walk_path("C:\\a;C:\\b;C:\\c", record_directory, &record));
@@ -209,7 +209,7 @@ MOLTEST(walking_path_stops_when_the_visitor_says_so) {
 
 /* No PATH is not an error: it is a machine with nothing on it, which the
    caller reports as finding nothing rather than as failing. */
-MOLTEST(walking_no_path_at_all_visits_nothing) {
+DESCRIBE(walking_no_path_at_all_visits_nothing) {
     walk_record record = {0};
     EXPECT_TRUE(fs_walk_path(NULL, record_directory, &record));
     EXPECT_EQ((size_t)0, record.count);
@@ -225,7 +225,7 @@ MOLTEST(walking_no_path_at_all_visits_nothing) {
  * `g++`. A name still carrying `.exe` matches neither list, which is how a
  * toolchain came to be recorded with a `c++` chosen to compile C.
  */
-MOLTEST(a_program_name_is_the_last_component_without_the_platforms_suffix) {
+DESCRIBE(a_program_name_is_the_last_component_without_the_platforms_suffix) {
     char name[64];
 
     ASSERT_TRUE(fs_program_name("/usr/bin/gcc", name, sizeof name));
@@ -250,12 +250,12 @@ MOLTEST(a_program_name_is_the_last_component_without_the_platforms_suffix) {
 #endif
 }
 
-MOLTEST(a_program_name_that_does_not_fit_is_refused) {
+DESCRIBE(a_program_name_that_does_not_fit_is_refused) {
     char name[4];
     EXPECT_FALSE(fs_program_name("/usr/bin/a-long-compiler-name", name, sizeof name));
 }
 
-MOLTEST(an_executable_file_carries_what_the_platform_appends) {
+DESCRIBE(an_executable_file_carries_what_the_platform_appends) {
     char file[64];
     ASSERT_TRUE(fs_executable_file("g++", file, sizeof file));
 #ifdef _WIN32
@@ -268,7 +268,7 @@ MOLTEST(an_executable_file_carries_what_the_platform_appends) {
 /* The two are inverses, which is the property the C++ driver lookup relies on:
    a name is turned into a file, the file is found, and the file is read back
    as the name it stands for. */
-MOLTEST(a_name_survives_the_trip_through_a_filename) {
+DESCRIBE(a_name_survives_the_trip_through_a_filename) {
     char file[64];
     char back[64];
     ASSERT_TRUE(fs_executable_file("clang++", file, sizeof file));
@@ -285,7 +285,7 @@ MOLTEST(a_name_survives_the_trip_through_a_filename) {
  * reported "this compiler cannot link" — which is how a working gcc came to be
  * rejected with nothing listed as missing.
  */
-MOLTEST(a_temporary_file_is_made_where_the_platform_keeps_them) {
+DESCRIBE(a_temporary_file_is_made_where_the_platform_keeps_them) {
     char first[PICKUP_PATHS_MAX];
     ASSERT_TRUE(fs_temp_file("pickup_probe", first, sizeof first));
     EXPECT_TRUE(fs_path_exists(first));
@@ -303,7 +303,7 @@ MOLTEST(a_temporary_file_is_made_where_the_platform_keeps_them) {
 
 /* A probe links a program here and then runs it, and on Windows what makes a
    file runnable is its name. */
-MOLTEST(a_temporary_program_is_named_so_it_can_be_run) {
+DESCRIBE(a_temporary_program_is_named_so_it_can_be_run) {
     char path[PICKUP_PATHS_MAX];
     ASSERT_TRUE(fs_temp_program("pickup_probe", path, sizeof path));
     EXPECT_TRUE(fs_path_exists(path));
@@ -319,7 +319,7 @@ MOLTEST(a_temporary_program_is_named_so_it_can_be_run) {
     EXPECT_EQ(0, remove(path));
 }
 
-MOLTEST(a_temporary_path_that_does_not_fit_is_refused) {
+DESCRIBE(a_temporary_path_that_does_not_fit_is_refused) {
     char tiny[8];
     EXPECT_FALSE(fs_temp_file("a_rather_long_prefix", tiny, sizeof tiny));
     EXPECT_FALSE(fs_temp_program("a_rather_long_prefix", tiny, sizeof tiny));

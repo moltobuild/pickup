@@ -11,7 +11,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-MOLTEST(resolve_rejects_a_malformed_request) {
+DESCRIBE(resolve_rejects_a_malformed_request) {
     /* An unknown requirement must be an error, never silently dropped: a
        dropped requirement would return a compiler that does not meet it. */
     const resolve_request unknown_feature = { .features = "no_such_feature" };
@@ -24,7 +24,7 @@ MOLTEST(resolve_rejects_a_malformed_request) {
     EXPECT_EQ(exit_usage_error, resolve_command_run(&unknown_lang, false));
 }
 
-MOLTEST(resolve_answers_when_nothing_qualifies) {
+DESCRIBE(resolve_answers_when_nothing_qualifies) {
     /* Requiring every C23 feature at once finds nothing on a machine whose
        newest compiler is partial — and "nothing matches" is an answer with its
        own exit code, not a malfunction. */
@@ -36,7 +36,7 @@ MOLTEST(resolve_answers_when_nothing_qualifies) {
     EXPECT_TRUE(code == exit_ok || code == exit_no_match);
 }
 
-MOLTEST(resolve_never_returns_a_compiler_that_lacks_the_feature) {
+DESCRIBE(resolve_never_returns_a_compiler_that_lacks_the_feature) {
     if (access("/usr/bin/gcc-9", X_OK) != 0 || access("/usr/bin/gcc-12", X_OK) != 0)
         SKIP("gcc-9 and gcc-12 are not both installed");
 
@@ -61,14 +61,14 @@ MOLTEST(resolve_never_returns_a_compiler_that_lacks_the_feature) {
     EXPECT_EQ(exit_ok, resolve_command_run(&gcc9_would_pass_on_flags_alone, false));
 }
 
-MOLTEST(resolve_emits_toml_for_machines) {
+DESCRIBE(resolve_emits_toml_for_machines) {
     const resolve_request any_c = { .lang = "c" };
     /* The TOML form is what Molto reads; it must succeed wherever the text
        form does. */
     EXPECT_EQ(resolve_command_run(&any_c, false), resolve_command_run(&any_c, true));
 }
 
-MOLTEST(resolve_requires_a_cxx_driver_for_cxx) {
+DESCRIBE(resolve_requires_a_cxx_driver_for_cxx) {
     /* Parsing C++ is not enough: without a C++ driver there is nothing to
        invoke, so such a toolchain must not be offered for C++. */
     const resolve_request cxx = { .lang = "c++" };
@@ -112,7 +112,7 @@ static bool resolve_saying(const resolve_request *request, int *code, char *text
  * fails, and it has to say so: rejected for what the candidate *is* rather than
  * for something it lacks, which is the same shape as the vendor below.
  */
-MOLTEST(resolve_says_the_target_when_the_target_is_what_did_not_match) {
+DESCRIBE(resolve_says_the_target_when_the_target_is_what_did_not_match) {
     const resolve_request elsewhere = {.lang = "c", .target = "sparc-unknown-none-elf"};
     int code = 0;
     char text[8192] = "";
@@ -129,7 +129,7 @@ MOLTEST(resolve_says_the_target_when_the_target_is_what_did_not_match) {
 /* The target this machine's compilers actually emit for is accepted, spelled
    the way a compiler reports it. Read back from the answer rather than assumed,
    because the triple differs between distributions. */
-MOLTEST(resolve_accepts_the_target_its_own_compilers_report) {
+DESCRIBE(resolve_accepts_the_target_its_own_compilers_report) {
     const resolve_request here = {.lang = "c"};
     int code = 0;
     char text[8192] = "";
@@ -153,7 +153,7 @@ MOLTEST(resolve_accepts_the_target_its_own_compilers_report) {
 /* The bug this closes: a candidate rejected for its vendor was listed with an
    empty `missing:`, because the reason was walked out of a feature catalogue
    that cannot hold it. Seven compilers, seven blank lines, and no diagnosis. */
-MOLTEST(resolve_says_the_vendor_when_the_vendor_is_what_did_not_match) {
+DESCRIBE(resolve_says_the_vendor_when_the_vendor_is_what_did_not_match) {
     char path[PICKUP_PATHS_MAX];
     ASSERT_TRUE(moltest_temp_file("pickup_resolve_err", path, sizeof path));
 

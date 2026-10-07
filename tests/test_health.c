@@ -143,14 +143,14 @@ MOLTEST_FAKE(cc_needs_the_libcxx_flag) {
     return 0;
 }
 
-MOLTEST(health_reports_no_driver_when_there_is_none) {
+DESCRIBE(health_reports_no_driver_when_there_is_none) {
     /* An empty cxx_path is the ordinary case of a C compiler with no C++ side,
        and must not read as a compiler that failed. */
     EXPECT_EQ(health_no_driver, health_probe(NULL, lang_c, NULL, 0, true));
     EXPECT_EQ(health_no_driver, health_probe("", lang_c, NULL, 0, true));
 }
 
-MOLTEST(health_reports_no_driver_when_the_binary_cannot_run) {
+DESCRIBE(health_reports_no_driver_when_the_binary_cannot_run) {
     /* A path that names nothing executable is an absent compiler, not one
        whose standard library is incomplete. Reporting the latter would send a
        reader looking for a package that was never the problem. */
@@ -158,7 +158,7 @@ MOLTEST(health_reports_no_driver_when_the_binary_cannot_run) {
               health_probe("/nonexistent/pickup/cc", lang_c, NULL, 0, true));
 }
 
-MOLTEST(health_reports_missing_headers_when_the_include_fails) {
+DESCRIBE(health_reports_missing_headers_when_the_include_fails) {
     fake_compiler fake;
     /* Refuses everything, the way a compiler does when <iostream> is nowhere
        to be found. */
@@ -169,7 +169,7 @@ MOLTEST(health_reports_missing_headers_when_the_include_fails) {
     fake_teardown(&fake);
 }
 
-MOLTEST(health_reports_no_link_when_only_the_parse_succeeds) {
+DESCRIBE(health_reports_no_link_when_only_the_parse_succeeds) {
     fake_compiler fake;
     /* Parses and will not link: the standard library's headers are present and
        the runtime it needs is not. */
@@ -180,7 +180,7 @@ MOLTEST(health_reports_no_link_when_only_the_parse_succeeds) {
     fake_teardown(&fake);
 }
 
-MOLTEST(health_reports_no_run_when_the_executable_will_not_start) {
+DESCRIBE(health_reports_no_run_when_the_executable_will_not_start) {
     fake_compiler fake;
     /* The case that motivated the whole module: the link exits zero, and what
        it produced cannot be executed. Nothing that stops at the exit status of
@@ -192,7 +192,7 @@ MOLTEST(health_reports_no_run_when_the_executable_will_not_start) {
     fake_teardown(&fake);
 }
 
-MOLTEST(health_reports_ok_only_when_the_program_actually_ran) {
+DESCRIBE(health_reports_ok_only_when_the_program_actually_ran) {
     fake_compiler fake;
     ASSERT_TRUE(fake_setup(&fake, "cc_links_and_runs"));
 
@@ -202,7 +202,7 @@ MOLTEST(health_reports_ok_only_when_the_program_actually_ran) {
     fake_teardown(&fake);
 }
 
-MOLTEST(health_passes_the_flags_it_was_given_to_the_compiler) {
+DESCRIBE(health_passes_the_flags_it_was_given_to_the_compiler) {
     /* Succeeds only when -stdlib=libc++ is on the command line. This is the
        claim recipe_discover rests on: a candidate set of flags is proven by
        handing them to the compiler, so they have to arrive. */
@@ -217,7 +217,7 @@ MOLTEST(health_passes_the_flags_it_was_given_to_the_compiler) {
     fake_teardown(&flagged);
 }
 
-MOLTEST(health_leaves_nothing_behind) {
+DESCRIBE(health_leaves_nothing_behind) {
     fake_compiler fake;
     ASSERT_TRUE(fake_setup(&fake, "cc_links_and_says_where"));
 
@@ -236,7 +236,7 @@ MOLTEST(health_leaves_nothing_behind) {
     fake_teardown(&fake);
 }
 
-MOLTEST(health_describes_every_outcome) {
+DESCRIBE(health_describes_every_outcome) {
     /* doctor prints these, so none may be empty and none may read like
        another. */
     const health_status all[] = {
@@ -265,7 +265,7 @@ MOLTEST(health_describes_every_outcome) {
  * says which bar applies, and the same fake — one that links something
  * unrunnable — is a failure under one and a success under the other.
  */
-MOLTEST(health_asks_only_that_it_linked_when_the_output_is_not_for_here) {
+DESCRIBE(health_asks_only_that_it_linked_when_the_output_is_not_for_here) {
     fake_compiler fake;
     ASSERT_TRUE(fake_setup(&fake, "cc_links_something_that_will_not_start"));
 
@@ -282,7 +282,7 @@ MOLTEST(health_asks_only_that_it_linked_when_the_output_is_not_for_here) {
 
 /* And the relaxation is not a blanket pass: a compiler that cannot link is
    still broken, whoever the output was for. */
-MOLTEST(health_still_refuses_one_that_cannot_link_for_elsewhere) {
+DESCRIBE(health_still_refuses_one_that_cannot_link_for_elsewhere) {
     fake_compiler fake;
     ASSERT_TRUE(fake_setup(&fake, "cc_parses_but_will_not_link"));
 

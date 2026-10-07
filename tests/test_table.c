@@ -26,7 +26,7 @@ static const char *const headers[] = { "NAME", "VENDOR", "TARGET" };
     return true;
 }
 
-MOLTEST(table_starts_as_wide_as_its_headers) {
+DESCRIBE(table_starts_as_wide_as_its_headers) {
     table columns;
     table_init(&columns, headers, COLUMN_COUNT);
 
@@ -35,7 +35,7 @@ MOLTEST(table_starts_as_wide_as_its_headers) {
     EXPECT_EQ(6, table_column_width(&columns, 2));
 }
 
-MOLTEST(table_widens_a_column_to_fit_a_longer_cell) {
+DESCRIBE(table_widens_a_column_to_fit_a_longer_cell) {
     table columns;
     table_init(&columns, headers, COLUMN_COUNT);
 
@@ -48,7 +48,7 @@ MOLTEST(table_widens_a_column_to_fit_a_longer_cell) {
     EXPECT_EQ(6, table_column_width(&columns, 1));
 }
 
-MOLTEST(table_keeps_the_widest_cell_seen) {
+DESCRIBE(table_keeps_the_widest_cell_seen) {
     table columns;
     table_init(&columns, headers, COLUMN_COUNT);
 
@@ -61,7 +61,7 @@ MOLTEST(table_keeps_the_widest_cell_seen) {
     EXPECT_EQ(23, table_column_width(&columns, 0));
 }
 
-MOLTEST(table_pads_every_column_but_the_last) {
+DESCRIBE(table_pads_every_column_but_the_last) {
     table columns;
     table_init(&columns, headers, COLUMN_COUNT);
 
@@ -76,7 +76,7 @@ MOLTEST(table_pads_every_column_but_the_last) {
     EXPECT_STREQ("cc    gcc     x86_64-linux-gnu\n", row);
 }
 
-MOLTEST(table_treats_a_missing_cell_as_empty) {
+DESCRIBE(table_treats_a_missing_cell_as_empty) {
     table columns;
     table_init(&columns, headers, COLUMN_COUNT);
 
@@ -90,7 +90,7 @@ MOLTEST(table_treats_a_missing_cell_as_empty) {
     EXPECT_STREQ("cc            \n", row);
 }
 
-MOLTEST(table_truncates_more_columns_than_it_can_hold) {
+DESCRIBE(table_truncates_more_columns_than_it_can_hold) {
     const char *const many[TABLE_MAX_COLUMNS + 3] = { 0 };
     table columns;
     table_init(&columns, many, TABLE_MAX_COLUMNS + 3);

@@ -6,7 +6,7 @@
 
 #include <string.h>
 
-MOLTEST(toolchain_version_parses_partial_versions) {
+DESCRIBE(toolchain_version_parses_partial_versions) {
     toolchain_version version;
 
     ASSERT_TRUE(toolchain_version_parse("12.3.0", &version));
@@ -25,7 +25,7 @@ MOLTEST(toolchain_version_parses_partial_versions) {
     EXPECT_FALSE(toolchain_version_parse("not-a-version", &version));
 }
 
-MOLTEST(toolchain_version_orders_by_component) {
+DESCRIBE(toolchain_version_orders_by_component) {
     toolchain_version nine = { 9, 5, 0 };
     toolchain_version twelve = { 12, 3, 0 };
     toolchain_version twelve_patch = { 12, 3, 1 };
@@ -36,13 +36,13 @@ MOLTEST(toolchain_version_orders_by_component) {
     EXPECT_TRUE(toolchain_version_compare(twelve_patch, twelve) > 0);
 }
 
-MOLTEST(toolchain_version_formats_all_components) {
+DESCRIBE(toolchain_version_formats_all_components) {
     char text[32];
     toolchain_version_format((toolchain_version){ 12, 3, 0 }, text, sizeof text);
     EXPECT_STREQ("12.3.0", text);
 }
 
-MOLTEST(toolchain_vendor_names_round_trip) {
+DESCRIBE(toolchain_vendor_names_round_trip) {
     EXPECT_STREQ("gcc", toolchain_vendor_name(vendor_gcc));
     EXPECT_STREQ("apple-clang", toolchain_vendor_name(vendor_apple_clang));
     EXPECT_EQ(vendor_clang, toolchain_vendor_parse("clang"));
@@ -54,7 +54,7 @@ MOLTEST(toolchain_vendor_names_round_trip) {
  * happens to be named.
  */
 
-MOLTEST(toolchain_id_is_the_vendor_and_version) {
+DESCRIBE(toolchain_id_is_the_vendor_and_version) {
     toolchain chain = { .vendor = vendor_gcc, .version = { 12, 3, 0 } };
     snprintf(chain.target, sizeof chain.target, "%s", "x86_64-linux-gnu");
     toolchain_make_id(&chain);
@@ -68,7 +68,7 @@ MOLTEST(toolchain_id_is_the_vendor_and_version) {
     EXPECT_STREQ("clang@22.1.8", clang.id);
 }
 
-MOLTEST(toolchain_id_marks_a_target_that_is_not_the_ordinary_one) {
+DESCRIBE(toolchain_id_marks_a_target_that_is_not_the_ordinary_one) {
     toolchain chain = { .vendor = vendor_gcc, .version = { 12, 3, 0 } };
     snprintf(chain.target, sizeof chain.target, "%s", "x86_64-conda-linux-gnu");
     toolchain_make_id(&chain);
@@ -76,7 +76,7 @@ MOLTEST(toolchain_id_marks_a_target_that_is_not_the_ordinary_one) {
     EXPECT_STREQ("gcc@12.3.0-conda", chain.id);
 }
 
-MOLTEST(toolchain_tag_comes_from_the_target_alone) {
+DESCRIBE(toolchain_tag_comes_from_the_target_alone) {
     char tag[64];
 
     /* Derived from the triple itself, never by comparing toolchains with each
@@ -97,7 +97,7 @@ MOLTEST(toolchain_tag_comes_from_the_target_alone) {
     EXPECT_STREQ("", tag);
 }
 
-MOLTEST(toolchain_emits_for_host_reads_the_architecture_too) {
+DESCRIBE(toolchain_emits_for_host_reads_the_architecture_too) {
     toolchain chain = {0};
 
     /* Nothing to compare against is not a mismatch: a compiler that answered
@@ -138,7 +138,7 @@ MOLTEST(toolchain_emits_for_host_reads_the_architecture_too) {
 #endif
 }
 
-MOLTEST(toolchain_answers_to_the_shorter_forms_a_person_types) {
+DESCRIBE(toolchain_answers_to_the_shorter_forms_a_person_types) {
     toolchain chain = { .vendor = vendor_gcc, .version = { 12, 3, 0 } };
     snprintf(chain.target, sizeof chain.target, "%s", "x86_64-linux-gnu");
     snprintf(chain.path, sizeof chain.path, "%s", "/usr/bin/gcc-12");
@@ -162,7 +162,7 @@ MOLTEST(toolchain_answers_to_the_shorter_forms_a_person_types) {
     EXPECT_FALSE(toolchain_matches(&chain, NULL));
 }
 
-MOLTEST(toolchain_tells_two_of_the_same_version_apart_by_their_tag) {
+DESCRIBE(toolchain_tells_two_of_the_same_version_apart_by_their_tag) {
     toolchain system = { .vendor = vendor_gcc, .version = { 12, 3, 0 } };
     snprintf(system.target, sizeof system.target, "%s", "x86_64-linux-gnu");
     toolchain_make_id(&system);
@@ -181,7 +181,7 @@ MOLTEST(toolchain_tells_two_of_the_same_version_apart_by_their_tag) {
     EXPECT_TRUE(toolchain_matches(&system, "gcc@12.3.0"));
 }
 
-MOLTEST(toolchain_names_both_sources) {
+DESCRIBE(toolchain_names_both_sources) {
     EXPECT_STREQ("system", toolchain_source_name(toolchain_source_system));
     EXPECT_STREQ("pickup", toolchain_source_name(toolchain_source_pickup));
 }

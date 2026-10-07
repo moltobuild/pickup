@@ -125,7 +125,7 @@ static bool make_toolchain(install_fixture *fixture, registry_artifact *artifact
     return describe(archive, "clang", "1.0.0", registry_kind_toolchain, artifact);
 }
 
-MOLTEST(install_places_a_verified_toolchain_under_the_pickup_home) {
+DESCRIBE(install_places_a_verified_toolchain_under_the_pickup_home) {
     if (!tools_present())
         SKIP("curl, tar with zstd and gcc-12 are needed for an end to end install");
 
@@ -170,7 +170,7 @@ MOLTEST(install_places_a_verified_toolchain_under_the_pickup_home) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(install_discards_an_archive_whose_digest_does_not_match) {
+DESCRIBE(install_discards_an_archive_whose_digest_does_not_match) {
     if (!tools_present())
         SKIP("curl, tar with zstd and gcc-12 are needed for an end to end install");
 
@@ -202,7 +202,7 @@ MOLTEST(install_discards_an_archive_whose_digest_does_not_match) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(install_refuses_what_was_withdrawn_unless_told_otherwise) {
+DESCRIBE(install_refuses_what_was_withdrawn_unless_told_otherwise) {
     if (!tools_present())
         SKIP("curl, tar with zstd and gcc-12 are needed for an end to end install");
 
@@ -230,7 +230,7 @@ MOLTEST(install_refuses_what_was_withdrawn_unless_told_otherwise) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(install_refuses_a_packing_it_cannot_open) {
+DESCRIBE(install_refuses_a_packing_it_cannot_open) {
     install_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -283,7 +283,7 @@ static const char *a_packing_this_tar_refuses(void) {
     return NULL;
 }
 
-MOLTEST(install_lets_through_a_packing_this_tar_opens) {
+DESCRIBE(install_lets_through_a_packing_this_tar_opens) {
     install_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -310,7 +310,7 @@ MOLTEST(install_lets_through_a_packing_this_tar_opens) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(install_refuses_a_packing_this_tar_cannot_open_before_downloading) {
+DESCRIBE(install_refuses_a_packing_this_tar_cannot_open_before_downloading) {
     install_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -341,7 +341,7 @@ MOLTEST(install_refuses_a_packing_this_tar_cannot_open_before_downloading) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(install_names_the_program_a_packing_needs) {
+DESCRIBE(install_names_the_program_a_packing_needs) {
     /* Every packing pickup accepts has a program to name when the tar cannot
        open it; anything else is not a packing pickup knows. */
     EXPECT_TRUE(install_format_requirement(REGISTRY_FORMAT_TAR_GZ) != NULL);
@@ -351,7 +351,7 @@ MOLTEST(install_names_the_program_a_packing_needs) {
     EXPECT_TRUE(install_format_requirement(NULL) == NULL);
 }
 
-MOLTEST(install_rejects_an_archive_without_a_compiler_in_it) {
+DESCRIBE(install_rejects_an_archive_without_a_compiler_in_it) {
     if (!tools_present())
         SKIP("curl, tar with zstd and gcc-12 are needed for an end to end install");
 
@@ -388,7 +388,7 @@ MOLTEST(install_rejects_an_archive_without_a_compiler_in_it) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(install_puts_a_tool_where_nothing_resolves_against_it) {
+DESCRIBE(install_puts_a_tool_where_nothing_resolves_against_it) {
     if (!http_available() || !archive_available() || !archive_supports_zstd())
         SKIP("curl and tar with zstd are needed for an end to end install");
 
@@ -437,7 +437,7 @@ MOLTEST(install_puts_a_tool_where_nothing_resolves_against_it) {
 
 /* With nothing relocated, the tool lands in the data directory and the archive
    in the cache directory: the platform's places, and not the legacy home. */
-MOLTEST(install_uses_the_platform_directories_when_nothing_is_relocated) {
+DESCRIBE(install_uses_the_platform_directories_when_nothing_is_relocated) {
     if (!http_available() || !archive_available() || !archive_supports_zstd())
         SKIP("curl and tar with zstd are needed for an end to end install");
 
@@ -488,7 +488,7 @@ MOLTEST(install_uses_the_platform_directories_when_nothing_is_relocated) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(install_rejects_a_tool_whose_binary_says_nothing) {
+DESCRIBE(install_rejects_a_tool_whose_binary_says_nothing) {
     if (!http_available() || !archive_available() || !archive_supports_zstd())
         SKIP("curl and tar with zstd are needed for an end to end install");
 
@@ -527,7 +527,7 @@ MOLTEST(install_rejects_a_tool_whose_binary_says_nothing) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(install_status_messages_cover_every_outcome) {
+DESCRIBE(install_status_messages_cover_every_outcome) {
     /* A caller prints these; none may come out blank. */
     const install_status all[] = {
         install_ok, install_no_downloader, install_no_extractor, install_no_codec,
@@ -591,7 +591,7 @@ static bool make_cross_toolchain(install_fixture *fixture, registry_artifact *ar
  * the installed directory is named after a target the toolchain does not emit
  * for, and the report names a driver the publisher did not mean.
  */
-MOLTEST(install_identifies_a_toolchain_through_the_driver_its_recipe_names) {
+DESCRIBE(install_identifies_a_toolchain_through_the_driver_its_recipe_names) {
     if (!tools_present())
         SKIP("curl, tar with zstd and gcc-12 are needed for an end to end install");
 
@@ -612,7 +612,7 @@ MOLTEST(install_identifies_a_toolchain_through_the_driver_its_recipe_names) {
 
 /* And a recipe that names nothing is still served by the search: the field is
    a hint the publisher may leave out, not a new requirement. */
-MOLTEST(install_falls_back_to_the_search_when_a_recipe_names_no_driver) {
+DESCRIBE(install_falls_back_to_the_search_when_a_recipe_names_no_driver) {
     if (!tools_present())
         SKIP("curl, tar with zstd and gcc-12 are needed for an end to end install");
 
@@ -717,7 +717,7 @@ static bool make_upstream_tool(install_fixture *fixture, registry_artifact *arti
 }
 
 /* What is under strip_prefix becomes the install, and nothing else does. */
-MOLTEST(install_keeps_only_what_is_under_the_strip_prefix) {
+DESCRIBE(install_keeps_only_what_is_under_the_strip_prefix) {
     if (!gzip_installs_work())
         SKIP("curl and tar with gzip are needed for an end to end install");
 
@@ -782,7 +782,7 @@ static bool make_zip_tool(install_fixture *fixture, registry_artifact *artifact)
     return true;
 }
 
-MOLTEST(install_opens_a_zip) {
+DESCRIBE(install_opens_a_zip) {
     if (!http_available() || !archive_supports_zip())
         SKIP("curl and something that opens a zip are needed for an end to end install");
 
@@ -817,7 +817,7 @@ static void take_away_the_download(const registry_artifact *artifact) {
  * is the same bytes: fetching them again is a download, a digest and an unpack
  * spent on arriving where things already are.
  */
-MOLTEST(install_downloads_nothing_for_a_tool_already_installed) {
+DESCRIBE(install_downloads_nothing_for_a_tool_already_installed) {
     if (!gzip_installs_work())
         SKIP("curl and tar with gzip are needed for an end to end install");
 
@@ -844,7 +844,7 @@ MOLTEST(install_downloads_nothing_for_a_tool_already_installed) {
 
 /* `--force` is the way to ask for the download anyway: here it is attempted,
    and fails because the archive is gone, which is the proof it was. */
-MOLTEST(install_downloads_again_when_forced) {
+DESCRIBE(install_downloads_again_when_forced) {
     if (!gzip_installs_work())
         SKIP("curl and tar with gzip are needed for an end to end install");
 
@@ -868,7 +868,7 @@ MOLTEST(install_downloads_again_when_forced) {
 
 /* What an install leaves behind says what it installed, which is how the
    next one knows the bytes are the same. */
-MOLTEST(install_records_what_it_installed) {
+DESCRIBE(install_records_what_it_installed) {
     if (!gzip_installs_work())
         SKIP("curl and tar with gzip are needed for an end to end install");
 
@@ -896,7 +896,7 @@ MOLTEST(install_records_what_it_installed) {
 
 /* An install that recorded different bytes under the same name is not the
    same thing, however it is named: it is replaced rather than kept. */
-MOLTEST(install_replaces_a_tool_that_recorded_other_bytes) {
+DESCRIBE(install_replaces_a_tool_that_recorded_other_bytes) {
     if (!gzip_installs_work())
         SKIP("curl and tar with gzip are needed for an end to end install");
 
@@ -923,7 +923,7 @@ MOLTEST(install_replaces_a_tool_that_recorded_other_bytes) {
 
 /* A tool installed before installs left a record still counts, as long as it
    is where that version is installed and it answers. */
-MOLTEST(install_counts_a_tool_installed_before_records_were_kept) {
+DESCRIBE(install_counts_a_tool_installed_before_records_were_kept) {
     if (!gzip_installs_work())
         SKIP("curl and tar with gzip are needed for an end to end install");
 
@@ -957,7 +957,7 @@ static bool has_a_gcc(void) {
     return result.completed && result.exit_code == 0;
 }
 
-MOLTEST(install_downloads_nothing_for_a_toolchain_already_installed) {
+DESCRIBE(install_downloads_nothing_for_a_toolchain_already_installed) {
 #ifdef _WIN32
     /* The compiler in the archive is a script named `clang`, and on Windows a
        file is a program by being called `.exe`: the install rightly finds no

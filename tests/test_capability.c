@@ -7,7 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 
-MOLTEST(capability_catalog_is_addressable_by_id) {
+DESCRIBE(capability_catalog_is_addressable_by_id) {
     size_t count = 0;
     const capability *catalog = capability_catalog(&count);
     ASSERT_NOT_NULL(catalog);
@@ -21,7 +21,7 @@ MOLTEST(capability_catalog_is_addressable_by_id) {
     EXPECT_TRUE(capability_index("no_such_feature") == SIZE_MAX);
 }
 
-MOLTEST(capability_set_tracks_individual_features) {
+DESCRIBE(capability_set_tracks_individual_features) {
     capability_set set = { 0 };
     size_t nodiscard = capability_index("attr_nodiscard");
     size_t typeof_id = capability_index("typeof");
@@ -32,7 +32,7 @@ MOLTEST(capability_set_tracks_individual_features) {
     EXPECT_FALSE(capability_set_has(set, typeof_id));
 }
 
-MOLTEST(capability_set_contains_is_a_subset_test) {
+DESCRIBE(capability_set_contains_is_a_subset_test) {
     capability_set available = { 0 };
     capability_set required = { 0 };
     size_t a = capability_index("attr_nodiscard");
@@ -51,7 +51,7 @@ MOLTEST(capability_set_contains_is_a_subset_test) {
     EXPECT_TRUE(capability_set_contains(none, none));
 }
 
-MOLTEST(capability_set_for_standard_groups_by_language) {
+DESCRIBE(capability_set_for_standard_groups_by_language) {
     capability_set c23 = capability_set_for_standard(lang_c, "c2x");
     EXPECT_TRUE(capability_set_has(c23, capability_index("attr_nodiscard")));
     /* A C++ feature must not leak into a C standard's set. */
@@ -61,7 +61,7 @@ MOLTEST(capability_set_for_standard_groups_by_language) {
     EXPECT_EQ(0, (int)unknown.bits);
 }
 
-MOLTEST(capability_catalog_fingerprint_is_stable_within_a_build) {
+DESCRIBE(capability_catalog_fingerprint_is_stable_within_a_build) {
     /* Anything that stores feature bits compares this to decide whether they
        still mean what they meant, so it must not wander between calls. */
     EXPECT_TRUE(capability_catalog_fingerprint() == capability_catalog_fingerprint());
@@ -71,7 +71,7 @@ MOLTEST(capability_catalog_fingerprint_is_stable_within_a_build) {
 /* The measurement this whole project is built on: gcc 9 accepts -std=c2x and
    does not implement [[nodiscard]]. Skipped where those compilers are absent,
    because the claim is about them, not about every machine. */
-MOLTEST(capability_probing_separates_accepting_a_flag_from_implementing_it) {
+DESCRIBE(capability_probing_separates_accepting_a_flag_from_implementing_it) {
     if (access("/usr/bin/gcc-9", X_OK) != 0 || access("/usr/bin/gcc-12", X_OK) != 0)
         SKIP("gcc-9 and gcc-12 are not both installed");
 
@@ -93,13 +93,13 @@ MOLTEST(capability_probing_separates_accepting_a_flag_from_implementing_it) {
     EXPECT_TRUE(capability_set_has(new_features, static_assert_id));
 }
 
-MOLTEST(capability_rejects_a_standard_the_compiler_does_not_know) {
+DESCRIBE(capability_rejects_a_standard_the_compiler_does_not_know) {
     if (access("/usr/bin/gcc-12", X_OK) != 0)
         SKIP("gcc-12 is not installed");
     EXPECT_FALSE(capability_accepts_standard("/usr/bin/gcc-12", lang_c, "c47"));
 }
 
-MOLTEST(capability_probing_a_missing_compiler_proves_nothing) {
+DESCRIBE(capability_probing_a_missing_compiler_proves_nothing) {
     capability_set set = capability_probe("/nonexistent/compiler", lang_c);
     EXPECT_EQ(0, (int)set.bits);
     EXPECT_FALSE(capability_accepts_standard("/nonexistent/compiler", lang_c, "c11"));

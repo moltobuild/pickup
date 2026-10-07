@@ -192,7 +192,7 @@ static int findings_about(const diagnostics_report *report, const char *prefix) 
     return count;
 }
 
-MOLTEST(diagnostics_reports_one_cause_rather_than_every_symptom) {
+DESCRIBE(diagnostics_reports_one_cause_rather_than_every_symptom) {
     fake_machine machine;
     ASSERT_TRUE(machine_setup(&machine, false));
 
@@ -226,7 +226,7 @@ MOLTEST(diagnostics_reports_one_cause_rather_than_every_symptom) {
     free(report);
 }
 
-MOLTEST(diagnostics_blames_only_the_compilers_of_the_broken_installation) {
+DESCRIBE(diagnostics_blames_only_the_compilers_of_the_broken_installation) {
     fake_machine machine;
     ASSERT_TRUE(machine_setup(&machine, false));
 
@@ -265,7 +265,7 @@ MOLTEST(diagnostics_blames_only_the_compilers_of_the_broken_installation) {
     free(report);
 }
 
-MOLTEST(diagnostics_names_the_package_of_the_distribution_it_is_on) {
+DESCRIBE(diagnostics_names_the_package_of_the_distribution_it_is_on) {
     fake_machine machine;
     ASSERT_TRUE(machine_setup(&machine, false));
 
@@ -292,7 +292,7 @@ MOLTEST(diagnostics_names_the_package_of_the_distribution_it_is_on) {
     free(report);
 }
 
-MOLTEST(diagnostics_suggests_no_package_it_cannot_name) {
+DESCRIBE(diagnostics_suggests_no_package_it_cannot_name) {
     fake_machine machine;
     ASSERT_TRUE(machine_setup(&machine, false));
 
@@ -316,7 +316,7 @@ MOLTEST(diagnostics_suggests_no_package_it_cannot_name) {
     free(report);
 }
 
-MOLTEST(diagnostics_finds_nothing_wrong_with_a_whole_installation) {
+DESCRIBE(diagnostics_finds_nothing_wrong_with_a_whole_installation) {
     fake_machine machine;
     ASSERT_TRUE(machine_setup(&machine, true));
 
@@ -339,7 +339,7 @@ MOLTEST(diagnostics_finds_nothing_wrong_with_a_whole_installation) {
     free(report);
 }
 
-MOLTEST(diagnostics_does_not_fault_a_c_compiler_for_having_no_cxx) {
+DESCRIBE(diagnostics_does_not_fault_a_c_compiler_for_having_no_cxx) {
     fake_machine machine;
     ASSERT_TRUE(machine_setup(&machine, true));
 
@@ -359,7 +359,7 @@ MOLTEST(diagnostics_does_not_fault_a_c_compiler_for_having_no_cxx) {
     free(report);
 }
 
-MOLTEST(diagnostics_reports_a_machine_with_no_compilers) {
+DESCRIBE(diagnostics_reports_a_machine_with_no_compilers) {
     inventory list = { 0 };
     inventory_settle(&list);
     diagnostics_report *report = calloc(1, sizeof *report);
@@ -374,7 +374,7 @@ MOLTEST(diagnostics_reports_a_machine_with_no_compilers) {
     free(report);
 }
 
-MOLTEST(diagnostics_separates_what_stops_a_build_from_what_merely_annoys) {
+DESCRIBE(diagnostics_separates_what_stops_a_build_from_what_merely_annoys) {
     diagnostics_report *report = calloc(1, sizeof *report);
     ASSERT_TRUE(report != NULL);
     EXPECT_FALSE(diagnostics_has_errors(report));
@@ -389,7 +389,7 @@ MOLTEST(diagnostics_separates_what_stops_a_build_from_what_merely_annoys) {
     free(report);
 }
 
-MOLTEST(diagnostics_names_every_severity) {
+DESCRIBE(diagnostics_names_every_severity) {
     const finding_severity all[] = { finding_ok, finding_warning, finding_error };
     for (size_t i = 0; i < sizeof all / sizeof all[0]; i++) {
         const char *name = finding_severity_name(all[i]);
@@ -407,7 +407,7 @@ MOLTEST(diagnostics_names_every_severity) {
  * other toolchains do.
  */
 
-MOLTEST(diagnostics_does_not_fail_over_what_something_else_covers) {
+DESCRIBE(diagnostics_does_not_fail_over_what_something_else_covers) {
     fake_machine broken;
     fake_machine whole;
     ASSERT_TRUE(machine_setup(&broken, false));
@@ -444,7 +444,7 @@ MOLTEST(diagnostics_does_not_fail_over_what_something_else_covers) {
     free(report);
 }
 
-MOLTEST(diagnostics_fails_when_nothing_covers_it) {
+DESCRIBE(diagnostics_fails_when_nothing_covers_it) {
     fake_machine machine;
     ASSERT_TRUE(machine_setup(&machine, false));
 
@@ -466,7 +466,7 @@ MOLTEST(diagnostics_fails_when_nothing_covers_it) {
     free(report);
 }
 
-MOLTEST(diagnostics_says_what_the_machine_has_even_when_all_is_well) {
+DESCRIBE(diagnostics_says_what_the_machine_has_even_when_all_is_well) {
     fake_machine machine;
     ASSERT_TRUE(machine_setup(&machine, true));
 
@@ -498,7 +498,7 @@ MOLTEST(diagnostics_says_what_the_machine_has_even_when_all_is_well) {
     free(report);
 }
 
-MOLTEST(diagnostics_names_every_section) {
+DESCRIBE(diagnostics_names_every_section) {
     const finding_section all[] = {
         section_compilers, section_tools, section_environment,
     };

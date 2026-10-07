@@ -31,7 +31,7 @@ static void fixture_teardown(home_fixture *fixture) {
         (void)unsetenv(PICKUP_HOME_ENV);
 }
 
-MOLTEST(paths_put_everything_under_one_root) {
+DESCRIBE(paths_put_everything_under_one_root) {
     home_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture, "/tmp/pickup-home-under-test"));
 
@@ -53,7 +53,7 @@ MOLTEST(paths_put_everything_under_one_root) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(paths_keep_the_disposable_apart_from_the_installed) {
+DESCRIBE(paths_keep_the_disposable_apart_from_the_installed) {
     home_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture, "/tmp/pickup-home-under-test"));
 
@@ -70,7 +70,7 @@ MOLTEST(paths_keep_the_disposable_apart_from_the_installed) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(paths_name_a_toolchain_by_what_it_is) {
+DESCRIBE(paths_name_a_toolchain_by_what_it_is) {
     home_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture, "/tmp/pickup-home-under-test"));
 
@@ -91,7 +91,7 @@ MOLTEST(paths_name_a_toolchain_by_what_it_is) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(paths_find_the_toolchain_a_binary_belongs_to) {
+DESCRIBE(paths_find_the_toolchain_a_binary_belongs_to) {
     home_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture, "/tmp/pickup-home-under-test"));
 
@@ -107,7 +107,7 @@ MOLTEST(paths_find_the_toolchain_a_binary_belongs_to) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(paths_claim_nothing_outside_the_toolchains_directory) {
+DESCRIBE(paths_claim_nothing_outside_the_toolchains_directory) {
     home_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture, "/tmp/pickup-home-under-test"));
 
@@ -130,7 +130,7 @@ MOLTEST(paths_claim_nothing_outside_the_toolchains_directory) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(paths_fall_back_to_the_users_home) {
+DESCRIBE(paths_fall_back_to_the_users_home) {
     home_fixture fixture;
     /* Unset rather than pointed somewhere: this is the default users get. */
     ASSERT_TRUE(fixture_setup(&fixture, "/tmp/ignored"));
@@ -181,7 +181,7 @@ static bool layout_of(layout *out) {
 }
 
 #ifndef _WIN32
-MOLTEST(paths_follow_the_xdg_variables_when_they_are_set) {
+DESCRIBE(paths_follow_the_xdg_variables_when_they_are_set) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_xdg"));
 
@@ -198,7 +198,7 @@ MOLTEST(paths_follow_the_xdg_variables_when_they_are_set) {
     user_dirs_teardown(&fixture);
 }
 
-MOLTEST(paths_fall_back_to_the_xdg_defaults_when_the_variables_are_unset) {
+DESCRIBE(paths_fall_back_to_the_xdg_defaults_when_the_variables_are_unset) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_xdg"));
     ASSERT_TRUE(user_dirs_point(&fixture, "XDG_CONFIG_HOME", NULL));
@@ -218,7 +218,7 @@ MOLTEST(paths_fall_back_to_the_xdg_defaults_when_the_variables_are_unset) {
     user_dirs_teardown(&fixture);
 }
 
-MOLTEST(paths_ignore_an_empty_xdg_variable) {
+DESCRIBE(paths_ignore_an_empty_xdg_variable) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_xdg"));
     ASSERT_TRUE(setenv("XDG_CONFIG_HOME", "", 1) == 0);
@@ -235,7 +235,7 @@ MOLTEST(paths_ignore_an_empty_xdg_variable) {
     user_dirs_teardown(&fixture);
 }
 
-MOLTEST(paths_ignore_a_relative_xdg_variable) {
+DESCRIBE(paths_ignore_a_relative_xdg_variable) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_xdg"));
     ASSERT_TRUE(setenv("XDG_CONFIG_HOME", "relative/config", 1) == 0);
@@ -253,7 +253,7 @@ MOLTEST(paths_ignore_a_relative_xdg_variable) {
     user_dirs_teardown(&fixture);
 }
 
-MOLTEST(paths_do_not_double_a_trailing_separator) {
+DESCRIBE(paths_do_not_double_a_trailing_separator) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_xdg"));
     ASSERT_TRUE(user_dirs_point(&fixture, "XDG_DATA_HOME", "/xdg/data/"));
@@ -267,7 +267,7 @@ MOLTEST(paths_do_not_double_a_trailing_separator) {
     user_dirs_teardown(&fixture);
 }
 
-MOLTEST(paths_know_nothing_without_a_home_or_xdg_variables) {
+DESCRIBE(paths_know_nothing_without_a_home_or_xdg_variables) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_xdg"));
     ASSERT_TRUE(user_dirs_point(&fixture, "HOME", NULL));
@@ -284,7 +284,7 @@ MOLTEST(paths_know_nothing_without_a_home_or_xdg_variables) {
     user_dirs_teardown(&fixture);
 }
 
-MOLTEST(paths_find_the_toolchain_a_binary_belongs_to_under_xdg) {
+DESCRIBE(paths_find_the_toolchain_a_binary_belongs_to_under_xdg) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_xdg"));
 
@@ -306,7 +306,7 @@ MOLTEST(paths_find_the_toolchain_a_binary_belongs_to_under_xdg) {
 #endif
 
 #ifdef _WIN32
-MOLTEST(paths_keep_everything_under_appdata_on_windows) {
+DESCRIBE(paths_keep_everything_under_appdata_on_windows) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_appdata"));
 
@@ -324,7 +324,7 @@ MOLTEST(paths_keep_everything_under_appdata_on_windows) {
     user_dirs_teardown(&fixture);
 }
 
-MOLTEST(paths_know_nothing_without_appdata_on_windows) {
+DESCRIBE(paths_know_nothing_without_appdata_on_windows) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_appdata"));
     ASSERT_TRUE(user_dirs_point(&fixture, "APPDATA", NULL));
@@ -336,7 +336,7 @@ MOLTEST(paths_know_nothing_without_appdata_on_windows) {
 }
 #endif
 
-MOLTEST(paths_home_overrides_every_platform_directory) {
+DESCRIBE(paths_home_overrides_every_platform_directory) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_relocated"));
     ASSERT_TRUE(user_dirs_point(&fixture, PICKUP_HOME_ENV, "/relocated"));
@@ -361,7 +361,7 @@ MOLTEST(paths_home_overrides_every_platform_directory) {
     user_dirs_teardown(&fixture);
 }
 
-MOLTEST(paths_are_not_relocated_by_an_empty_pickup_home) {
+DESCRIBE(paths_are_not_relocated_by_an_empty_pickup_home) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_relocated"));
     ASSERT_TRUE(setenv(PICKUP_HOME_ENV, "", 1) == 0);

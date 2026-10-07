@@ -45,7 +45,7 @@ static bool collect_candidates(str_list *out) {
     return scanner_collect(getenv("PATH"), out);
 }
 
-MOLTEST(cache_round_trips_an_inventory) {
+DESCRIBE(cache_round_trips_an_inventory) {
     cache_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -82,7 +82,7 @@ MOLTEST(cache_round_trips_an_inventory) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(cache_is_rejected_when_the_candidate_set_changed) {
+DESCRIBE(cache_is_rejected_when_the_candidate_set_changed) {
     cache_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -103,7 +103,7 @@ MOLTEST(cache_is_rejected_when_the_candidate_set_changed) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(cache_is_rejected_when_a_binary_changed) {
+DESCRIBE(cache_is_rejected_when_a_binary_changed) {
     cache_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -141,7 +141,7 @@ MOLTEST(cache_is_rejected_when_a_binary_changed) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(cache_discards_a_corrupt_file) {
+DESCRIBE(cache_discards_a_corrupt_file) {
     cache_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -167,7 +167,7 @@ MOLTEST(cache_discards_a_corrupt_file) {
 /* Room to rewrite a whole cache file in memory. */
 #define CACHE_TEXT_SIZE 65536
 
-MOLTEST(cache_is_rejected_when_the_catalog_changed) {
+DESCRIBE(cache_is_rejected_when_the_catalog_changed) {
     cache_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -212,7 +212,7 @@ MOLTEST(cache_is_rejected_when_the_catalog_changed) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(cache_load_without_a_cache_simply_fails) {
+DESCRIBE(cache_load_without_a_cache_simply_fails) {
     cache_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -244,7 +244,7 @@ static void record_probe(size_t done, size_t total, void *context) {
     record->calls++;
 }
 
-MOLTEST(inventory_reports_its_progress_while_it_probes) {
+DESCRIBE(inventory_reports_its_progress_while_it_probes) {
     cache_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 

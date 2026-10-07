@@ -26,7 +26,7 @@ static const char clang_verbose[] =
     "Candidate multilib: .;@m64\n"
     "Selected multilib: .;@m64\n";
 
-MOLTEST(gcc_install_reads_every_candidate) {
+DESCRIBE(gcc_install_reads_every_candidate) {
     gcc_install_list list;
     ASSERT_TRUE(gcc_install_parse(clang_verbose, &list));
 
@@ -36,7 +36,7 @@ MOLTEST(gcc_install_reads_every_candidate) {
     EXPECT_STREQ("/usr/lib/gcc/x86_64-linux-gnu/9", list.items[2].path);
 }
 
-MOLTEST(gcc_install_reads_which_one_was_chosen) {
+DESCRIBE(gcc_install_reads_which_one_was_chosen) {
     gcc_install_list list;
     ASSERT_TRUE(gcc_install_parse(clang_verbose, &list));
 
@@ -46,7 +46,7 @@ MOLTEST(gcc_install_reads_which_one_was_chosen) {
     EXPECT_STREQ("/usr/lib/gcc/x86_64-linux-gnu/12", list.items[list.selected].path);
 }
 
-MOLTEST(gcc_install_does_not_mistake_the_warning_for_a_candidate) {
+DESCRIBE(gcc_install_does_not_mistake_the_warning_for_a_candidate) {
     gcc_install_list list;
     ASSERT_TRUE(gcc_install_parse(clang_verbose, &list));
 
@@ -55,7 +55,7 @@ MOLTEST(gcc_install_does_not_mistake_the_warning_for_a_candidate) {
     EXPECT_EQ(3, (int)list.count);
 }
 
-MOLTEST(gcc_install_reports_the_same_installation_once) {
+DESCRIBE(gcc_install_reports_the_same_installation_once) {
     /* Clang lists an installation once per search prefix it was found under. */
     static const char repeated[] =
         "Found candidate GCC installation: /usr/lib/gcc/x86_64-linux-gnu/11\n"
@@ -68,7 +68,7 @@ MOLTEST(gcc_install_reports_the_same_installation_once) {
     EXPECT_EQ(0, (int)list.selected);
 }
 
-MOLTEST(gcc_install_selection_is_recorded_even_when_never_listed) {
+DESCRIBE(gcc_install_selection_is_recorded_even_when_never_listed) {
     /* A driver that names only its choice still has to be understood. */
     static const char only_selected[] =
         "Selected GCC installation: /usr/lib/gcc/x86_64-linux-gnu/13\n";
@@ -80,7 +80,7 @@ MOLTEST(gcc_install_selection_is_recorded_even_when_never_listed) {
     EXPECT_STREQ("/usr/lib/gcc/x86_64-linux-gnu/13", list.items[0].path);
 }
 
-MOLTEST(gcc_install_finds_no_gcc_in_a_compiler_that_reports_none) {
+DESCRIBE(gcc_install_finds_no_gcc_in_a_compiler_that_reports_none) {
     /* Every non-Clang driver, and Clang on a machine with no GCC at all. An
        empty list is an answer; it must not read as a failure. */
     gcc_install_list list;
@@ -89,13 +89,13 @@ MOLTEST(gcc_install_finds_no_gcc_in_a_compiler_that_reports_none) {
     EXPECT_TRUE(list.selected == GCC_INSTALL_NONE);
 }
 
-MOLTEST(gcc_install_refuses_nothing_at_all) {
+DESCRIBE(gcc_install_refuses_nothing_at_all) {
     gcc_install_list list;
     EXPECT_FALSE(gcc_install_parse(NULL, &list));
     EXPECT_EQ(0, (int)list.count);
 }
 
-MOLTEST(gcc_install_best_prefers_the_highest_that_has_libstdcxx) {
+DESCRIBE(gcc_install_best_prefers_the_highest_that_has_libstdcxx) {
     /* Built by hand rather than parsed: what is under test is the choice, and
        the disk on the test machine must not decide the outcome. */
     gcc_install_list list = { .count = 3, .selected = 1 };
@@ -117,7 +117,7 @@ MOLTEST(gcc_install_best_prefers_the_highest_that_has_libstdcxx) {
     EXPECT_STREQ("/usr/lib/gcc/x86_64-linux-gnu/11", best.path);
 }
 
-MOLTEST(gcc_install_best_finds_nothing_when_none_is_complete) {
+DESCRIBE(gcc_install_best_finds_nothing_when_none_is_complete) {
     gcc_install_list list = { .count = 1, .selected = 0 };
     snprintf(list.items[0].path, sizeof list.items[0].path, "%s",
              "/usr/lib/gcc/x86_64-linux-gnu/12");

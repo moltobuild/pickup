@@ -8,7 +8,7 @@
 #include <string.h>
 #include <unistd.h>
 
-MOLTEST(probe_identifies_a_compiler_by_asking_it) {
+DESCRIBE(probe_identifies_a_compiler_by_asking_it) {
     if (access("/usr/bin/gcc-12", X_OK) != 0)
         SKIP("gcc-12 is not installed");
 
@@ -23,13 +23,13 @@ MOLTEST(probe_identifies_a_compiler_by_asking_it) {
     EXPECT_TRUE(strlen(chain.target) > 0);
 }
 
-MOLTEST(probe_rejects_something_that_is_not_a_compiler) {
+DESCRIBE(probe_rejects_something_that_is_not_a_compiler) {
     toolchain chain;
     EXPECT_FALSE(probe_identify("/bin/sh", &chain));
     EXPECT_FALSE(probe_identify("/nonexistent/compiler", &chain));
 }
 
-MOLTEST(probe_leaves_the_cxx_driver_empty_when_there_is_none) {
+DESCRIBE(probe_leaves_the_cxx_driver_empty_when_there_is_none) {
     if (access("/usr/bin/gcc-12", X_OK) != 0)
         SKIP("gcc-12 is not installed");
     if (access("/usr/bin/g++-12", X_OK) == 0)
@@ -43,7 +43,7 @@ MOLTEST(probe_leaves_the_cxx_driver_empty_when_there_is_none) {
     EXPECT_STREQ("", chain.cxx_path);
 }
 
-MOLTEST(inventory_discovers_and_orders_toolchains) {
+DESCRIBE(inventory_discovers_and_orders_toolchains) {
     inventory list;
     ASSERT_TRUE(inventory_discover(&list));
     EXPECT_TRUE(list.count > 0); /* the machine that builds pickup has a compiler */
@@ -61,7 +61,7 @@ MOLTEST(inventory_discovers_and_orders_toolchains) {
     inventory_free(&list);
 }
 
-MOLTEST(inventory_finds_a_toolchain_by_name_or_path) {
+DESCRIBE(inventory_finds_a_toolchain_by_name_or_path) {
     inventory list;
     ASSERT_TRUE(inventory_discover(&list));
     ASSERT_TRUE(list.count > 0);
@@ -100,7 +100,7 @@ static toolchain alias_of(const char *name, const char *path, const char *cxx,
     return chain;
 }
 
-MOLTEST(inventory_collapses_the_aliases_of_one_compiler) {
+DESCRIBE(inventory_collapses_the_aliases_of_one_compiler) {
     inventory list = { 0 };
     /* Four spellings of the same GCC, exactly as a real machine offers them. */
     toolchain cc = alias_of("cc", "/usr/bin/cc", "/usr/bin/c++", 9, 5,
@@ -129,7 +129,7 @@ MOLTEST(inventory_collapses_the_aliases_of_one_compiler) {
     inventory_free(&list);
 }
 
-MOLTEST(inventory_keeps_apart_two_compilers_of_the_same_version) {
+DESCRIBE(inventory_keeps_apart_two_compilers_of_the_same_version) {
     inventory list = { 0 };
     /* The system's 12.3.0 and a conda one. Same vendor and version, different
        toolchains, and collapsing them would hide one of them entirely. */
@@ -155,7 +155,7 @@ MOLTEST(inventory_keeps_apart_two_compilers_of_the_same_version) {
     inventory_free(&list);
 }
 
-MOLTEST(inventory_finds_a_toolchain_by_the_forms_a_person_types) {
+DESCRIBE(inventory_finds_a_toolchain_by_the_forms_a_person_types) {
     inventory list = { 0 };
     toolchain newer = alias_of("gcc-12", "/usr/bin/gcc-12", "", 12, 4,
                                "x86_64-linux-gnu", 0x1, 0);
@@ -189,7 +189,7 @@ MOLTEST(inventory_finds_a_toolchain_by_the_forms_a_person_types) {
  * transformed, so a match anchored at the start of the name finds nothing and
  * records the toolchain as having no C++ at all.
  */
-MOLTEST(probe_pairs_a_prefixed_driver_with_its_cxx_sibling) {
+DESCRIBE(probe_pairs_a_prefixed_driver_with_its_cxx_sibling) {
     char root[PICKUP_PATH_MAX];
     ASSERT_TRUE(moltest_temp_dir("pickup_prefixed", root, sizeof root));
 
@@ -213,7 +213,7 @@ MOLTEST(probe_pairs_a_prefixed_driver_with_its_cxx_sibling) {
 
 /* The same for the clang spelling, which transforms differently: `clang` grows
    a `++` where `gcc` becomes `g++`. */
-MOLTEST(probe_pairs_a_prefixed_clang_with_its_cxx_sibling) {
+DESCRIBE(probe_pairs_a_prefixed_clang_with_its_cxx_sibling) {
     char root[PICKUP_PATH_MAX];
     ASSERT_TRUE(moltest_temp_dir("pickup_prefixed_clang", root, sizeof root));
 
@@ -235,7 +235,7 @@ MOLTEST(probe_pairs_a_prefixed_clang_with_its_cxx_sibling) {
 
 /* And a bare name still pairs the way it always did: the prefix is optional,
    not required. */
-MOLTEST(probe_still_pairs_a_versioned_driver_with_no_prefix) {
+DESCRIBE(probe_still_pairs_a_versioned_driver_with_no_prefix) {
     char root[PICKUP_PATH_MAX];
     ASSERT_TRUE(moltest_temp_dir("pickup_versioned", root, sizeof root));
 

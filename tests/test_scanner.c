@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-MOLTEST(scanner_recognizes_compiler_names) {
+DESCRIBE(scanner_recognizes_compiler_names) {
     /* Plain and versioned forms. */
     EXPECT_TRUE(scanner_is_candidate_name("gcc"));
     EXPECT_TRUE(scanner_is_candidate_name("gcc-12"));
@@ -23,7 +23,7 @@ MOLTEST(scanner_recognizes_compiler_names) {
     EXPECT_TRUE(scanner_is_candidate_name("x86_64-linux-gnu-g++-11"));
 }
 
-MOLTEST(scanner_rejects_names_that_only_look_like_compilers) {
+DESCRIBE(scanner_rejects_names_that_only_look_like_compilers) {
     /* A prefix must end the name or be followed by a version separator, so
        unrelated tools are not probed. */
     EXPECT_FALSE(scanner_is_candidate_name("gccmakedep"));
@@ -33,7 +33,7 @@ MOLTEST(scanner_rejects_names_that_only_look_like_compilers) {
     EXPECT_FALSE(scanner_is_candidate_name(""));
 }
 
-MOLTEST(scanner_reports_each_compiler_once) {
+DESCRIBE(scanner_reports_each_compiler_once) {
     str_list found;
     str_list_init(&found);
     /* /usr/bin holds cc, gcc and gcc-N pointing at the same binaries; each
@@ -47,7 +47,7 @@ MOLTEST(scanner_reports_each_compiler_once) {
     str_list_free(&found);
 }
 
-MOLTEST(scanner_survives_directories_that_do_not_exist) {
+DESCRIBE(scanner_survives_directories_that_do_not_exist) {
     str_list found;
     str_list_init(&found);
     /* A PATH entry that is missing or unreadable is normal, not fatal. */
@@ -57,7 +57,7 @@ MOLTEST(scanner_survives_directories_that_do_not_exist) {
     str_list_free(&found);
 }
 
-MOLTEST(scanner_ignores_the_binutils_wrappers_beside_a_compiler) {
+DESCRIBE(scanner_ignores_the_binutils_wrappers_beside_a_compiler) {
     /* A GCC installation puts these next to the compiler, once per version.
        They are binutils wrappers with no compiler in them, and accepting the
        name would have each one interrogated on every scan — nine of the

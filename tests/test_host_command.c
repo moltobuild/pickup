@@ -13,7 +13,7 @@
  * compiler's, and that "nothing runs here" is reported as an answer.
  */
 
-MOLTEST(host_reports_a_target_this_build_can_run) {
+DESCRIBE(host_reports_a_target_this_build_can_run) {
     /* Every platform pickup builds on is one the registry names; a host it
        does not name is the branch below, and cannot be reached from a running
        test on a supported platform. */
@@ -25,7 +25,7 @@ MOLTEST(host_reports_a_target_this_build_can_run) {
     EXPECT_EQ(exit_ok, host_command_run(true));
 }
 
-MOLTEST(host_speaks_the_catalogue_spelling_not_the_compilers) {
+DESCRIBE(host_speaks_the_catalogue_spelling_not_the_compilers) {
     /* `pickup resolve` answers `x86_64-unknown-linux-gnu`: what a driver emits
        code for. This answers `linux-x86_64`: what the catalogue publishes
        under. Two questions, two strings, and conflating them is what sends a

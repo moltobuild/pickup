@@ -17,7 +17,7 @@ static void digest_of(const char *text, char *hex_out) {
     sha256_finish(&state, hex_out);
 }
 
-MOLTEST(sha256_matches_the_published_vectors) {
+DESCRIBE(sha256_matches_the_published_vectors) {
     char hex[SHA256_HEX_SIZE];
 
     /* The FIPS 180-4 examples. Getting these right is the whole point: a hash
@@ -33,7 +33,7 @@ MOLTEST(sha256_matches_the_published_vectors) {
     EXPECT_STREQ("248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1", hex);
 }
 
-MOLTEST(sha256_handles_a_message_spanning_many_blocks) {
+DESCRIBE(sha256_handles_a_message_spanning_many_blocks) {
     /* A million 'a', the third FIPS vector: exercises the block loop and a
        length that no longer fits in a byte count. */
     sha256_state state;
@@ -49,7 +49,7 @@ MOLTEST(sha256_handles_a_message_spanning_many_blocks) {
     EXPECT_STREQ("cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0", hex);
 }
 
-MOLTEST(sha256_is_unaffected_by_how_the_data_is_split) {
+DESCRIBE(sha256_is_unaffected_by_how_the_data_is_split) {
     /* Downloads arrive in arbitrary pieces; the digest must not depend on
        where the boundaries fell. */
     const char *message = "the quick brown fox jumps over the lazy dog, repeatedly";
@@ -67,7 +67,7 @@ MOLTEST(sha256_is_unaffected_by_how_the_data_is_split) {
     EXPECT_STREQ(whole, byte_by_byte);
 }
 
-MOLTEST(sha256_hashes_a_file) {
+DESCRIBE(sha256_hashes_a_file) {
     char path[PICKUP_PATHS_MAX];
     ASSERT_TRUE(moltest_temp_file("pickup_sha", path, sizeof path));
     ASSERT_TRUE(fs_write_file(path, "abc"));
@@ -80,7 +80,7 @@ MOLTEST(sha256_hashes_a_file) {
     EXPECT_FALSE(sha256_file("/nonexistent/archive.tar.xz", hex));
 }
 
-MOLTEST(sha256_compares_digests_case_insensitively) {
+DESCRIBE(sha256_compares_digests_case_insensitively) {
     const char *lower = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
     const char *upper = "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD";
     const char *other = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ae";
@@ -102,7 +102,7 @@ static void record_progress(long long done, long long total, void *context) {
     record->calls++;
 }
 
-MOLTEST(sha256_reports_progress_while_it_hashes) {
+DESCRIBE(sha256_reports_progress_while_it_hashes) {
     char path[PICKUP_PATHS_MAX];
     ASSERT_TRUE(moltest_temp_file("pickup_sha_watch", path, sizeof path));
 

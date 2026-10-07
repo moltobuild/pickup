@@ -45,7 +45,7 @@ static bool manifest_version(const char *text, char *out, size_t out_size) {
     return true;
 }
 
-MOLTEST(cli_reports_the_version_the_manifest_declares) {
+DESCRIBE(cli_reports_the_version_the_manifest_declares) {
     char *text = fs_read_file(MANIFEST_PATH);
     if (text == NULL)
         SKIP("the manifest is only there when the suite runs from the repository root");
@@ -60,7 +60,7 @@ MOLTEST(cli_reports_the_version_the_manifest_declares) {
     EXPECT_STREQ(declared, cli_version());
 }
 
-MOLTEST(cli_version_is_not_empty) {
+DESCRIBE(cli_version_is_not_empty) {
     const char *version = cli_version();
     ASSERT_NOT_NULL(version);
     EXPECT_TRUE(version[0] != '\0');

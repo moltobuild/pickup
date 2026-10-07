@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-MOLTEST(format_size_reads_at_a_glance) {
+DESCRIBE(format_size_reads_at_a_glance) {
     char text[FORMAT_SIZE_MAX];
 
     format_size(0, text, sizeof text);
@@ -29,7 +29,7 @@ MOLTEST(format_size_reads_at_a_glance) {
     EXPECT_STREQ("997M", text);
 }
 
-MOLTEST(progress_measures_the_obvious_fractions) {
+DESCRIBE(progress_measures_the_obvious_fractions) {
     progress_bar bar = progress_measure(50, 100, 10);
     EXPECT_EQ(50, bar.percent);
     EXPECT_EQ(5, (int)bar.filled);
@@ -43,7 +43,7 @@ MOLTEST(progress_measures_the_obvious_fractions) {
     EXPECT_EQ(0, (int)bar.filled);
 }
 
-MOLTEST(progress_survives_a_total_it_was_never_told) {
+DESCRIBE(progress_survives_a_total_it_was_never_told) {
     /* Nothing is known, so nothing is claimed. */
     progress_bar bar = progress_measure(500, 0, 10);
     EXPECT_EQ(0, bar.percent);
@@ -53,7 +53,7 @@ MOLTEST(progress_survives_a_total_it_was_never_told) {
     EXPECT_EQ(0, bar.percent);
 }
 
-MOLTEST(progress_clamps_a_file_longer_than_announced) {
+DESCRIBE(progress_clamps_a_file_longer_than_announced) {
     /* A server may deliver more than it promised; the bar still stops at full
        rather than overrunning its own width. */
     progress_bar bar = progress_measure(150, 100, 10);
@@ -61,7 +61,7 @@ MOLTEST(progress_clamps_a_file_longer_than_announced) {
     EXPECT_EQ(10, (int)bar.filled);
 }
 
-MOLTEST(progress_does_not_overflow_on_gigabyte_downloads) {
+DESCRIBE(progress_does_not_overflow_on_gigabyte_downloads) {
     /* done * 100 and done * width both exceed 32 bits here, which is where a
        narrower intermediate type would wrap and report nonsense. */
     long long total = 1938859476LL;
@@ -74,7 +74,7 @@ MOLTEST(progress_does_not_overflow_on_gigabyte_downloads) {
     EXPECT_EQ(PROGRESS_BAR_WIDTH, (int)bar.filled);
 }
 
-MOLTEST(progress_draws_a_bar_with_its_percentage) {
+DESCRIBE(progress_draws_a_bar_with_its_percentage) {
     FILE *sink = tmpfile();
     ASSERT_TRUE(sink != NULL);
 
@@ -110,7 +110,7 @@ static void captured(void (*draw)(FILE *, const char *, long long, long long),
     fclose(sink);
 }
 
-MOLTEST(progress_counts_steps_rather_than_bytes) {
+DESCRIBE(progress_counts_steps_rather_than_bytes) {
     char line[256];
     captured(progress_draw_steps, "probing compilers", 3, 12, line, sizeof line);
 
@@ -124,7 +124,7 @@ MOLTEST(progress_counts_steps_rather_than_bytes) {
     EXPECT_TRUE(strstr(line, "B") == NULL);
 }
 
-MOLTEST(progress_steps_start_and_finish_where_the_work_does) {
+DESCRIBE(progress_steps_start_and_finish_where_the_work_does) {
     char line[256];
 
     /* Nothing probed yet is an empty bar, not an absent one: it is the first
@@ -138,7 +138,7 @@ MOLTEST(progress_steps_start_and_finish_where_the_work_does) {
     EXPECT_TRUE(strstr(line, "4/4") != NULL);
 }
 
-MOLTEST(progress_clears_the_line_it_drew_on) {
+DESCRIBE(progress_clears_the_line_it_drew_on) {
     FILE *sink = tmpfile();
     ASSERT_TRUE(sink != NULL);
 
@@ -159,7 +159,7 @@ MOLTEST(progress_clears_the_line_it_drew_on) {
         EXPECT_TRUE(line[i] == ' ');
 }
 
-MOLTEST(progress_leaves_a_line_it_never_drew_on_alone) {
+DESCRIBE(progress_leaves_a_line_it_never_drew_on_alone) {
     FILE *sink = tmpfile();
     ASSERT_TRUE(sink != NULL);
 
@@ -180,7 +180,7 @@ MOLTEST(progress_leaves_a_line_it_never_drew_on_alone) {
     fclose(sink);
 }
 
-MOLTEST(spinner_cycles_through_its_frames) {
+DESCRIBE(spinner_cycles_through_its_frames) {
     char seen[SPINNER_FRAMES][64];
 
     for (size_t frame = 0; frame < SPINNER_FRAMES; frame++) {
@@ -210,7 +210,7 @@ MOLTEST(spinner_cycles_through_its_frames) {
     EXPECT_STREQ(seen[0], wrapped);
 }
 
-MOLTEST(spinner_waits_without_claiming_a_figure) {
+DESCRIBE(spinner_waits_without_claiming_a_figure) {
     FILE *sink = tmpfile();
     ASSERT_TRUE(sink != NULL);
     spinner_wait(sink, "preparing the extraction", 1);
@@ -229,7 +229,7 @@ MOLTEST(spinner_waits_without_claiming_a_figure) {
     EXPECT_TRUE(strstr(line, "extracted") == NULL);
 }
 
-MOLTEST(spinner_says_how_much_it_has_produced) {
+DESCRIBE(spinner_says_how_much_it_has_produced) {
     FILE *sink = tmpfile();
     ASSERT_TRUE(sink != NULL);
     spinner_draw(sink, "extracting clang 22.1.8", 0, 224395264);
@@ -247,7 +247,7 @@ MOLTEST(spinner_says_how_much_it_has_produced) {
     EXPECT_TRUE(strstr(line, "214M") != NULL);
 }
 
-MOLTEST(progress_is_not_interactive_when_redirected) {
+DESCRIBE(progress_is_not_interactive_when_redirected) {
     FILE *sink = tmpfile();
     ASSERT_TRUE(sink != NULL);
     EXPECT_FALSE(progress_is_interactive(sink));

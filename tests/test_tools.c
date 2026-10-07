@@ -102,7 +102,7 @@ static const dev_tool *of_kind(const dev_tool *found, size_t count, tool_kind ki
     return NULL;
 }
 
-MOLTEST(tools_finds_a_formatter_and_reads_its_version) {
+DESCRIBE(tools_finds_a_formatter_and_reads_its_version) {
     tools_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
     ASSERT_TRUE(plant_working(&fixture, "clang-format", "clang-format version 22.1.8"));
@@ -121,7 +121,7 @@ MOLTEST(tools_finds_a_formatter_and_reads_its_version) {
 
 /* A tool pickup installed from an archive holding only the binary keeps it at
    the top of its directory, not in bin/: Ninja does (RFC-0023). */
-MOLTEST(tools_finds_an_installed_tool_kept_at_the_top_of_its_directory) {
+DESCRIBE(tools_finds_an_installed_tool_kept_at_the_top_of_its_directory) {
     tools_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
     char dir[PICKUP_PATHS_MAX];
@@ -139,7 +139,7 @@ MOLTEST(tools_finds_an_installed_tool_kept_at_the_top_of_its_directory) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(tools_does_not_count_something_that_only_has_the_right_name) {
+DESCRIBE(tools_does_not_count_something_that_only_has_the_right_name) {
     tools_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
     /* Executable, correctly named, and it does not answer. Reporting it would
@@ -153,7 +153,7 @@ MOLTEST(tools_does_not_count_something_that_only_has_the_right_name) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(tools_finds_nothing_on_a_bare_machine) {
+DESCRIBE(tools_finds_nothing_on_a_bare_machine) {
     tools_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -166,7 +166,7 @@ MOLTEST(tools_finds_nothing_on_a_bare_machine) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(tools_takes_either_linter) {
+DESCRIBE(tools_takes_either_linter) {
     tools_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
     /* cppcheck predates clang-tidy and is still what many projects use, so a
@@ -183,7 +183,7 @@ MOLTEST(tools_takes_either_linter) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(tools_knows_which_names_it_looks_for) {
+DESCRIBE(tools_knows_which_names_it_looks_for) {
     tool_kind kind;
     ASSERT_TRUE(tools_kind_of("clang-format", &kind));
     EXPECT_EQ(tool_formatter, kind);
@@ -208,7 +208,7 @@ MOLTEST(tools_knows_which_names_it_looks_for) {
     EXPECT_FALSE(tools_kind_of(NULL, &kind));
 }
 
-MOLTEST(tools_names_every_kind_and_what_provides_it) {
+DESCRIBE(tools_names_every_kind_and_what_provides_it) {
     const tool_kind kinds[] = { tool_formatter, tool_linter, tool_language_server, tool_build };
     for (size_t i = 0; i < sizeof kinds / sizeof kinds[0]; i++) {
         const char *name = tool_kind_name(kinds[i]);
@@ -221,7 +221,7 @@ MOLTEST(tools_names_every_kind_and_what_provides_it) {
     }
 }
 
-MOLTEST(tools_reads_a_version_that_is_not_on_the_first_line) {
+DESCRIBE(tools_reads_a_version_that_is_not_on_the_first_line) {
     tools_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
 
@@ -241,7 +241,7 @@ MOLTEST(tools_reads_a_version_that_is_not_on_the_first_line) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(tools_keeps_a_version_worded_without_the_word) {
+DESCRIBE(tools_keeps_a_version_worded_without_the_word) {
     tools_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
     /* cppcheck says "Cppcheck 2.21.0" and nothing else; the fallback to the
@@ -278,7 +278,7 @@ static bool plant_installed(const tools_fixture *fixture, const char *name, cons
    whichever directory the filesystem happens to list first. 9.0.0 is there
    because it sorts after 21.1.8 as text, so an alphabetical walk would pick
    the wrong one too. */
-MOLTEST(tools_takes_the_newest_version_pickup_installed) {
+DESCRIBE(tools_takes_the_newest_version_pickup_installed) {
     tools_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
     ASSERT_TRUE(plant_installed(&fixture, "clang-format", "9.0.0"));
@@ -299,7 +299,7 @@ MOLTEST(tools_takes_the_newest_version_pickup_installed) {
 
 /* A newer one on PATH still wins over anything pickup installed, as it always
    has: what the machine puts first is what the user chose. */
-MOLTEST(tools_still_prefers_what_is_on_the_path) {
+DESCRIBE(tools_still_prefers_what_is_on_the_path) {
     tools_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
     ASSERT_TRUE(plant_installed(&fixture, "clang-format", "21.1.8"));
@@ -315,7 +315,7 @@ MOLTEST(tools_still_prefers_what_is_on_the_path) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(tools_says_where_a_tool_came_from) {
+DESCRIBE(tools_says_where_a_tool_came_from) {
     tools_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
     /* PATH is the fixture, so anything found there is the machine's own. */

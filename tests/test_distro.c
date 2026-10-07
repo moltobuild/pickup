@@ -46,7 +46,7 @@ static const char opensuse[] =
     "ID=\"opensuse-tumbleweed\"\n"
     "ID_LIKE=\"opensuse suse\"\n";
 
-MOLTEST(distro_reads_what_the_system_calls_itself) {
+DESCRIBE(distro_reads_what_the_system_calls_itself) {
     EXPECT_EQ(distro_debian, distro_parse_os_release(ubuntu));
     EXPECT_EQ(distro_fedora, distro_parse_os_release(fedora));
     EXPECT_EQ(distro_arch, distro_parse_os_release(arch));
@@ -54,13 +54,13 @@ MOLTEST(distro_reads_what_the_system_calls_itself) {
     EXPECT_EQ(distro_suse, distro_parse_os_release(opensuse));
 }
 
-MOLTEST(distro_follows_a_derivative_to_its_parent) {
+DESCRIBE(distro_follows_a_derivative_to_its_parent) {
     /* There are more derivatives than anyone can enumerate, and each one names
        its parent precisely so that this works. */
     EXPECT_EQ(distro_debian, distro_parse_os_release(pop_os));
 }
 
-MOLTEST(distro_does_not_mistake_a_field_that_ends_in_the_same_letters) {
+DESCRIBE(distro_does_not_mistake_a_field_that_ends_in_the_same_letters) {
     /* VERSION_ID contains ID, and matching it would read a version number as
        the name of a distribution. */
     static const char version_first[] =
@@ -69,7 +69,7 @@ MOLTEST(distro_does_not_mistake_a_field_that_ends_in_the_same_letters) {
     EXPECT_EQ(distro_fedora, distro_parse_os_release(version_first));
 }
 
-MOLTEST(distro_admits_when_it_does_not_know) {
+DESCRIBE(distro_admits_when_it_does_not_know) {
     /* An unrecognised system is an answer. What follows from it is that no
        package gets named, which is better than naming the wrong one. */
     static const char nothing_known[] = "ID=plan9\nID_LIKE=inferno\n";
@@ -78,7 +78,7 @@ MOLTEST(distro_admits_when_it_does_not_know) {
     EXPECT_EQ(distro_unknown, distro_parse_os_release(NULL));
 }
 
-MOLTEST(distro_names_the_versioned_package_where_versions_coexist) {
+DESCRIBE(distro_names_the_versioned_package_where_versions_coexist) {
     char package[DISTRO_PACKAGE_MAX];
 
     /* The version matters: several GCCs are installed side by side and only
@@ -90,7 +90,7 @@ MOLTEST(distro_names_the_versioned_package_where_versions_coexist) {
     EXPECT_STREQ("gcc13-c++", package);
 }
 
-MOLTEST(distro_names_the_unversioned_package_where_there_is_one) {
+DESCRIBE(distro_names_the_unversioned_package_where_there_is_one) {
     char package[DISTRO_PACKAGE_MAX];
 
     ASSERT_TRUE(distro_gxx_package(distro_fedora, 13, package, sizeof package));
@@ -100,7 +100,7 @@ MOLTEST(distro_names_the_unversioned_package_where_there_is_one) {
     EXPECT_STREQ("g++", package);
 }
 
-MOLTEST(distro_suggests_nothing_where_there_is_nothing_to_install) {
+DESCRIBE(distro_suggests_nothing_where_there_is_nothing_to_install) {
     char package[DISTRO_PACKAGE_MAX];
 
     /* Arch ships both compilers in one package, so a GCC without C++ is not a
@@ -110,13 +110,13 @@ MOLTEST(distro_suggests_nothing_where_there_is_nothing_to_install) {
     EXPECT_FALSE(distro_gxx_package(distro_unknown, 13, package, sizeof package));
 }
 
-MOLTEST(distro_needs_a_version_before_naming_a_versioned_package) {
+DESCRIBE(distro_needs_a_version_before_naming_a_versioned_package) {
     char package[DISTRO_PACKAGE_MAX];
     /* "g++-0" is not a package anybody can install. */
     EXPECT_FALSE(distro_gxx_package(distro_debian, 0, package, sizeof package));
 }
 
-MOLTEST(distro_names_every_family_it_can_report) {
+DESCRIBE(distro_names_every_family_it_can_report) {
     const distro_family all[] = {
         distro_unknown, distro_debian, distro_fedora,
         distro_arch, distro_suse, distro_alpine,

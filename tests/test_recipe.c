@@ -340,7 +340,7 @@ static bool has_link_flag(const link_recipe *recipe, const char *fragment) {
     return false;
 }
 
-MOLTEST(recipe_publishes_nothing_when_the_compiler_needs_nothing) {
+DESCRIBE(recipe_publishes_nothing_when_the_compiler_needs_nothing) {
     fake_toolchain fake;
     fake_accepts accepts = { .bare = true, .ships_libcxx = true };
     ASSERT_TRUE(fake_setup(&fake, &accepts));
@@ -375,7 +375,7 @@ MOLTEST(recipe_publishes_nothing_when_the_compiler_needs_nothing) {
  * libunwind.dll and whose C output asks for nothing at all. Hence a fixture
  * that links either way and only runs one of them.
  */
-MOLTEST(recipe_puts_the_runtime_inside_a_binary_that_cannot_be_told_where_it_is) {
+DESCRIBE(recipe_puts_the_runtime_inside_a_binary_that_cannot_be_told_where_it_is) {
 #ifndef _WIN32
     SKIP("only a PE has nowhere to keep the path to its runtime");
 #else
@@ -399,7 +399,7 @@ MOLTEST(recipe_puts_the_runtime_inside_a_binary_that_cannot_be_told_where_it_is)
 #endif
 }
 
-MOLTEST(recipe_pins_the_gcc_installation_when_that_is_what_is_needed) {
+DESCRIBE(recipe_pins_the_gcc_installation_when_that_is_what_is_needed) {
     fake_toolchain fake;
     fake_accepts accepts = { .gcc_install = true, .ships_libcxx = true };
     ASSERT_TRUE(fake_setup(&fake, &accepts));
@@ -418,7 +418,7 @@ MOLTEST(recipe_pins_the_gcc_installation_when_that_is_what_is_needed) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_falls_back_to_the_compilers_own_library) {
+DESCRIBE(recipe_falls_back_to_the_compilers_own_library) {
     fake_toolchain fake;
     fake_accepts accepts = { .libcxx = true, .ships_libcxx = true };
     ASSERT_TRUE(fake_setup(&fake, &accepts));
@@ -441,7 +441,7 @@ MOLTEST(recipe_falls_back_to_the_compilers_own_library) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_prefers_the_host_library_for_a_compiler_the_host_owns) {
+DESCRIBE(recipe_prefers_the_host_library_for_a_compiler_the_host_owns) {
     fake_toolchain fake;
     /* The choice this module exists to make. Both configurations produce a
        running program; only one of them keeps the toolchain ABI-compatible
@@ -463,7 +463,7 @@ MOLTEST(recipe_prefers_the_host_library_for_a_compiler_the_host_owns) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_prefers_what_an_installed_toolchain_brought_with_it) {
+DESCRIBE(recipe_prefers_what_an_installed_toolchain_brought_with_it) {
     fake_toolchain fake;
     home_fixture home;
     /* The same compiler, the same two working configurations, and the opposite
@@ -492,7 +492,7 @@ MOLTEST(recipe_prefers_what_an_installed_toolchain_brought_with_it) {
     home_teardown(&home);
 }
 
-MOLTEST(recipe_prefers_its_own_library_to_needing_no_flags) {
+DESCRIBE(recipe_prefers_its_own_library_to_needing_no_flags) {
     fake_toolchain fake;
     home_fixture home;
     /* Working untouched is not the same as working the same way everywhere. A
@@ -512,7 +512,7 @@ MOLTEST(recipe_prefers_its_own_library_to_needing_no_flags) {
     home_teardown(&home);
 }
 
-MOLTEST(recipe_prefers_the_libstdcxx_an_installed_toolchain_brought) {
+DESCRIBE(recipe_prefers_the_libstdcxx_an_installed_toolchain_brought) {
     fake_toolchain fake;
     home_fixture home;
     /* The other half of the same rule, and the shape a GCC arrives in: no
@@ -537,7 +537,7 @@ MOLTEST(recipe_prefers_the_libstdcxx_an_installed_toolchain_brought) {
     home_teardown(&home);
 }
 
-MOLTEST(recipe_claims_no_library_that_lives_outside_the_prefix) {
+DESCRIBE(recipe_claims_no_library_that_lives_outside_the_prefix) {
     fake_toolchain fake;
     home_fixture home;
     fake_accepts accepts = { .gcc_install = true, .libcxx = true, .ships_libcxx = true };
@@ -564,7 +564,7 @@ MOLTEST(recipe_claims_no_library_that_lives_outside_the_prefix) {
     home_teardown(&home);
 }
 
-MOLTEST(recipe_orders_a_compiler_the_same_way_without_a_pickup_home) {
+DESCRIBE(recipe_orders_a_compiler_the_same_way_without_a_pickup_home) {
     fake_toolchain fake;
     home_fixture home;
     fake_accepts accepts = { .gcc_install = true, .libcxx = true, .ships_libcxx = true };
@@ -587,7 +587,7 @@ MOLTEST(recipe_orders_a_compiler_the_same_way_without_a_pickup_home) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_reports_a_toolchain_that_cannot_build_at_all) {
+DESCRIBE(recipe_reports_a_toolchain_that_cannot_build_at_all) {
     fake_toolchain fake;
     fake_accepts accepts = { 0 }; /* accepts nothing */
     ASSERT_TRUE(fake_setup(&fake, &accepts));
@@ -604,7 +604,7 @@ MOLTEST(recipe_reports_a_toolchain_that_cannot_build_at_all) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_offers_no_libcxx_to_a_toolchain_that_ships_none) {
+DESCRIBE(recipe_offers_no_libcxx_to_a_toolchain_that_ships_none) {
     fake_toolchain fake;
     /* Every GCC, and every Clang built against the system's library. */
     fake_accepts accepts = { .libcxx = true, .ships_libcxx = false };
@@ -620,20 +620,20 @@ MOLTEST(recipe_offers_no_libcxx_to_a_toolchain_that_ships_none) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_has_nothing_to_discover_without_a_driver) {
+DESCRIBE(recipe_has_nothing_to_discover_without_a_driver) {
     toolchain chain = { 0 };
     link_recipe recipe = recipe_discover(&chain, lang_cxx);
     EXPECT_FALSE(recipe.usable);
     EXPECT_EQ(stdlib_unknown, recipe.stdlib);
 }
 
-MOLTEST(recipe_names_every_standard_library_it_can_report) {
+DESCRIBE(recipe_names_every_standard_library_it_can_report) {
     EXPECT_STREQ("libstdc++", recipe_stdlib_name(stdlib_libstdcxx));
     EXPECT_STREQ("libc++", recipe_stdlib_name(stdlib_libcxx));
     EXPECT_STREQ("", recipe_stdlib_name(stdlib_unknown));
 }
 
-MOLTEST(recipe_leaves_the_flags_beside_the_driver) {
+DESCRIBE(recipe_leaves_the_flags_beside_the_driver) {
     fake_toolchain fake;
     fake_accepts accepts = { .libcxx = true, .ships_libcxx = true };
     ASSERT_TRUE(fake_setup(&fake, &accepts));
@@ -658,7 +658,7 @@ MOLTEST(recipe_leaves_the_flags_beside_the_driver) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_writes_no_config_for_a_compiler_that_needs_none) {
+DESCRIBE(recipe_writes_no_config_for_a_compiler_that_needs_none) {
     fake_toolchain fake;
     fake_accepts accepts = { .bare = true, .ships_libcxx = true };
     ASSERT_TRUE(fake_setup(&fake, &accepts));
@@ -678,7 +678,7 @@ MOLTEST(recipe_writes_no_config_for_a_compiler_that_needs_none) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_describes_the_toolchain_and_not_its_config_file) {
+DESCRIBE(recipe_describes_the_toolchain_and_not_its_config_file) {
     fake_toolchain fake;
     /* Needs --gcc-install-dir to build. */
     fake_accepts accepts = { .gcc_install = true, .ships_libcxx = true };
@@ -705,7 +705,7 @@ MOLTEST(recipe_describes_the_toolchain_and_not_its_config_file) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_puts_both_languages_on_the_same_gcc) {
+DESCRIBE(recipe_puts_both_languages_on_the_same_gcc) {
     fake_toolchain fake;
     /* Accepts everything, so C works untouched while C++ needs the GCC
        pinned — which is the ordinary shape of the problem. */
@@ -735,7 +735,7 @@ MOLTEST(recipe_puts_both_languages_on_the_same_gcc) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_keeps_a_flag_that_would_break_c_out_of_its_recipe) {
+DESCRIBE(recipe_keeps_a_flag_that_would_break_c_out_of_its_recipe) {
     fake_toolchain fake;
     /* Works bare and refuses --gcc-install-dir. C already built without it, so
        adding one that breaks C would trade a mismatch for a compiler that
@@ -760,14 +760,14 @@ MOLTEST(recipe_keeps_a_flag_that_would_break_c_out_of_its_recipe) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_has_no_gcc_to_align_when_none_was_pinned) {
+DESCRIBE(recipe_has_no_gcc_to_align_when_none_was_pinned) {
     link_recipe cxx = { .usable = true };
     link_recipe c = { .usable = true };
     EXPECT_NULL(recipe_gcc_flag(&cxx));
     EXPECT_FALSE(recipe_align_gcc(&cxx, "/nonexistent/cc", &c));
 }
 
-MOLTEST(recipe_finds_no_libcxx_where_there_is_none) {
+DESCRIBE(recipe_finds_no_libcxx_where_there_is_none) {
     char directory[PICKUP_PATHS_MAX];
     /* A driver that cannot be run answers nothing, rather than a path that
        would later be written into an executable as a search path. */
@@ -785,7 +785,7 @@ MOLTEST(recipe_finds_no_libcxx_where_there_is_none) {
  * matters most here is what it refuses to touch.
  */
 
-MOLTEST(recipe_refreshes_a_configuration_that_has_fallen_behind) {
+DESCRIBE(recipe_refreshes_a_configuration_that_has_fallen_behind) {
     fake_toolchain fake;
     fake_accepts accepts = { .gcc_install = true, .ships_libcxx = true };
     ASSERT_TRUE(fake_setup(&fake, &accepts));
@@ -811,7 +811,7 @@ MOLTEST(recipe_refreshes_a_configuration_that_has_fallen_behind) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_leaves_a_configuration_someone_wrote_by_hand) {
+DESCRIBE(recipe_leaves_a_configuration_someone_wrote_by_hand) {
     fake_toolchain fake;
     fake_accepts accepts = { .gcc_install = true, .ships_libcxx = true };
     ASSERT_TRUE(fake_setup(&fake, &accepts));
@@ -838,7 +838,7 @@ MOLTEST(recipe_leaves_a_configuration_someone_wrote_by_hand) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_reports_no_change_when_there_is_none) {
+DESCRIBE(recipe_reports_no_change_when_there_is_none) {
     fake_toolchain fake;
     fake_accepts accepts = { .gcc_install = true, .ships_libcxx = true };
     ASSERT_TRUE(fake_setup(&fake, &accepts));
@@ -855,7 +855,7 @@ MOLTEST(recipe_reports_no_change_when_there_is_none) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_writes_a_configuration_that_was_never_there) {
+DESCRIBE(recipe_writes_a_configuration_that_was_never_there) {
     fake_toolchain fake;
     fake_accepts accepts = { .gcc_install = true, .ships_libcxx = true };
     ASSERT_TRUE(fake_setup(&fake, &accepts));
@@ -870,7 +870,7 @@ MOLTEST(recipe_writes_a_configuration_that_was_never_there) {
     fake_teardown(&fake);
 }
 
-MOLTEST(recipe_names_the_library_a_caller_asked_for) {
+DESCRIBE(recipe_names_the_library_a_caller_asked_for) {
     fake_toolchain fake;
     home_fixture home;
     /* Left to itself this toolchain would stand on the libc++ it carries, and
@@ -900,7 +900,7 @@ MOLTEST(recipe_names_the_library_a_caller_asked_for) {
     home_teardown(&home);
 }
 
-MOLTEST(recipe_says_nothing_extra_when_no_library_was_asked_for) {
+DESCRIBE(recipe_says_nothing_extra_when_no_library_was_asked_for) {
     fake_toolchain fake;
     fake_accepts accepts = { .bare = true };
     ASSERT_TRUE(fake_setup(&fake, &accepts));
@@ -952,7 +952,7 @@ MOLTEST_FAKE(fake_config_dependent_driver) {
  * happened past `satisfies`, `resolve` printed `missing:` with nothing behind
  * it.
  */
-MOLTEST(recipe_keeps_the_configuration_a_driver_needs_to_link) {
+DESCRIBE(recipe_keeps_the_configuration_a_driver_needs_to_link) {
     char root[PICKUP_PATHS_MAX];
     ASSERT_TRUE(moltest_temp_dir("pickup_cfg_driver", root, sizeof root));
 
@@ -988,7 +988,7 @@ static bool write_moved_config(const char *root, const char *flag, char *driver,
     return recipe_write_config(driver, &recipe);
 }
 
-MOLTEST(recipe_relocates_a_whole_path_and_not_a_longer_name) {
+DESCRIBE(recipe_relocates_a_whole_path_and_not_a_longer_name) {
     char root[PICKUP_PATHS_MAX];
     ASSERT_TRUE(moltest_temp_dir("pickup_relocate", root, sizeof root));
 
@@ -1015,7 +1015,7 @@ MOLTEST(recipe_relocates_a_whole_path_and_not_a_longer_name) {
     (void)fs_remove_tree(root);
 }
 
-MOLTEST(recipe_does_not_relocate_a_configuration_someone_wrote) {
+DESCRIBE(recipe_does_not_relocate_a_configuration_someone_wrote) {
     char root[PICKUP_PATHS_MAX];
     ASSERT_TRUE(moltest_temp_dir("pickup_relocate", root, sizeof root));
 

@@ -65,13 +65,13 @@ static bool make_archive(const char *root, const char *archive) {
     return pack(root, "LLVM-1.0.0-Linux-X64", archive, "-czf");
 }
 
-MOLTEST(archive_reports_whether_it_can_extract) {
+DESCRIBE(archive_reports_whether_it_can_extract) {
     bool first = archive_available();
     EXPECT_TRUE(archive_available() == first);
     EXPECT_STREQ("tar", archive_requirement());
 }
 
-MOLTEST(archive_settles_the_force_local_question_by_asking) {
+DESCRIBE(archive_settles_the_force_local_question_by_asking) {
     if (!archive_available())
         SKIP("tar is not installed");
 
@@ -82,7 +82,7 @@ MOLTEST(archive_settles_the_force_local_question_by_asking) {
     EXPECT_TRUE(archive_supports_force_local() == first);
 }
 
-MOLTEST(archive_settles_the_wildcards_question_by_asking) {
+DESCRIBE(archive_settles_the_wildcards_question_by_asking) {
     if (!archive_available())
         SKIP("tar is not installed");
 
@@ -93,7 +93,7 @@ MOLTEST(archive_settles_the_wildcards_question_by_asking) {
     EXPECT_TRUE(archive_supports_wildcards() == first);
 }
 
-MOLTEST(archive_strips_the_top_level_directory) {
+DESCRIBE(archive_strips_the_top_level_directory) {
     if (!archive_available())
         SKIP("tar is not installed");
 
@@ -122,7 +122,7 @@ MOLTEST(archive_strips_the_top_level_directory) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(archive_keeps_the_top_level_directory_when_not_stripping) {
+DESCRIBE(archive_keeps_the_top_level_directory_when_not_stripping) {
     if (!archive_available())
         SKIP("tar is not installed");
 
@@ -171,7 +171,7 @@ static bool make_mixed_archive(const char *root, const char *archive) {
     return pack(root, "LLVM-1.0.0", archive, "-czf");
 }
 
-MOLTEST(archive_extracts_only_what_was_asked_for) {
+DESCRIBE(archive_extracts_only_what_was_asked_for) {
     if (!archive_available())
         SKIP("tar is not installed");
 
@@ -216,7 +216,7 @@ MOLTEST(archive_extracts_only_what_was_asked_for) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(archive_selects_by_pattern_whichever_tar_this_is) {
+DESCRIBE(archive_selects_by_pattern_whichever_tar_this_is) {
     if (!archive_available())
         SKIP("tar is not installed");
 
@@ -251,7 +251,7 @@ MOLTEST(archive_selects_by_pattern_whichever_tar_this_is) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(archive_without_patterns_extracts_everything) {
+DESCRIBE(archive_without_patterns_extracts_everything) {
     if (!archive_available())
         SKIP("tar is not installed");
 
@@ -276,7 +276,7 @@ MOLTEST(archive_without_patterns_extracts_everything) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(archive_extracts_at_the_most_it_will_accept) {
+DESCRIBE(archive_extracts_at_the_most_it_will_accept) {
     if (!archive_available())
         SKIP("tar is not installed");
 
@@ -320,7 +320,7 @@ MOLTEST(archive_extracts_at_the_most_it_will_accept) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(archive_refuses_more_patterns_than_it_can_hold) {
+DESCRIBE(archive_refuses_more_patterns_than_it_can_hold) {
     const char *many[ARCHIVE_MAX_PATTERNS + 1];
     for (size_t i = 0; i < ARCHIVE_MAX_PATTERNS + 1; i++)
         many[i] = "*";
@@ -334,7 +334,7 @@ MOLTEST(archive_refuses_more_patterns_than_it_can_hold) {
     EXPECT_FALSE(archive_extract_selected("/nonexistent.tar.gz", "/tmp", &request));
 }
 
-MOLTEST(archive_fails_on_something_that_is_not_an_archive) {
+DESCRIBE(archive_fails_on_something_that_is_not_an_archive) {
     if (!archive_available())
         SKIP("tar is not installed");
 
@@ -355,7 +355,7 @@ MOLTEST(archive_fails_on_something_that_is_not_an_archive) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(archive_opens_what_the_registry_packs) {
+DESCRIBE(archive_opens_what_the_registry_packs) {
     if (!archive_available())
         SKIP("tar is not installed");
 
@@ -370,7 +370,7 @@ MOLTEST(archive_opens_what_the_registry_packs) {
     EXPECT_STREQ("zstd", archive_zstd_requirement());
 }
 
-MOLTEST(archive_extracts_a_zstd_archive_without_a_top_level_directory) {
+DESCRIBE(archive_extracts_a_zstd_archive_without_a_top_level_directory) {
     if (!archive_available() || !archive_supports_zstd())
         SKIP("tar with zstd is needed to unpack what the registry publishes");
 

@@ -91,7 +91,7 @@ static bool report_names(const migrate_report *report, const char *name) {
     return false;
 }
 
-MOLTEST(migrate_does_nothing_without_a_legacy_home) {
+DESCRIBE(migrate_does_nothing_without_a_legacy_home) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_migrate"));
 
@@ -107,7 +107,7 @@ MOLTEST(migrate_does_nothing_without_a_legacy_home) {
     user_dirs_teardown(&fixture);
 }
 
-MOLTEST(migrate_leaves_a_relocated_home_alone) {
+DESCRIBE(migrate_leaves_a_relocated_home_alone) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_migrate"));
     ASSERT_TRUE(plant_a_used_legacy_home());
@@ -123,7 +123,7 @@ MOLTEST(migrate_leaves_a_relocated_home_alone) {
     user_dirs_teardown(&fixture);
 }
 
-MOLTEST(migrate_moves_toolchains_tools_and_preferences) {
+DESCRIBE(migrate_moves_toolchains_tools_and_preferences) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_migrate"));
     ASSERT_TRUE(plant_a_used_legacy_home());
@@ -158,7 +158,7 @@ MOLTEST(migrate_moves_toolchains_tools_and_preferences) {
     user_dirs_teardown(&fixture);
 }
 
-MOLTEST(migrate_happens_once) {
+DESCRIBE(migrate_happens_once) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_migrate"));
     ASSERT_TRUE(plant_a_used_legacy_home());
@@ -175,7 +175,7 @@ MOLTEST(migrate_happens_once) {
     user_dirs_teardown(&fixture);
 }
 
-MOLTEST(migrate_keeps_the_legacy_home_when_something_cannot_move) {
+DESCRIBE(migrate_keeps_the_legacy_home_when_something_cannot_move) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_migrate"));
     ASSERT_TRUE(plant_a_used_legacy_home());
@@ -219,7 +219,7 @@ MOLTEST(migrate_keeps_the_legacy_home_when_something_cannot_move) {
     user_dirs_teardown(&fixture);
 }
 
-MOLTEST(migrate_does_not_overwrite_preferences_already_in_place) {
+DESCRIBE(migrate_does_not_overwrite_preferences_already_in_place) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_migrate"));
     ASSERT_TRUE(plant_legacy("config.toml", "default = \"old@1\"\n"));
@@ -286,7 +286,7 @@ static char *moved_config(const char *driver_relative) {
     return fs_read_file(path);
 }
 
-MOLTEST(migrate_points_a_moved_configuration_at_the_new_location) {
+DESCRIBE(migrate_points_a_moved_configuration_at_the_new_location) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_migrate"));
 
@@ -350,7 +350,7 @@ MOLTEST_FAKE(driver_reading_its_config) {
     return status;
 }
 
-MOLTEST(migrate_leaves_a_configured_toolchain_that_still_finds_its_directories) {
+DESCRIBE(migrate_leaves_a_configured_toolchain_that_still_finds_its_directories) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_migrate"));
 
@@ -404,7 +404,7 @@ static bool have_cc(void) {
  * beside it, a header the toolchain carries in its own include/, and a program
  * that does not build unless the file names where that header now is.
  */
-MOLTEST(migrate_leaves_a_toolchain_that_still_compiles) {
+DESCRIBE(migrate_leaves_a_toolchain_that_still_compiles) {
     if (!have_cc())
         SKIP("a system cc is needed to stand behind the toolchain's driver");
 
@@ -452,7 +452,7 @@ MOLTEST(migrate_leaves_a_toolchain_that_still_compiles) {
 }
 #endif
 
-MOLTEST(migrate_announces_what_moved_and_what_did_not) {
+DESCRIBE(migrate_announces_what_moved_and_what_did_not) {
     migrate_report report = {0};
     report.attempted = true;
     report.toolchains_moved = 2;

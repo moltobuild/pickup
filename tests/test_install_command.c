@@ -16,7 +16,7 @@
  * no place in a unit test.
  */
 
-MOLTEST(install_rejects_a_name_and_version_that_disagree) {
+DESCRIBE(install_rejects_a_name_and_version_that_disagree) {
     /* "clang@22.1.0 --version 19" names the version twice; picking one over
        the other silently would install something other than what was asked
        for. */
@@ -27,7 +27,7 @@ MOLTEST(install_rejects_a_name_and_version_that_disagree) {
     EXPECT_EQ(exit_usage_error, install_command_run(&request));
 }
 
-MOLTEST(install_rejects_a_name_and_version_even_when_they_agree) {
+DESCRIBE(install_rejects_a_name_and_version_even_when_they_agree) {
     /* Repeating the same version does not make the two spellings one
        request; it is still two answers to the same question. */
     const install_command_request request = {
@@ -37,14 +37,14 @@ MOLTEST(install_rejects_a_name_and_version_even_when_they_agree) {
     EXPECT_EQ(exit_usage_error, install_command_run(&request));
 }
 
-MOLTEST(install_rejects_a_versioned_name_with_nothing_before_the_at) {
+DESCRIBE(install_rejects_a_versioned_name_with_nothing_before_the_at) {
     /* "@22.1.0" splits into an empty name, which is not one the registry
        could ever publish. */
     const install_command_request request = {.name = "@22.1.0"};
     EXPECT_EQ(exit_usage_error, install_command_run(&request));
 }
 
-MOLTEST(install_leaves_an_unversioned_name_alone) {
+DESCRIBE(install_leaves_an_unversioned_name_alone) {
     /* No '@' at all is the common case, and must reach the usual name
        validation unmodified rather than being rejected for carrying a
        version it never named. */
@@ -153,7 +153,7 @@ static const char clang_format_catalogue[] =
 
 /* A version the cache has not heard of is asked about once more, freshly,
    before it is called missing. */
-MOLTEST(install_asks_the_registry_again_before_saying_a_version_is_missing) {
+DESCRIBE(install_asks_the_registry_again_before_saying_a_version_is_missing) {
     if (!http_available() || registry_host_target()[0] == '\0')
         SKIP("curl and a target the registry publishes for are needed");
 
@@ -168,7 +168,7 @@ MOLTEST(install_asks_the_registry_again_before_saying_a_version_is_missing) {
 
 /* And a version that is in the cache costs no second request: the registry is
    only asked again when the cache could not answer. */
-MOLTEST(install_trusts_a_cache_that_has_the_answer) {
+DESCRIBE(install_trusts_a_cache_that_has_the_answer) {
     if (!http_available() || registry_host_target()[0] == '\0')
         SKIP("curl and a target the registry publishes for are needed");
 
@@ -195,7 +195,7 @@ MOLTEST(install_trusts_a_cache_that_has_the_answer) {
  * answer from "nothing is published as" — the exit code that says the name
  * does not exist — and that difference is what is checked.
  */
-MOLTEST(install_asks_the_registry_again_before_saying_a_name_is_unknown) {
+DESCRIBE(install_asks_the_registry_again_before_saying_a_name_is_unknown) {
     if (!http_available() || registry_host_target()[0] == '\0')
         SKIP("curl and a target the registry publishes for are needed");
 

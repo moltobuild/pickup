@@ -57,7 +57,7 @@ static const char error_json[] =
 
 /* --- what a catalogue says --- */
 
-MOLTEST(registry_reads_a_catalogue) {
+DESCRIBE(registry_reads_a_catalogue) {
     registry_entry_list list;
     ASSERT_TRUE(registry_parse_catalogue(catalogue_json, &list));
     ASSERT_EQ(2, (int)list.count);
@@ -76,7 +76,7 @@ MOLTEST(registry_reads_a_catalogue) {
 
 /* An artifact published before the registry had accounts. The row is read, and
    the author is simply not known. */
-MOLTEST(registry_reads_a_catalogue_row_with_no_author) {
+DESCRIBE(registry_reads_a_catalogue_row_with_no_author) {
     registry_entry_list list;
     ASSERT_TRUE(registry_parse_catalogue(catalogue_json, &list));
     ASSERT_EQ(2, (int)list.count);
@@ -88,7 +88,7 @@ MOLTEST(registry_reads_a_catalogue_row_with_no_author) {
 }
 
 /* The same, for a document written before the field existed at all. */
-MOLTEST(registry_reads_a_catalogue_row_that_never_mentions_an_author) {
+DESCRIBE(registry_reads_a_catalogue_row_that_never_mentions_an_author) {
     static const char without_field[] =
         "{\"kind\":\"toolchain\",\"entries\":[{\"name\":\"clang\","
         " \"latest_version\":\"19.1.6\",\"versions\":1,"
@@ -102,7 +102,7 @@ MOLTEST(registry_reads_a_catalogue_row_that_never_mentions_an_author) {
     registry_entry_list_free(&list);
 }
 
-MOLTEST(registry_reads_a_search_answer) {
+DESCRIBE(registry_reads_a_search_answer) {
     registry_entry_list list;
     ASSERT_TRUE(registry_parse_search(search_json, &list));
     ASSERT_EQ(2, (int)list.count);
@@ -122,7 +122,7 @@ MOLTEST(registry_reads_a_search_answer) {
 
 /* --- what a release says --- */
 
-MOLTEST(registry_reads_an_artifact_whole) {
+DESCRIBE(registry_reads_an_artifact_whole) {
     registry_artifact_list list;
     ASSERT_TRUE(registry_parse_releases(releases_json, NULL, NULL, &list));
     ASSERT_EQ(1, (int)list.count);
@@ -149,7 +149,7 @@ MOLTEST(registry_reads_an_artifact_whole) {
     registry_artifact_list_free(&list);
 }
 
-MOLTEST(registry_reads_the_binary_a_tool_names) {
+DESCRIBE(registry_reads_the_binary_a_tool_names) {
     registry_artifact_list list;
     ASSERT_TRUE(registry_parse_releases(tool_json, NULL, NULL, &list));
     ASSERT_EQ(1, (int)list.count);
@@ -161,7 +161,7 @@ MOLTEST(registry_reads_the_binary_a_tool_names) {
 /* An author the registry states as null. Everything else about the artifact is
    there, so the blob stays installable and only the name of who published it is
    missing. */
-MOLTEST(registry_reads_an_artifact_with_no_author) {
+DESCRIBE(registry_reads_an_artifact_with_no_author) {
     registry_artifact_list list;
     ASSERT_TRUE(registry_parse_releases(tool_json, NULL, NULL, &list));
     ASSERT_EQ(1, (int)list.count);
@@ -170,7 +170,7 @@ MOLTEST(registry_reads_an_artifact_with_no_author) {
     registry_artifact_list_free(&list);
 }
 
-MOLTEST(registry_keeps_only_the_target_asked_for) {
+DESCRIBE(registry_keeps_only_the_target_asked_for) {
     registry_artifact_list list;
     ASSERT_TRUE(registry_parse_releases(releases_json, NULL, "linux-aarch64", &list));
 
@@ -180,7 +180,7 @@ MOLTEST(registry_keeps_only_the_target_asked_for) {
     registry_artifact_list_free(&list);
 }
 
-MOLTEST(registry_drops_an_artifact_missing_what_it_must_have) {
+DESCRIBE(registry_drops_an_artifact_missing_what_it_must_have) {
     /* No checksum. Verifying is not optional, so this cannot be carried to the
        point where something decides whether to check it. */
     static const char no_digest[] =
@@ -196,7 +196,7 @@ MOLTEST(registry_drops_an_artifact_missing_what_it_must_have) {
     registry_artifact_list_free(&list);
 }
 
-MOLTEST(registry_reads_a_single_artifact_document) {
+DESCRIBE(registry_reads_a_single_artifact_document) {
     static const char one[] =
         "{\"kind\":\"tool\",\"name\":\"clang-tidy\",\"version\":\"19.1.6\","
         " \"target\":\"linux-x86_64\",\"format\":\"tar.zst\",\"checksum\":\"bf\","
@@ -214,7 +214,7 @@ MOLTEST(registry_reads_a_single_artifact_document) {
 
 /* The coordinate endpoint as it answered before it knew about accounts: no
    `published_by` key anywhere. Reading it is still a success. */
-MOLTEST(registry_reads_a_single_artifact_document_with_no_author) {
+DESCRIBE(registry_reads_a_single_artifact_document_with_no_author) {
     static const char one[] =
         "{\"kind\":\"tool\",\"name\":\"clang-tidy\",\"version\":\"19.1.6\","
         " \"target\":\"linux-x86_64\",\"format\":\"tar.zst\",\"checksum\":\"bf\","
@@ -227,7 +227,7 @@ MOLTEST(registry_reads_a_single_artifact_document_with_no_author) {
     EXPECT_STREQ("", artifact.published_by);
 }
 
-MOLTEST(registry_reads_the_error_code) {
+DESCRIBE(registry_reads_the_error_code) {
     char code[64] = "";
     char message[256] = "";
     ASSERT_TRUE(registry_parse_error(error_json, code, sizeof code,
@@ -236,14 +236,14 @@ MOLTEST(registry_reads_the_error_code) {
     EXPECT_STREQ("no toolchain named 'nope'", message);
 }
 
-MOLTEST(registry_refuses_to_read_something_that_is_not_json) {
+DESCRIBE(registry_refuses_to_read_something_that_is_not_json) {
     registry_entry_list list;
     EXPECT_FALSE(registry_parse_catalogue("<html>404</html>", &list));
 }
 
 /* --- choosing a version --- */
 
-MOLTEST(registry_matches_the_components_a_filter_names) {
+DESCRIBE(registry_matches_the_components_a_filter_names) {
     EXPECT_TRUE(registry_version_matches(NULL, "19.1.6"));
     EXPECT_TRUE(registry_version_matches("", "19.1.6"));
     EXPECT_TRUE(registry_version_matches("19", "19.1.6"));
@@ -253,7 +253,7 @@ MOLTEST(registry_matches_the_components_a_filter_names) {
     EXPECT_FALSE(registry_version_matches("20", "19.1.6"));
 }
 
-MOLTEST(registry_knows_when_a_filter_names_one_whole_version) {
+DESCRIBE(registry_knows_when_a_filter_names_one_whole_version) {
     EXPECT_TRUE(registry_version_is_exact("19.1.6"));
     EXPECT_FALSE(registry_version_is_exact("19"));
     EXPECT_FALSE(registry_version_is_exact("19.1"));
@@ -288,7 +288,7 @@ static void two_releases(registry_artifact_list *list) {
     (void)registry_parse_releases(json, NULL, NULL, list);
 }
 
-MOLTEST(registry_skips_what_was_withdrawn) {
+DESCRIBE(registry_skips_what_was_withdrawn) {
     registry_artifact_list list;
     two_releases(&list);
     ASSERT_EQ(2, (int)list.count);
@@ -300,7 +300,7 @@ MOLTEST(registry_skips_what_was_withdrawn) {
     registry_artifact_list_free(&list);
 }
 
-MOLTEST(registry_installs_what_was_withdrawn_when_it_is_named) {
+DESCRIBE(registry_installs_what_was_withdrawn_when_it_is_named) {
     registry_artifact_list list;
     two_releases(&list);
 
@@ -319,7 +319,7 @@ MOLTEST(registry_installs_what_was_withdrawn_when_it_is_named) {
     registry_artifact_list_free(&list);
 }
 
-MOLTEST(registry_answers_that_nothing_matches) {
+DESCRIBE(registry_answers_that_nothing_matches) {
     registry_artifact_list list;
     two_releases(&list);
 
@@ -331,7 +331,7 @@ MOLTEST(registry_answers_that_nothing_matches) {
 
 /* --- names --- */
 
-MOLTEST(registry_refuses_a_name_that_would_leave_the_cache) {
+DESCRIBE(registry_refuses_a_name_that_would_leave_the_cache) {
     EXPECT_TRUE(registry_name_is_simple("clang"));
     EXPECT_TRUE(registry_name_is_simple("clang-format"));
     EXPECT_TRUE(registry_name_is_simple("gcc"));
@@ -344,7 +344,7 @@ MOLTEST(registry_refuses_a_name_that_would_leave_the_cache) {
     EXPECT_FALSE(registry_name_is_simple("a b"));
 }
 
-MOLTEST(registry_names_the_paths_of_its_kinds) {
+DESCRIBE(registry_names_the_paths_of_its_kinds) {
     EXPECT_STREQ("toolchains", registry_kind_path(registry_kind_toolchain));
     EXPECT_STREQ("tools", registry_kind_path(registry_kind_tool));
     EXPECT_STREQ("packages", registry_kind_path(registry_kind_package));
@@ -401,7 +401,7 @@ static bool write_config(const char *contents) {
         && fs_write_file(path, contents);
 }
 
-MOLTEST(registry_falls_back_to_the_built_in_url) {
+DESCRIBE(registry_falls_back_to_the_built_in_url) {
     home_fixture fixture;
     ASSERT_TRUE(home_setup(&fixture));
 
@@ -412,7 +412,7 @@ MOLTEST(registry_falls_back_to_the_built_in_url) {
     home_teardown(&fixture);
 }
 
-MOLTEST(registry_takes_the_url_the_file_records) {
+DESCRIBE(registry_takes_the_url_the_file_records) {
     home_fixture fixture;
     ASSERT_TRUE(home_setup(&fixture));
     ASSERT_TRUE(write_config("default = \"gcc@12\"\nregistry = \"https://mine.invalid\"\n"));
@@ -424,7 +424,7 @@ MOLTEST(registry_takes_the_url_the_file_records) {
     home_teardown(&fixture);
 }
 
-MOLTEST(registry_lets_the_environment_win) {
+DESCRIBE(registry_lets_the_environment_win) {
     home_fixture fixture;
     ASSERT_TRUE(home_setup(&fixture));
     ASSERT_TRUE(write_config("registry = \"https://file.invalid\"\n"));
@@ -456,7 +456,7 @@ static bool plant(const char *filename, const char *contents) {
         && fs_write_file(path, contents);
 }
 
-MOLTEST(registry_reads_its_catalogue_from_the_cache_directory) {
+DESCRIBE(registry_reads_its_catalogue_from_the_cache_directory) {
     home_fixture fixture;
     ASSERT_TRUE(home_setup(&fixture));
     ASSERT_TRUE(plant("registry-toolchains.json", planted_catalogue));
@@ -475,7 +475,7 @@ MOLTEST(registry_reads_its_catalogue_from_the_cache_directory) {
     home_teardown(&fixture);
 }
 
-MOLTEST(registry_finds_which_catalogue_publishes_a_name) {
+DESCRIBE(registry_finds_which_catalogue_publishes_a_name) {
     home_fixture fixture;
     ASSERT_TRUE(home_setup(&fixture));
     ASSERT_TRUE(plant("registry-toolchains.json", catalogue_json));
@@ -494,7 +494,7 @@ MOLTEST(registry_finds_which_catalogue_publishes_a_name) {
     home_teardown(&fixture);
 }
 
-MOLTEST(registry_discards_a_cached_answer_that_no_longer_parses) {
+DESCRIBE(registry_discards_a_cached_answer_that_no_longer_parses) {
     home_fixture fixture;
     ASSERT_TRUE(home_setup(&fixture));
     ASSERT_TRUE(plant("registry-toolchains.json", "not json at all"));
@@ -513,7 +513,7 @@ MOLTEST(registry_discards_a_cached_answer_that_no_longer_parses) {
     home_teardown(&fixture);
 }
 
-MOLTEST(registry_refuses_to_fetch_a_name_that_would_leave_the_cache) {
+DESCRIBE(registry_refuses_to_fetch_a_name_that_would_leave_the_cache) {
     home_fixture fixture;
     ASSERT_TRUE(home_setup(&fixture));
 

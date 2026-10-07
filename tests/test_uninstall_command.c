@@ -62,7 +62,7 @@ static bool installed(const char *name, const char *version) {
            fs_is_dir(directory);
 }
 
-MOLTEST(uninstall_removes_the_tool_version_it_names) {
+DESCRIBE(uninstall_removes_the_tool_version_it_names) {
     uninstall_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
     ASSERT_TRUE(plant("clang-tidy", "19.1.6"));
@@ -76,7 +76,7 @@ MOLTEST(uninstall_removes_the_tool_version_it_names) {
 }
 
 /* A bare name is enough when there is only one to mean. */
-MOLTEST(uninstall_takes_a_bare_tool_name_when_one_version_is_installed) {
+DESCRIBE(uninstall_takes_a_bare_tool_name_when_one_version_is_installed) {
     uninstall_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
     ASSERT_TRUE(plant("clang-format", "21.1.8"));
@@ -89,7 +89,7 @@ MOLTEST(uninstall_takes_a_bare_tool_name_when_one_version_is_installed) {
 
 /* And refused when there are several: removing the one the user did not
    picture is the failure the toolchain side already guards against. */
-MOLTEST(uninstall_refuses_a_bare_tool_name_that_means_several_versions) {
+DESCRIBE(uninstall_refuses_a_bare_tool_name_that_means_several_versions) {
     uninstall_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
     ASSERT_TRUE(plant("clang-tidy", "19.1.6"));
@@ -104,7 +104,7 @@ MOLTEST(uninstall_refuses_a_bare_tool_name_that_means_several_versions) {
 
 /* A version that is not installed is an answer, not a breakage — and a name
    that only begins like another tool's is not that tool. */
-MOLTEST(uninstall_says_when_that_tool_version_is_not_installed) {
+DESCRIBE(uninstall_says_when_that_tool_version_is_not_installed) {
     uninstall_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));
     ASSERT_TRUE(plant("clang-tidy", "21.1.8"));

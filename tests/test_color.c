@@ -32,7 +32,7 @@ static void guard_restore(env_guard *guard) {
         (void)unsetenv(guard->name);
 }
 
-MOLTEST(color_stays_off_when_output_is_not_a_terminal) {
+DESCRIBE(color_stays_off_when_output_is_not_a_terminal) {
     FILE *sink = tmpfile();
     ASSERT_TRUE(sink != NULL);
 
@@ -44,7 +44,7 @@ MOLTEST(color_stays_off_when_output_is_not_a_terminal) {
     fclose(sink);
 }
 
-MOLTEST(color_honours_no_color) {
+DESCRIBE(color_honours_no_color) {
     env_guard guard;
     guard_set(&guard, NO_COLOR_ENV, "1");
 
@@ -55,14 +55,14 @@ MOLTEST(color_honours_no_color) {
     guard_restore(&guard);
 }
 
-MOLTEST(color_stays_off_on_a_dumb_terminal) {
+DESCRIBE(color_stays_off_on_a_dumb_terminal) {
     env_guard guard;
     guard_set(&guard, TERM_ENV, TERM_DUMB);
     EXPECT_FALSE(color_enabled(stdout));
     guard_restore(&guard);
 }
 
-MOLTEST(color_codes_are_empty_until_configured_on) {
+DESCRIBE(color_codes_are_empty_until_configured_on) {
     FILE *sink = tmpfile();
     ASSERT_TRUE(sink != NULL);
     color_configure(sink); /* not a terminal, so colour is off */
@@ -78,7 +78,7 @@ MOLTEST(color_codes_are_empty_until_configured_on) {
     fclose(sink);
 }
 
-MOLTEST(color_codes_are_distinct_escapes_when_on) {
+DESCRIBE(color_codes_are_distinct_escapes_when_on) {
     /* The accessors are only meaningful together: whatever they return, the
        four must differ from each other and every one must be closed by the
        same reset. */

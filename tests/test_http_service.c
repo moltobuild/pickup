@@ -26,14 +26,14 @@ static void file_url(const char *path, char *out, size_t out_size) {
     snprintf(out, out_size, "file://%s", path);
 }
 
-MOLTEST(http_reports_whether_it_can_download_at_all) {
+DESCRIBE(http_reports_whether_it_can_download_at_all) {
     /* Whatever the answer, it must be the same every time it is asked. */
     bool first = http_available();
     EXPECT_TRUE(http_available() == first);
     EXPECT_STREQ("curl", http_requirement());
 }
 
-MOLTEST(http_downloads_to_the_destination) {
+DESCRIBE(http_downloads_to_the_destination) {
     if (!http_available())
         SKIP("curl is not installed");
 
@@ -56,7 +56,7 @@ MOLTEST(http_downloads_to_the_destination) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(http_leaves_nothing_behind_when_the_source_is_missing) {
+DESCRIBE(http_leaves_nothing_behind_when_the_source_is_missing) {
     if (!http_available())
         SKIP("curl is not installed");
 
@@ -78,7 +78,7 @@ MOLTEST(http_leaves_nothing_behind_when_the_source_is_missing) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(http_with_progress_falls_back_when_there_is_no_terminal) {
+DESCRIBE(http_with_progress_falls_back_when_there_is_no_terminal) {
     if (!http_available())
         SKIP("curl is not installed");
 
@@ -102,7 +102,7 @@ MOLTEST(http_with_progress_falls_back_when_there_is_no_terminal) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(http_with_progress_reports_a_failure_too) {
+DESCRIBE(http_with_progress_reports_a_failure_too) {
     if (!http_available())
         SKIP("curl is not installed");
 
@@ -135,7 +135,7 @@ static void record_tick(size_t frame, void *context) {
     record->ticks++;
 }
 
-MOLTEST(http_watched_delivers_the_file_it_was_asked_for) {
+DESCRIBE(http_watched_delivers_the_file_it_was_asked_for) {
     if (!http_available())
         SKIP("curl is not installed");
 
@@ -163,7 +163,7 @@ MOLTEST(http_watched_delivers_the_file_it_was_asked_for) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(http_watched_without_a_watcher_is_a_plain_download) {
+DESCRIBE(http_watched_without_a_watcher_is_a_plain_download) {
     if (!http_available())
         SKIP("curl is not installed");
 
@@ -182,7 +182,7 @@ MOLTEST(http_watched_without_a_watcher_is_a_plain_download) {
     fixture_teardown(&fixture);
 }
 
-MOLTEST(http_watched_leaves_nothing_behind_when_it_fails) {
+DESCRIBE(http_watched_leaves_nothing_behind_when_it_fails) {
     if (!http_available())
         SKIP("curl is not installed");
 

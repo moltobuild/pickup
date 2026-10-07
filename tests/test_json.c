@@ -28,7 +28,7 @@ static const char github_release[] =
     "  }\n"
     "]\n";
 
-MOLTEST(json_reads_the_shape_github_returns) {
+DESCRIBE(json_reads_the_shape_github_returns) {
     json_document *doc = json_parse(github_release);
     ASSERT_NOT_NULL(doc);
 
@@ -54,7 +54,7 @@ MOLTEST(json_reads_the_shape_github_returns) {
     json_free(doc);
 }
 
-MOLTEST(json_reports_every_scalar_type) {
+DESCRIBE(json_reports_every_scalar_type) {
     json_document *doc = json_parse(
         "{\"s\":\"text\",\"n\":-42,\"t\":true,\"f\":false,\"nothing\":null}");
     ASSERT_NOT_NULL(doc);
@@ -78,7 +78,7 @@ MOLTEST(json_reports_every_scalar_type) {
     json_free(doc);
 }
 
-MOLTEST(json_decodes_escapes) {
+DESCRIBE(json_decodes_escapes) {
     json_document *doc = json_parse("[\"a\\\"b\", \"c\\\\d\", \"e\\nf\", \"g\\u0041h\"]");
     ASSERT_NOT_NULL(doc);
     json_value root = json_root(doc);
@@ -91,7 +91,7 @@ MOLTEST(json_decodes_escapes) {
     json_free(doc);
 }
 
-MOLTEST(json_decodes_unicode_beyond_ascii) {
+DESCRIBE(json_decodes_unicode_beyond_ascii) {
     /* Two bytes, three bytes, and a surrogate pair that must become one code
        point rather than two broken halves. */
     json_document *doc = json_parse("[\"\\u00f1\", \"\\u20ac\", \"\\ud83d\\ude00\"]");
@@ -105,7 +105,7 @@ MOLTEST(json_decodes_unicode_beyond_ascii) {
     json_free(doc);
 }
 
-MOLTEST(json_refuses_malformed_documents) {
+DESCRIBE(json_refuses_malformed_documents) {
     EXPECT_NULL(json_parse("{"));
     EXPECT_NULL(json_parse("{\"a\":}"));
     EXPECT_NULL(json_parse("[1,]"));
@@ -117,7 +117,7 @@ MOLTEST(json_refuses_malformed_documents) {
     EXPECT_NULL(json_parse(NULL));
 }
 
-MOLTEST(json_refuses_a_document_nested_past_the_limit) {
+DESCRIBE(json_refuses_a_document_nested_past_the_limit) {
     /* Deep enough to blow the stack if the parser recursed without a bound. */
     char deep[4 * JSON_MAX_DEPTH + 8];
     size_t at = 0;
@@ -130,7 +130,7 @@ MOLTEST(json_refuses_a_document_nested_past_the_limit) {
     EXPECT_NULL(json_parse(deep));
 }
 
-MOLTEST(json_number_refuses_what_it_cannot_represent) {
+DESCRIBE(json_number_refuses_what_it_cannot_represent) {
     json_document *doc = json_parse("[1.5, 1e3, 99999999999999999999999]");
     ASSERT_NOT_NULL(doc);
     json_value root = json_root(doc);
@@ -145,7 +145,7 @@ MOLTEST(json_number_refuses_what_it_cannot_represent) {
     json_free(doc);
 }
 
-MOLTEST(json_accessors_tolerate_what_is_not_there) {
+DESCRIBE(json_accessors_tolerate_what_is_not_there) {
     json_document *doc = json_parse("{\"a\":[1]}");
     ASSERT_NOT_NULL(doc);
     json_value root = json_root(doc);
@@ -175,7 +175,7 @@ MOLTEST(json_accessors_tolerate_what_is_not_there) {
     json_free(doc);
 }
 
-MOLTEST(json_handles_empty_containers_and_whitespace) {
+DESCRIBE(json_handles_empty_containers_and_whitespace) {
     json_document *doc = json_parse("  {\n\t\"empty\": [],\n\t\"blank\": {}\n}  ");
     ASSERT_NOT_NULL(doc);
     json_value root = json_root(doc);
@@ -188,7 +188,7 @@ MOLTEST(json_handles_empty_containers_and_whitespace) {
     json_free(doc);
 }
 
-MOLTEST(json_free_accepts_null) {
+DESCRIBE(json_free_accepts_null) {
     json_free(NULL); /* must not crash */
     EXPECT_TRUE(true);
 }

@@ -28,10 +28,8 @@ typedef struct {
 } tool_candidate;
 
 static const tool_candidate candidates[] = {
-    {"clang-format", tool_formatter},
-    {"clang-tidy", tool_linter},
-    {"cppcheck", tool_linter},
-    {"clangd", tool_language_server},
+    {"clang-format", tool_formatter}, {"clang-tidy", tool_linter}, {"cppcheck", tool_linter},
+    {"clangd", tool_language_server}, {"cmake", tool_build},       {"ninja", tool_build},
 };
 
 #define CANDIDATE_COUNT (sizeof candidates / sizeof candidates[0])
@@ -40,6 +38,7 @@ static const tool_candidate candidates[] = {
 #define PACKAGE_FORMATTER "clang-format"
 #define PACKAGE_LINTER "clang-tidy"
 #define PACKAGE_LANGUAGE_SERVER "clangd"
+#define PACKAGE_BUILD "cmake"
 
 const char *tool_kind_name(tool_kind kind) {
     switch (kind) {
@@ -49,6 +48,8 @@ const char *tool_kind_name(tool_kind kind) {
         return "linter";
     case tool_language_server:
         return "language server";
+    case tool_build:
+        return "build";
     }
     return "tool";
 }
@@ -61,6 +62,8 @@ const char *tool_kind_package(tool_kind kind) {
         return PACKAGE_LINTER;
     case tool_language_server:
         return PACKAGE_LANGUAGE_SERVER;
+    case tool_build:
+        return PACKAGE_BUILD;
     }
     return PACKAGE_FORMATTER;
 }

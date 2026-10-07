@@ -176,6 +176,12 @@ MOLTEST(tools_knows_which_names_it_looks_for) {
     ASSERT_TRUE(tools_kind_of("clangd", &kind));
     EXPECT_EQ(tool_language_server, kind);
 
+    /* What a build runs (RFC-0023): CMake, and the Ninja it generates for. */
+    ASSERT_TRUE(tools_kind_of("cmake", &kind));
+    EXPECT_EQ(tool_build, kind);
+    ASSERT_TRUE(tools_kind_of("ninja", &kind));
+    EXPECT_EQ(tool_build, kind);
+
     /* A toolchain is not a tool, and install has to tell them apart. */
     EXPECT_FALSE(tools_kind_of("clang", &kind));
     EXPECT_FALSE(tools_kind_of("gcc", &kind));
@@ -183,7 +189,7 @@ MOLTEST(tools_knows_which_names_it_looks_for) {
 }
 
 MOLTEST(tools_names_every_kind_and_what_provides_it) {
-    const tool_kind kinds[] = { tool_formatter, tool_linter, tool_language_server };
+    const tool_kind kinds[] = { tool_formatter, tool_linter, tool_language_server, tool_build };
     for (size_t i = 0; i < sizeof kinds / sizeof kinds[0]; i++) {
         const char *name = tool_kind_name(kinds[i]);
         const char *package = tool_kind_package(kinds[i]);

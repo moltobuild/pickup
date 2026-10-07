@@ -150,16 +150,63 @@ static bool prepare_partial(const char *root, char *partial, size_t partial_size
     return fs_remove_tree(partial) && fs_make_dirs(partial);
 }
 
+/* How many directories `prefix` names: what tar strips to put its contents at
+   the top. */
+static int components_of(const char *prefix) {
+    if (prefix[0] == '\0')
+        return STRIP_NOTHING;
+    int count = 1;
+    for (const char *c = prefix; *c != '\0'; c++)
+        count += *c == '/';
+    return count;
+}
+
+#if !defined(_WIN32) && !defined(__APPLE__)
+/*
+ * A zip on Linux, where GNU tar reads none (molto RFC-0023: Ninja publishes
+ * nothing else). unzip writes it whole into `partial`; a strip_prefix is then
+ * the subtree moved up to stand in its place.
+ */
+static archive_outcome unzip_to_partial(const char *archive, const registry_artifact *artifact,
+                                        const char *partial) {
+    const char *argv[] = {"unzip", "-q", "-o", archive, "-d", partial, NULL};
+    const process_result result = process_try(argv, NULL);
+    if (!result.completed || result.exit_code != 0)
+        return archive_failed;
+    if (artifact->strip_prefix[0] == '\0')
+        return archive_ok;
+
+    char whole[PICKUP_PATHS_MAX];
+    char inner[PICKUP_PATHS_MAX];
+    if (!fs_format_path(whole, sizeof whole, "%s.whole", partial) || !fs_remove_tree(whole) ||
+        !fs_rename(partial, whole) ||
+        !fs_format_path(inner, sizeof inner, "%s/%s", whole, artifact->strip_prefix) ||
+        !fs_rename(inner, partial))
+        return archive_failed;
+    return fs_remove_tree(whole) ? archive_ok : archive_failed;
+}
+#endif
+
 static archive_outcome extract_to_partial(const char *archive, const registry_artifact *artifact,
                                           const char *partial) {
     char label[LABEL_SIZE];
     snprintf(label, sizeof label, EXTRACT_LABEL_FORMAT, artifact->name, artifact->version);
 
-    /* Nothing is selected out of it. The registry publishes what a build uses
-       and nothing else, so the choice of what to keep was made when it was
-       packed, by something that knew. */
+#if !defined(_WIN32) && !defined(__APPLE__)
+    if (strcmp(artifact->format, "zip") == 0)
+        return unzip_to_partial(archive, artifact, partial);
+#endif
+
+    /* What the registry packed is kept whole: the choice of what to keep was
+       made when it was packed, by something that knew. An upstream archive
+       (RFC-0023) keeps its install under a directory the recipe names, and
+       that subtree alone is extracted, with the directory taken off. */
+    const char *patterns[] = {artifact->strip_prefix};
+    const bool stripped = artifact->strip_prefix[0] != '\0';
     const archive_request request = {
-        .strip_components = STRIP_NOTHING,
+        .patterns = stripped ? patterns : NULL,
+        .pattern_count = stripped ? 1 : 0,
+        .strip_components = components_of(artifact->strip_prefix),
         .label = label,
         .waiting_label = PREPARING_LABEL,
     };

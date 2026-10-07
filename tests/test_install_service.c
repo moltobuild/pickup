@@ -664,6 +664,84 @@ static bool make_gzip_tool(install_fixture *fixture, registry_artifact *artifact
     return true;
 }
 
+/*
+ * CMake as Kitware packs it (molto RFC-0023): the install three directories
+ * down, beside things that are not part of it, and no "./" before any name.
+ */
+static bool make_upstream_tool(install_fixture *fixture, registry_artifact *artifact) {
+    char bin[256];
+    snprintf(bin, sizeof bin, "%s/up-stage/cmake-9.9.9-test/CMake.app/Contents/bin",
+             fixture->root);
+    char share[256];
+    snprintf(share, sizeof share, "%s/up-stage/cmake-9.9.9-test/CMake.app/Contents/share",
+             fixture->root);
+    if (!fs_make_dirs(bin) || !fs_make_dirs(share))
+        return false;
+    char binary[512];
+    snprintf(binary, sizeof binary, "%s/cmake", bin);
+    if (!moltest_fake_program(binary, "out cmake version 9.9.9\nexit 0\n", binary,
+                              sizeof binary))
+        return false;
+    char file[512];
+    snprintf(file, sizeof file, "%s/modules.cmake", share);
+    char outside[512];
+    snprintf(outside, sizeof outside, "%s/up-stage/cmake-9.9.9-test/README", fixture->root);
+    if (!fs_write_file(file, "# a module\n") || !fs_write_file(outside, "not the install\n"))
+        return false;
+
+    char archive[256], stage[256];
+    snprintf(archive, sizeof archive, "%s/cmake.tar.gz", fixture->root);
+    snprintf(stage, sizeof stage, "%s/up-stage", fixture->root);
+    const char *argv[8];
+    size_t count = 0;
+    argv[count++] = "tar";
+    if (archive_supports_force_local())
+        argv[count++] = "--force-local";
+    argv[count++] = "-C";
+    argv[count++] = stage;
+    argv[count++] = "-czf";
+    argv[count++] = archive;
+    argv[count++] = "cmake-9.9.9-test";
+    argv[count] = NULL;
+    const process_result packed = process_try(argv, NULL);
+    if (!packed.completed || packed.exit_code != 0 ||
+        !describe(archive, "cmake", "9.9.9", registry_kind_tool, artifact))
+        return false;
+    snprintf(artifact->format, sizeof artifact->format, "%s", REGISTRY_FORMAT_TAR_GZ);
+    /* The name the fake really got: on Windows it carries an extension. */
+    const char *slash = strrchr(binary, '/');
+    snprintf(artifact->binary, sizeof artifact->binary, "bin/%s", slash + 1);
+    snprintf(artifact->strip_prefix, sizeof artifact->strip_prefix,
+             "cmake-9.9.9-test/CMake.app/Contents");
+    return true;
+}
+
+/* What is under strip_prefix becomes the install, and nothing else does. */
+MOLTEST(install_keeps_only_what_is_under_the_strip_prefix) {
+    if (!gzip_installs_work())
+        SKIP("curl and tar with gzip are needed for an end to end install");
+
+    install_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+    registry_artifact artifact;
+    ASSERT_TRUE(make_upstream_tool(&fixture, &artifact));
+
+    const install_request request = { .artifact = &artifact };
+    install_report report = install_run(&request);
+    ASSERT_EQ(install_ok, report.status);
+
+    char path[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(path, sizeof path, "%s/%s", report.directory, artifact.binary));
+    EXPECT_TRUE(fs_path_exists(path));
+    /* The tree around the binary comes too: CMake finds its modules there. */
+    ASSERT_TRUE(fs_format_path(path, sizeof path, "%s/share/modules.cmake", report.directory));
+    EXPECT_TRUE(fs_path_exists(path));
+    ASSERT_TRUE(fs_format_path(path, sizeof path, "%s/README", report.directory));
+    EXPECT_FALSE(fs_path_exists(path));
+
+    fixture_teardown(&fixture);
+}
+
 /* The archive a second install would have to download, taken away: an install
    that still succeeds afterwards did not download anything. */
 static void take_away_the_download(const registry_artifact *artifact) {

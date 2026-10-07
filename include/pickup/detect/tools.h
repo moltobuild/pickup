@@ -29,6 +29,9 @@ typedef enum {
        because it has to match the compiler it indexes for, which is exactly
        what this registry knows and a distribution package does not. */
     tool_language_server,
+    /* What a build runs rather than what reads code: CMake and Ninja, for a
+       dependency configured with CMake (molto RFC-0023). */
+    tool_build,
 } tool_kind;
 
 #define TOOL_NAME_MAX 64

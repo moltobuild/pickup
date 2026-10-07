@@ -184,6 +184,8 @@ static void read_metadata(json_value artifact, registry_artifact *out) {
     copy_optional(json_get(toolchain, "c_driver"), out->c_driver, sizeof out->c_driver);
 
     copy_optional(json_get(json_get(metadata, "tool"), "binary"), out->binary, sizeof out->binary);
+    copy_optional(json_get(json_get(metadata, "archive"), "strip_prefix"), out->strip_prefix,
+                  sizeof out->strip_prefix);
 }
 
 /*

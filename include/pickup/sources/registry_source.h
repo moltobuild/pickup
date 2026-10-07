@@ -108,6 +108,10 @@ typedef struct {
        reason `binary` above is obeyed for a tool. Verified either way, because
        nothing is adopted for having unpacked. */
     char c_driver[REGISTRY_BINARY_MAX];
+    /* The directory inside an upstream archive that is the install (molto
+       RFC-0023): `cmake-4.4.4-linux-x86_64`, or three levels down on macOS.
+       Obeyed for the same reason as c_driver; empty means the top level. */
+    char strip_prefix[REGISTRY_BINARY_MAX];
     char provides[REGISTRY_FEATURES_MAX][REGISTRY_FEATURE_MAX];
     size_t provides_count;
 

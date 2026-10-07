@@ -708,7 +708,9 @@ static bool make_upstream_tool(install_fixture *fixture, registry_artifact *arti
         !describe(archive, "cmake", "9.9.9", registry_kind_tool, artifact))
         return false;
     snprintf(artifact->format, sizeof artifact->format, "%s", REGISTRY_FORMAT_TAR_GZ);
-    snprintf(artifact->binary, sizeof artifact->binary, "bin/cmake");
+    /* The name the fake really got: on Windows it carries an extension. */
+    const char *slash = strrchr(binary, '/');
+    snprintf(artifact->binary, sizeof artifact->binary, "bin/%s", slash + 1);
     snprintf(artifact->strip_prefix, sizeof artifact->strip_prefix,
              "cmake-9.9.9-test/CMake.app/Contents");
     return true;
@@ -729,7 +731,7 @@ MOLTEST(install_keeps_only_what_is_under_the_strip_prefix) {
     ASSERT_EQ(install_ok, report.status);
 
     char path[PICKUP_PATHS_MAX];
-    ASSERT_TRUE(fs_format_path(path, sizeof path, "%s/bin/cmake", report.directory));
+    ASSERT_TRUE(fs_format_path(path, sizeof path, "%s/%s", report.directory, artifact.binary));
     EXPECT_TRUE(fs_path_exists(path));
     /* The tree around the binary comes too: CMake finds its modules there. */
     ASSERT_TRUE(fs_format_path(path, sizeof path, "%s/share/modules.cmake", report.directory));

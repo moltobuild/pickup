@@ -34,7 +34,7 @@ static bool inside(const char *path, const char *root) {
     return strncmp(path, root, length) == 0 && path[length] == '/';
 }
 
-MOLTEST(default_keeps_the_preference_in_the_config_directory) {
+DESCRIBE(default_keeps_the_preference_in_the_config_directory) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_user_dirs"));
 
@@ -54,7 +54,7 @@ MOLTEST(default_keeps_the_preference_in_the_config_directory) {
     user_dirs_teardown(&fixture);
 }
 
-MOLTEST(tools_finds_what_was_installed_into_the_data_directory) {
+DESCRIBE(tools_finds_what_was_installed_into_the_data_directory) {
     user_dirs_fixture fixture;
     ASSERT_TRUE(user_dirs_setup(&fixture, "pickup_user_dirs"));
 
@@ -98,7 +98,7 @@ MOLTEST(tools_finds_what_was_installed_into_the_data_directory) {
  * and `uninstall` removes it from there. A wrapper around the system's own
  * compiler, so that what is probed really compiles.
  */
-MOLTEST(list_and_uninstall_use_the_data_directory) {
+DESCRIBE(list_and_uninstall_use_the_data_directory) {
     if (access("/usr/bin/cc", X_OK) != 0)
         SKIP("/usr/bin/cc is needed to stand behind the installed driver");
 

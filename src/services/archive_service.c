@@ -38,6 +38,14 @@ const char *archive_xz_requirement(void) { return "xz"; }
 
 const char *archive_gzip_requirement(void) { return "gzip"; }
 
+const char *archive_zip_requirement(void) {
+#if defined(_WIN32) || defined(__APPLE__)
+    return TAR_COMMAND;
+#else
+    return "unzip";
+#endif
+}
+
 bool archive_available(void) {
     static bool checked = false;
     static bool available = false;
@@ -185,6 +193,29 @@ bool archive_supports_xz(void) {
 bool archive_supports_gzip(void) {
     static codec_answer answer;
     return codec_opens(&answer, "pickup_gzip", empty_tar_gz, sizeof empty_tar_gz);
+}
+
+#if defined(_WIN32) || defined(__APPLE__)
+/* A zip with nothing in it: the end-of-central-directory record alone. */
+static const unsigned char empty_zip[] = {0x50, 0x4b, 0x05, 0x06, 0, 0, 0, 0, 0, 0, 0,
+                                          0,    0,    0,    0,    0, 0, 0, 0, 0, 0, 0};
+#endif
+
+bool archive_supports_zip(void) {
+#if defined(_WIN32) || defined(__APPLE__)
+    static codec_answer answer;
+    return codec_opens(&answer, "pickup_zip", empty_zip, sizeof empty_zip);
+#else
+    static bool checked = false;
+    static bool supported = false;
+    if (!checked) {
+        checked = true;
+        const char *argv[] = {"unzip", "-v", NULL};
+        const process_result result = process_try(argv, NULL);
+        supported = result.completed && result.exit_code == 0;
+    }
+    return supported;
+#endif
 }
 
 /*

@@ -62,6 +62,10 @@
 [[nodiscard]] bool archive_supports_zstd(void);
 [[nodiscard]] bool archive_supports_xz(void);
 [[nodiscard]] bool archive_supports_gzip(void);
+/* A zip (molto RFC-0023: Ninja publishes nothing else). bsdtar reads one,
+   which is the tar of macOS and Windows; GNU tar does not, so on Linux the
+   question is whether `unzip` runs. */
+[[nodiscard]] bool archive_supports_zip(void);
 
 /* The command a caller should be told to install when archive_available is
    false. */
@@ -75,6 +79,7 @@
 [[nodiscard]] const char *archive_zstd_requirement(void);
 [[nodiscard]] const char *archive_xz_requirement(void);
 [[nodiscard]] const char *archive_gzip_requirement(void);
+[[nodiscard]] const char *archive_zip_requirement(void);
 
 /* Whether naming that program is a remedy at all.
 

@@ -66,6 +66,7 @@
 #define REGISTRY_FORMAT_TAR_ZST "tar.zst"
 #define REGISTRY_FORMAT_TAR_XZ "tar.xz"
 #define REGISTRY_FORMAT_TAR_GZ "tar.gz"
+#define REGISTRY_FORMAT_ZIP "zip"
 
 /* Where artifacts come from, in falling order of precedence: the environment,
    the configuration file, this. */

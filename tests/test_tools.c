@@ -119,6 +119,26 @@ MOLTEST(tools_finds_a_formatter_and_reads_its_version) {
     fixture_teardown(&fixture);
 }
 
+/* A tool pickup installed from an archive holding only the binary keeps it at
+   the top of its directory, not in bin/: Ninja does (RFC-0023). */
+MOLTEST(tools_finds_an_installed_tool_kept_at_the_top_of_its_directory) {
+    tools_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+    char dir[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(dir, sizeof dir, "%s/tools/ninja-1.13.2", fixture.root));
+    ASSERT_TRUE(fs_make_dirs(dir));
+    ASSERT_TRUE(plant_working(&fixture, "tools/ninja-1.13.2/ninja", "1.13.2"));
+
+    dev_tool found[8];
+    const size_t count = tools_discover(found, 8);
+    bool ninja = false;
+    for (size_t i = 0; i < count; i++)
+        ninja = ninja || strcmp(found[i].name, "ninja") == 0;
+    EXPECT_TRUE(ninja);
+
+    fixture_teardown(&fixture);
+}
+
 MOLTEST(tools_does_not_count_something_that_only_has_the_right_name) {
     tools_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));

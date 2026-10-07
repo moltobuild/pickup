@@ -246,11 +246,16 @@ static bool find_under(const char *root, const tool_candidate *candidate, dev_to
     while ((entry = readdir(dir)) != NULL) {
         if (entry->d_name[0] == '.')
             continue;
+        /* In bin/, as a toolchain and CMake keep it, or at the top, as an
+           archive holding nothing else does: Ninja's (RFC-0023). */
         char bin[PICKUP_PATHS_MAX];
-        if (!fs_format_path(bin, sizeof bin, "%s/%s/bin", root, entry->d_name))
+        char top[PICKUP_PATHS_MAX];
+        if (!fs_format_path(bin, sizeof bin, "%s/%s/bin", root, entry->d_name) ||
+            !fs_format_path(top, sizeof top, "%s/%s", root, entry->d_name))
             continue;
         dev_tool answer;
-        if (!find_in(bin, candidate, toolchain_source_pickup, &answer))
+        if (!find_in(bin, candidate, toolchain_source_pickup, &answer) &&
+            !find_in(top, candidate, toolchain_source_pickup, &answer))
             continue;
         if (!found || is_newer(&answer, out)) {
             *out = answer;

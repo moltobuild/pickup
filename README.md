@@ -124,15 +124,16 @@ explicit development dependencies below, not a literal CLI argument:
 
 ```toml
 [dev-deps]
-moltest = { git = "https://github.com/moltobuild/moltest", rev = "9e0611007d3b1ccebd589273dd14a7a229265c3c" }
-moltest_coverage = { git = "https://github.com/moltobuild/moltest-coverage", tag = "v0.3.0" }
-moltest_mock = { git = "https://github.com/moltobuild/moltest-mock", tag = "v0.5.0" }
+moltest = { git = "https://github.com/moltobuild/moltest", tag = "v0.4.0" }
+moltest_coverage = { git = "https://github.com/moltobuild/moltest-coverage", rev = "0491018dfabb9f948ae6a51648fc696c43648652" }
+moltest_mock = { git = "https://github.com/moltobuild/moltest-mock", rev = "508386d57906d63dd336aea35434ed2fa8974eba" }
 ```
 
-The published plugins require this exact moltest 0.3.0 revision; moltest 0.4.0
-cannot be combined with them yet. Run `molto test --profile coverage` for the
-coverage report. Update the three entries together when a newer compatible set
-is released.
+The plugin commits above support moltest v0.4.0 and come from
+[coverage PR #9](https://github.com/moltobuild/moltest-coverage/pull/9) and
+[mock PR #8](https://github.com/moltobuild/moltest-mock/pull/8). Replace them with
+new release tags once published; coverage v0.3.0 and mock v0.5.0 still pin the
+older runner. Run `molto test --profile coverage` for the coverage report.
 
 ## Usage
 

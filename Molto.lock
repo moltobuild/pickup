@@ -7,6 +7,21 @@ root = "pickup"
 
 [[package]]
 name = "moltest"
-source = "git+https://github.com/moltobuild/moltest#v0.3.0"
+version = "0.3.0"
+source = "git+https://github.com/moltobuild/moltest#9e0611007d3b1ccebd589273dd14a7a229265c3c"
 scopes = ["dev"]
 dependencies = []
+
+[[package]]
+name = "moltest_coverage"
+version = "0.3.0"
+source = "git+https://github.com/moltobuild/moltest-coverage#v0.3.0"
+scopes = ["dev"]
+dependencies = ["moltest"]
+
+[[package]]
+name = "moltest_mock"
+version = "0.5.0"
+source = "git+https://github.com/moltobuild/moltest-mock#v0.5.0"
+scopes = ["dev"]
+dependencies = ["moltest"]

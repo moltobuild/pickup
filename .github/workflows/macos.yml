@@ -13,9 +13,8 @@ name: macOS
 # does: `ci.yml` answers for Linux, `windows.yml` for Windows, and this one for
 # macOS, and a red badge names its platform without anyone opening a run.
 #
-# Not here, and why: `molto builds pickup`. `ci.yml` does that with the molto
-# it pins, and that release predates molto's macOS binary. A different molto on
-# this runner only would make the two answers about two different things.
+# `ci.yml` checks the Molto build path. All platforms use the same release
+# pinned in .github/molto-version, with RFC-0024 manifest dependency support.
 
 on:
   push:

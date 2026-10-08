@@ -118,6 +118,22 @@ The suite is built by molto, which takes its test framework,
 any project's dependencies (`[dev-deps]` in `Project.toml`). Where there is no
 pickup yet to find a compiler, name one: `C_COMPILER=gcc-12 make test`.
 
+For new suites, use the latest compatible `moltest[all]` set: moltest,
+moltest-mock and moltest-coverage together. This is shorthand for the three
+explicit development dependencies below, not a literal CLI argument:
+
+```toml
+[dev-deps]
+moltest = { git = "https://github.com/moltobuild/moltest", rev = "9e0611007d3b1ccebd589273dd14a7a229265c3c" }
+moltest_coverage = { git = "https://github.com/moltobuild/moltest-coverage", tag = "v0.3.0" }
+moltest_mock = { git = "https://github.com/moltobuild/moltest-mock", tag = "v0.5.0" }
+```
+
+The published plugins require this exact moltest 0.3.0 revision; moltest 0.4.0
+cannot be combined with them yet. Run `molto test --profile coverage` for the
+coverage report. Update the three entries together when a newer compatible set
+is released.
+
 ## Usage
 
 ```sh

@@ -39,7 +39,10 @@ mode = "single"
 # reused by every project that names the same tag; the suite is built by molto,
 # and the bootstrap Makefile hands `make test` over to it.
 [dev-deps]
-moltest = { git = "https://github.com/moltobuild/moltest", tag = "v0.3.0" }
+# moltest[all]: runner, coverage and mocks. The plugins share this exact runner.
+moltest = { git = "https://github.com/moltobuild/moltest", rev = "9e0611007d3b1ccebd589273dd14a7a229265c3c" }
+moltest_coverage = { git = "https://github.com/moltobuild/moltest-coverage", tag = "v0.3.0" }
+moltest_mock = { git = "https://github.com/moltobuild/moltest-mock", tag = "v0.5.0" }
 
 [profile.debug]
 opt_level = 0

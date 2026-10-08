@@ -424,9 +424,12 @@ archive_outcome archive_extract_reported(const char *archive, const char *destin
         if (produced != last_produced) {
             last_produced = produced;
             still_ms = 0;
-        } else if (!stopped && (still_ms += POLL_INTERVAL_MS) >= STALL_LIMIT_MS) {
-            process_stop(&handle);
-            stopped = true;
+        } else if (!stopped) {
+            still_ms += POLL_INTERVAL_MS;
+            if (still_ms >= STALL_LIMIT_MS) {
+                process_stop(&handle);
+                stopped = true;
+            }
         }
 
         if (show_progress)

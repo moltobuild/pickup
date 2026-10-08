@@ -147,4 +147,10 @@ jobs:
         env:
           C_COMPILER: gcc
           CPP_COMPILER: g++
-        run: make test
+        run: |
+          # Coverage can pull MinGW runtime DLLs into the test executable.
+          # Fake tools are copies of it and run with an isolated PATH, so
+          # link the Windows test profile statically, like the release.
+          sed '/^\[profile.debug\]$/a flags = ["-static"]' Project.toml > Project.toml.new
+          mv Project.toml.new Project.toml
+          make test

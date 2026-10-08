@@ -139,6 +139,29 @@ DESCRIBE(tools_finds_an_installed_tool_kept_at_the_top_of_its_directory) {
     fixture_teardown(&fixture);
 }
 
+/* NASM, as upstream's zip holds it once pickup has installed it: what molto
+   assembles a dependency's x86 code with (molto RFC-0025). */
+DESCRIBE(tools_finds_an_installed_nasm) {
+    tools_fixture fixture;
+    ASSERT_TRUE(fixture_setup(&fixture));
+    char dir[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(fs_format_path(dir, sizeof dir, "%s/tools/nasm-3.02", fixture.root));
+    ASSERT_TRUE(fs_make_dirs(dir));
+    ASSERT_TRUE(plant_working(&fixture, "tools/nasm-3.02/nasm", "3.02"));
+
+    dev_tool found[16];
+    const size_t count = tools_discover(found, 16);
+    const dev_tool *nasm = NULL;
+    for (size_t i = 0; i < count; i++) {
+        if (strcmp(found[i].name, "nasm") == 0)
+            nasm = &found[i];
+    }
+    ASSERT_NOT_NULL(nasm);
+    EXPECT_EQ(tool_build, nasm->kind);
+
+    fixture_teardown(&fixture);
+}
+
 DESCRIBE(tools_does_not_count_something_that_only_has_the_right_name) {
     tools_fixture fixture;
     ASSERT_TRUE(fixture_setup(&fixture));

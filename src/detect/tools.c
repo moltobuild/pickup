@@ -28,8 +28,14 @@ typedef struct {
 } tool_candidate;
 
 static const tool_candidate candidates[] = {
-    {"clang-format", tool_formatter}, {"clang-tidy", tool_linter}, {"cppcheck", tool_linter},
-    {"clangd", tool_language_server}, {"cmake", tool_build},       {"ninja", tool_build},
+    {"clang-format", tool_formatter},
+    {"clang-tidy", tool_linter},
+    {"cppcheck", tool_linter},
+    {"clangd", tool_language_server},
+    {"cmake", tool_build},
+    {"ninja", tool_build},
+    /* What x86 assembly in a dependency is assembled with (molto RFC-0025). */
+    {"nasm", tool_build},
 };
 
 #define CANDIDATE_COUNT (sizeof candidates / sizeof candidates[0])

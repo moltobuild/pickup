@@ -50,6 +50,8 @@ static bool wants_toml(const cli_args *args) {
    of it names a machine. */
 static const cli_option resolve_options[] = {
     {"--lang", 'l', cli_opt_value, "<c|c++>", "Language to compile", "c"},
+    {"--mixed", 0, cli_opt_flag, NULL, "Require both C and C++ from the same toolchain", NULL},
+    {"--c-std", 0, cli_opt_value, "<name>", "C standard for a mixed C++ request", NULL},
     {"--std", 's', cli_opt_value, "<name>", "Standard flag the compiler must accept", NULL},
     {"--require", 'r', cli_opt_value, "<ids>", "Comma-separated features that must be present",
      NULL},
@@ -119,6 +121,8 @@ static int handle_resolve(const cli_args *args) {
         .vendor = cli_args_option(args, "--vendor"),
         .target = cli_args_option(args, "--target"),
         .stdlib = cli_args_option(args, "--stdlib"),
+        .mixed = cli_args_flag(args, "--mixed"),
+        .c_standard = cli_args_option(args, "--c-std"),
     };
     return resolve_command_run(&request, wants_toml(args));
 }

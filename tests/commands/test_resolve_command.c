@@ -2,6 +2,9 @@
 
 #include <pickup/commands/resolve_command.h>
 #include <pickup/services/inventory_service.h>
+#include <pickup/services/cache_service.h>
+#include <pickup/services/fs_service.h>
+#include <pickup/detect/scanner.h>
 #include <pickup/services/paths_service.h>
 #include <pickup/exit_code.h>
 
@@ -189,4 +192,86 @@ DESCRIBE(resolve_says_the_vendor_when_the_vendor_is_what_did_not_match) {
     EXPECT_NOT_NULL(strstr(text, "vendor msvc"));
     /* And no line is left saying nothing. */
     EXPECT_NULL(strstr(text, "missing:\n"));
+}
+
+/* The regression: moltest asks for a C attribute while SDL needs C++17.
+   Resolving each part first makes the test independent of the host compiler. */
+DESCRIBE(resolve_mixed_checks_c_features_without_requiring_them_in_cpp) {
+    const resolve_request c = {.lang = "c", .standard = "c2x",
+                               .features = "attr_nodiscard"};
+    const resolve_request cpp = {.lang = "c++", .standard = "c++17"};
+    if (resolve_command_run(&c, false) != exit_ok ||
+        resolve_command_run(&cpp, false) != exit_ok)
+        SKIP("a C attribute and C++17 toolchain are needed");
+    const resolve_request mixed = {.lang = "c++", .standard = "c++17", .mixed = true,
+                                   .c_standard = "c2x", .features = "attr_nodiscard,lambda"};
+    EXPECT_EQ(exit_ok, resolve_command_run(&mixed, true));
+}
+
+DESCRIBE(resolve_mixed_rejects_an_unsupported_c_standard) {
+    const resolve_request mixed = {.lang = "c++", .standard = "c++17", .mixed = true,
+                                   .c_standard = "not-a-c-standard"};
+    int code = 0;
+    char text[8192] = "";
+    ASSERT_TRUE(resolve_saying(&mixed, &code, text, sizeof text));
+    EXPECT_EQ(exit_no_match, code);
+    EXPECT_NOT_NULL(strstr(text, "C -std=not-a-c-standard"));
+}
+
+DESCRIBE(resolve_rejects_c_standard_outside_a_mixed_cpp_request) {
+    const resolve_request single = {.lang = "c++", .c_standard = "c17"};
+    EXPECT_EQ(exit_usage_error, resolve_command_run(&single, false));
+    const resolve_request wrong_language = {.lang = "c", .mixed = true, .c_standard = "c17"};
+    EXPECT_EQ(exit_usage_error, resolve_command_run(&wrong_language, false));
+}
+
+/* Record an inventory with one language deliberately missing its features.
+   A mixed request must reject it even when the other language qualifies. */
+DESCRIBE(resolve_mixed_rejects_missing_features_in_either_language) {
+    inventory list;
+    ASSERT_TRUE(inventory_load(&list, false));
+    char root[PICKUP_PATHS_MAX];
+    ASSERT_TRUE(moltest_temp_dir("pickup_mixed", root, sizeof root));
+    const char *existing = getenv(PICKUP_HOME_ENV);
+    char previous[PICKUP_PATHS_MAX] = "";
+    const bool had_previous = existing != NULL;
+    if (existing != NULL)
+        snprintf(previous, sizeof previous, "%s", existing);
+    ASSERT_EQ(0, setenv(PICKUP_HOME_ENV, root, 1));
+
+    str_list candidates;
+    str_list_init(&candidates);
+    ASSERT_TRUE(scanner_collect(getenv("PATH"), &candidates));
+    capability_set *saved = calloc(list.count > 0 ? list.count : 1, sizeof *saved);
+    ASSERT_NOT_NULL(saved);
+    for (size_t i = 0; i < list.count; i++) {
+        saved[i] = list.items[i].c_features;
+        list.items[i].c_features.bits = 0;
+    }
+    ASSERT_TRUE(cache_store(&candidates, &list));
+    const resolve_request mixed = {.lang = "c++", .standard = "c++17", .mixed = true,
+                                   .c_standard = "c17", .features = "attr_nodiscard,lambda"};
+    int code = 0;
+    char text[8192] = "";
+    ASSERT_TRUE(resolve_saying(&mixed, &code, text, sizeof text));
+    EXPECT_EQ(exit_no_match, code);
+    EXPECT_NOT_NULL(strstr(text, "attr_nodiscard"));
+
+    for (size_t i = 0; i < list.count; i++) {
+        list.items[i].c_features = saved[i];
+        list.items[i].cxx_features.bits = 0;
+    }
+    ASSERT_TRUE(cache_store(&candidates, &list));
+    ASSERT_TRUE(resolve_saying(&mixed, &code, text, sizeof text));
+    EXPECT_EQ(exit_no_match, code);
+    EXPECT_NOT_NULL(strstr(text, "lambda"));
+
+    free(saved);
+    str_list_free(&candidates);
+    inventory_free(&list);
+    if (had_previous)
+        (void)setenv(PICKUP_HOME_ENV, previous, 1);
+    else
+        (void)unsetenv(PICKUP_HOME_ENV);
+    (void)fs_remove_tree(root);
 }

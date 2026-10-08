@@ -426,8 +426,15 @@ absence:
 ```sh
 pickup resolve --require attr_nodiscard        # proven features
 pickup resolve --lang c++ --std c++20          # language and standard flag
+pickup resolve --lang c++ --mixed --c-std c17 --std c++17 --require attr_nodiscard
 pickup resolve --vendor gcc --format toml      # for machines
 ```
+
+`--mixed` validates both drivers of one toolchain. Required feature ids keep
+the language defined in the capability catalog, so C `attr_nodiscard` is
+checked against the C driver while C++ `lambda` is checked against the C++
+driver. With `--lang c++`, `--c-std` additionally checks the C standard; `--std`
+checks C++. Both drivers must produce a working program.
 
 **`--require` and `--std` are not the same question, and the difference
 matters.** `--require` names features and is answered by probing: a compiler

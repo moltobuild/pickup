@@ -24,6 +24,10 @@ typedef struct {
        see — linking against a prebuilt C++ library commits everything else to
        the same standard library, and the two do not mix. */
     const char *stdlib;
+    /* Validate C and C++ on the same candidate. Feature ids retain the
+       language assigned by the capability catalog; output uses `lang`. */
+    bool mixed;
+    const char *c_standard; /* C standard for a mixed C++ request; optional */
 } resolve_request;
 
 /* Execute `pickup resolve`: print the best toolchain satisfying `request`.

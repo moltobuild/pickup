@@ -109,12 +109,18 @@ static bool satisfies(const toolchain *chain, const resolve_request *request, ca
         return false;
     /* A C++ request needs a C++ driver, not merely a compiler that can parse
        C++: without one there is nothing to invoke. */
-    if (lang == lang_cxx && chain->cxx_path[0] == '\0')
+    if ((lang == lang_cxx || request->mixed) && chain->cxx_path[0] == '\0')
         return false;
-    if (!capability_set_contains(features_of(chain, lang), required))
+    capability_set proven = features_of(chain, lang);
+    if (request->mixed)
+        proven.bits = chain->c_features.bits | chain->cxx_features.bits;
+    if (!capability_set_contains(proven, required))
         return false;
     if (request->standard != NULL &&
         !capability_accepts_standard(driver_for(chain, lang), lang, request->standard))
+        return false;
+    if (request->c_standard != NULL &&
+        !capability_accepts_standard(chain->path, lang_c, request->c_standard))
         return false;
     return true;
 }
@@ -129,6 +135,8 @@ static void print_missing(const toolchain *chain, const resolve_request *request
     size_t count = 0;
     const capability *catalog = capability_catalog(&count);
     capability_set proven = features_of(chain, lang);
+    if (request->mixed)
+        proven.bits = chain->c_features.bits | chain->cxx_features.bits;
 
     fprintf(stderr, "  %-16s (%s) missing:", chain->name, version);
     /* First, and in the order `satisfies` rejects them. A vendor is the one
@@ -150,7 +158,7 @@ static void print_missing(const toolchain *chain, const resolve_request *request
         fprintf(stderr, " this machine (it emits for %s)\n", chain->target);
         return;
     }
-    if (lang == lang_cxx && chain->cxx_path[0] == '\0') {
+    if ((lang == lang_cxx || request->mixed) && chain->cxx_path[0] == '\0') {
         fprintf(stderr, " a C++ driver\n");
         return;
     }
@@ -158,6 +166,11 @@ static void print_missing(const toolchain *chain, const resolve_request *request
     if (request->standard != NULL &&
         !capability_accepts_standard(driver_for(chain, lang), lang, request->standard)) {
         fprintf(stderr, " -std=%s", request->standard);
+        named = true;
+    }
+    if (request->c_standard != NULL &&
+        !capability_accepts_standard(chain->path, lang_c, request->c_standard)) {
+        fprintf(stderr, " C -std=%s", request->c_standard);
         named = true;
     }
     for (size_t i = 0; i < count; i++) {
@@ -276,6 +289,16 @@ static const toolchain *select_buildable(const inventory *list, const resolve_re
         if (!recipe.usable)
             continue;
 
+        /* Mixed builds must also be buildable through the C driver of this
+           candidate, not through another independently selected compiler. */
+        if (request->mixed) {
+            const capability_lang other = lang == lang_c ? lang_cxx : lang_c;
+            link_recipe other_recipe = recipe_discover_for(&list->items[best], other,
+                                                           stdlib_unknown, request->target == NULL);
+            if (!other_recipe.usable)
+                continue;
+        }
+
         *recipe_out = recipe;
         chosen = &list->items[best];
         break;
@@ -346,6 +369,10 @@ int resolve_command_run(const resolve_request *request, bool as_toml) {
     capability_lang lang;
     if (!parse_lang(request->lang, &lang)) {
         fprintf(stderr, "pickup: unknown language '%s'\n", request->lang);
+        return exit_usage_error;
+    }
+    if (request->c_standard != NULL && (!request->mixed || lang != lang_cxx)) {
+        fprintf(stderr, "pickup: --c-std requires --mixed --lang c++\n");
         return exit_usage_error;
     }
     if (request->vendor != NULL && toolchain_vendor_parse(request->vendor) == vendor_unknown) {
